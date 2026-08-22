@@ -27,21 +27,11 @@
       <input
         class="input salary-input"
         type="number"
-        placeholder="起薪，如 6000"
+        placeholder="如 6000"
         placeholder-class="ph"
-        value="{{salaryLow}}"
+        value="{{salary}}"
         disabled="{{isFaceTalk}}"
-        bindinput="onSalaryLow"
-      />
-      <text class="salary-sep">—</text>
-      <input
-        class="input salary-input"
-        type="number"
-        placeholder="顶薪，可空"
-        placeholder-class="ph"
-        value="{{salaryHigh}}"
-        disabled="{{isFaceTalk}}"
-        bindinput="onSalaryHigh"
+        bindinput="onSalary"
       />
     </view>
     <view class="switch-row">

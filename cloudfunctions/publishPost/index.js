@@ -6,8 +6,7 @@
 //   {
 //     form: {
 //       role: "大师傅",            // 师傅类型（写死选项）
-//       salaryLow: "6000",        // 工资下限（数字字符串）
-//       salaryHigh: "8000",       // 工资上限（可空）
+//       salaryHigh: "6000",        // 工资（唯一薪资字段，面议时为空）
 //       salaryNote: "面议",        // 薪资备注（选了"面议"时用）
 //       province: "广东省",        // 省
 //       city: "深圳市",            // 市
@@ -50,8 +49,8 @@ exports.main = async (event) => {
 
   const phone = String(f.phone).trim();
 
-  // ---- 工资区间解析 ----
-  // salaryNote 为 "面议" 时存 salary_note；否则解析 salaryLow/salaryHigh 数字
+  // ---- 工资解析 ----
+  // salaryNote 为 "面议" 时存 salary_note；否则解析 salaryHigh（前端只传工资单一值，salaryLow 不再传）
   const record = {
     data_type: "recruit",
     role: f.role,

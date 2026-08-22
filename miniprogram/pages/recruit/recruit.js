@@ -69,13 +69,8 @@ Page({
 
   // 记录 → 卡片展示字段
   decorate(p) {
-    const salary =
-      p.salary_note ||
-      (p.salary_low && p.salary_high
-        ? `${p.salary_low}-${p.salary_high}元`
-        : p.salary_low
-          ? `${p.salary_low}元以上`
-          : "薪资面议");
+    // 只显示 salary_high 或面议
+    const salary = p.salary_high ? `薪资${p.salary_high}元` : "薪资面议";
     // 直辖市/省同名时去重（上海上海 → 上海；广东东莞 → 广东 东莞）
     const province = p.province || "";
     const city = p.city || "";

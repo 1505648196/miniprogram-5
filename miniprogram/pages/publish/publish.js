@@ -29,8 +29,7 @@ Page({
     rolesCollapsed: true,
     roleHalf: 7,        // 折叠时展示前 7 个 + 其他类型 + 已选中的
     roleIndex: -1,
-    salaryLow: "",
-    salaryHigh: "",
+    salary: "",
     isFaceTalk: false, // 薪资面议
     region: ["", "", ""],
     regionCode: ["", "", ""], // picker 返回的行政区划 code（省/市/区）
@@ -92,14 +91,9 @@ Page({
     this.setData({ roleIndex: index }, () => this.refreshVisibleRoles());
   },
 
-  // 起薪
-  onSalaryLow(e) {
-    this.setData({ salaryLow: e.detail.value });
-  },
-
-  // 顶薪
-  onSalaryHigh(e) {
-    this.setData({ salaryHigh: e.detail.value });
+  // 工资（单个数字，唯一薪资字段）
+  onSalary(e) {
+    this.setData({ salary: e.detail.value });
   },
 
   // 面议开关
@@ -107,8 +101,7 @@ Page({
     const checked = e.detail.value;
     this.setData({
       isFaceTalk: checked,
-      salaryLow: checked ? "" : this.data.salaryLow,
-      salaryHigh: checked ? "" : this.data.salaryHigh,
+      salary: checked ? "" : this.data.salary,
     });
   },
 
@@ -215,8 +208,8 @@ Page({
       wx.showToast({ title: "请输入 11 位手机号", icon: "none" });
       return;
     }
-    // 工资校验：非面议时至少填一项数字
-    if (!d.isFaceTalk && !d.salaryLow.trim() && !d.salaryHigh.trim()) {
+    // 工资校验：非面议时必填
+    if (!d.isFaceTalk && !d.salary.trim()) {
       wx.showToast({ title: "请填写工资或选择面议", icon: "none" });
       return;
     }
@@ -226,8 +219,7 @@ Page({
     const isMunicipality = !!rc[0] && rc[0] === rc[1];
     const form = {
       role: d.roles[d.roleIndex],
-      salaryLow: d.isFaceTalk ? "" : d.salaryLow,
-      salaryHigh: d.isFaceTalk ? "" : d.salaryHigh,
+      salaryHigh: d.isFaceTalk ? "" : d.salary, // 工资只存 salary_high（面议时为空）
       salaryNote: d.isFaceTalk ? "面议" : "",
       province: d.region[0] || "",
       city: d.region[1] || "",

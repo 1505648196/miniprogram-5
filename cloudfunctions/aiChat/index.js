@@ -38,6 +38,11 @@ const DATA_TYPE_LABEL = {
 exports.main = async (event) => {
   const question = String(event.question || lastUserMessage(event.messages) || "").trim();
 
+  // ---- 日志：入参（云开发控制台 → 云函数 aiChat → 日志） ----
+  console.log("[aiChat] 入参 question =", question);
+  console.log("[aiChat] 入参 type    =", event.type || "(未传)");
+  console.log("[aiChat] 入参 messages条数 =", Array.isArray(event.messages) ? event.messages.length : 0);
+
   // agent 模式：前端入口已固定领域（如招工页传 type=recruit），不再猜类型
   const agentType = event.type && DATA_TYPE_LABEL[event.type] ? event.type : null;
 
@@ -47,6 +52,9 @@ exports.main = async (event) => {
 
   // 1. 意图识别
   const intent = detectIntent(question);
+
+  // ---- 日志：意图识别结果 ----
+  console.log("[aiChat] 意图识别结果 intent =", JSON.stringify(intent));
 
   // 2. agent 模式下领域固定，覆盖猜测结果
   if (agentType) {
@@ -165,12 +173,15 @@ function detectIntent(text) {
   const t = text || "";
 
   const greetings = ["你好", "您好", "在吗", "hello", "hi", "谢谢", "感谢"];
+  const hitGreeting = greetings.find((g) => t.includes(g));
+  console.log("[aiChat] detectIntent 问候词命中 =", hitGreeting || "无");
   if (greetings.some((g) => t.includes(g))) return { type: "other" };
 
   const listKw = ["列表", "信息", "有哪些", "给我", "列出", "看看", "帮我找", "推荐", "有没有", "有吗", "找"];
   const analysisKw = ["多不多", "怎么样", "趋势", "建议", "分析", "一般多少", "区间", "怎么看", "平均", "行情", "多少"];
   const isList = listKw.some((k) => t.includes(k));
   const isAnalysis = analysisKw.some((k) => t.includes(k));
+  console.log("[aiChat] detectIntent 列表词命中 =", isList, "| 分析词命中 =", isAnalysis);
 
   // 城市 / 省份（先市后省，"吉林"等重名会优先命中市级）
   let city = null;
@@ -190,6 +201,7 @@ function detectIntent(text) {
       }
     }
   }
+  console.log("[aiChat] detectIntent 城市/省份命中 =", city || "无", "| isProvince =", isProvince);
   // 翻译成行政区划 code：市→city_code，省→province_code
   const cityCode = city
     ? isProvince
@@ -210,6 +222,7 @@ function detectIntent(text) {
     t.includes("压面机") ||
     t.includes("冰柜") ||
     t.includes("蒸包机");
+  console.log("[aiChat] detectIntent 设备词命中 =", hasEquipWord);
   if (hasEquipWord) {
     // 求购侧关键词：买/收购/求购/收
     const buyKw = ["买", "收购", "求购", "收"];
@@ -222,11 +235,13 @@ function detectIntent(text) {
   else if (t.includes("求店") || t.includes("找店")) dataType = "want_shop";
   else if (t.includes("转让") || t.includes("转店") || t.includes("铺子")) dataType = "transfer";
   else if (t.includes("招") || t.includes("招聘")) dataType = "recruit";
+  console.log("[aiChat] detectIntent 领域类型 dataType =", dataType || "未识别");
 
   // 数量限制（"10条" → limit=10）
   let limit = null;
   const m = t.match(/(\d{1,2})\s*(?:条|个)/);
   if (m) limit = Math.min(parseInt(m[1], 10) || 10, 20);
+  if (m) console.log("[aiChat] detectIntent 数量限制命中 =", t.slice(m.index, m.index + m[0].length), "→ limit =", limit);
 
   // 默认 list：用户没提"分析/行情"类词时，直接给列表最快
   return { type: isAnalysis ? "analysis" : "list", city, cityCode, isProvince, dataType, limit };
@@ -261,6 +276,9 @@ async function queryPosts(intent) {
   }
 
   const limit = intent.limit || 10;
+  // ---- 日志：本次查询的完整条件 ----
+  console.log("[aiChat] queryPosts 条件 =", JSON.stringify(query));
+  console.log("[aiChat] queryPosts limit =", limit, "| orderBy = published_at desc");
   // 查询出错会向上抛出，由 exports.main 统一捕获并返回给用户，方便排查
   const res = await db
     .collection("baozi_posts")
@@ -268,6 +286,8 @@ async function queryPosts(intent) {
     .orderBy("published_at", "desc")
     .limit(limit)
     .get();
+  // ---- 日志：查询命中条数 ----
+  console.log("[aiChat] queryPosts 命中条数 =", (res.data || []).length);
   return res.data || [];
 }
 
@@ -294,8 +314,8 @@ function formatPost(p, i) {
       break;
     case "recruit":
       if (p.role) parts.push(p.role);
-      if (p.salary_note) parts.push("薪资:" + p.salary_note);
-      else if (p.salary_low) parts.push("薪资" + p.salary_low + (p.salary_high ? "-" + p.salary_high : "") + "元");
+      if (p.salary_high) parts.push("薪资" + p.salary_high + "元");
+      else parts.push("薪资面议");
       if (p.address) parts.push("地址:" + p.address);
       if (p.contact) parts.push("联系人:" + p.contact);
       if (p.boss_style) parts.push(p.boss_style);

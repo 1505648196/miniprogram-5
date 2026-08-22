@@ -345,13 +345,8 @@ Page({
 
 // ---------- 工具函数（与招工页共用，post → 卡片视图模型） ----------
 function decorate(p) {
-  const salary =
-    p.salary_note ||
-    (p.salary_low && p.salary_high
-      ? `${p.salary_low}-${p.salary_high}元`
-      : p.salary_low
-        ? `${p.salary_low}元以上`
-        : "薪资面议");
+  // 只显示 salary_high 或面议
+  const salary = p.salary_high ? `薪资${p.salary_high}元` : "薪资面议";
   const province = p.province || "";
   const city = p.city || "";
   const location =
