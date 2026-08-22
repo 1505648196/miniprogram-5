@@ -1,0 +1,7 @@
+
+      const reply =
+        (response.data &&
+          response.data.choices &&
+          response.data.choices[0] &&
+          response.data.choices[0].message &&
+          response.data.choic

@@ -1,0 +1,14 @@
+{
+  "name": "publishPost",
+  "version": "1.0.0",
+  "description": "发布帖子入库：校验、电话脱敏、写 baozi_posts",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

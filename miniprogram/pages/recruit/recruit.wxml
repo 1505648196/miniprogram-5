@@ -1,0 +1,136 @@
+<!-- pages/recruit/recruit.wxml 招工独立页 -->
+<view class="page">
+
+  <!-- ================= 招聘信息流 ================= -->
+  <scroll-view
+    class="list-scroll"
+    scroll-y
+    scroll-with-animation
+    bindscrolltolower="onListLower"
+  >
+    <view class="list-inner">
+      <!-- 空状态 -->
+      <block wx:if="{{listLoaded && list.length === 0}}">
+        <view class="empty">
+          <view class="empty-icon">🧑‍🍳</view>
+          <view class="empty-title">还没有招工信息</view>
+          <view class="empty-sub">发布第一条招聘，让师傅找到你</view>
+          <view class="empty-btn" bindtap="goPublish">＋ 我要发布招工</view>
+        </view>
+      </block>
+
+      <!-- 列表 -->
+      <block wx:else>
+        <view class="post-card" wx:for="{{list}}" wx:key="_id">
+          <view class="post-top">
+            <text class="post-role">{{item.role || '招工'}}</text>
+            <text class="post-location">{{item.locationText}}</text>
+            <text class="post-time">{{item.timeText}}</text>
+          </view>
+          <view class="post-salary">💼 {{item.salaryText}}</view>
+          <view class="post-line" wx:if="{{item.address}}">📍 {{item.address}}</view>
+          <view class="post-line" wx:if="{{item.contactText}}">👤 {{item.contactText}}</view>
+          <view class="post-desc" wx:if="{{item.raw_text}}">{{item.raw_text}}</view>
+          <view class="post-tags" wx:if="{{item.tagItems && item.tagItems.length}}">
+            <text
+              class="post-tag {{tagItem.cls}}"
+              wx:for="{{item.tagItems}}"
+              wx:for-item="tagItem"
+              wx:key="name"
+            >{{tagItem.name}}</text>
+          </view>
+        </view>
+
+        <!-- 加载更多 -->
+        <view class="list-more" wx:if="{{listLoading}}">加载中...</view>
+        <view class="list-more" wx:elif="{{!hasMore && list.length > 0}}">— 已经到底啦 —</view>
+        <view class="list-more" wx:elif="{{list.length > 0}}" bindtap="onListLower">上拉加载更多</view>
+
+        <!-- 列表底部发布入口 -->
+        <view class="publish-entry" bindtap="goPublish">＋ 我要发布招工</view>
+      </block>
+    </view>
+  </scroll-view>
+
+  <!-- ================= AI 招工助手弹层 ================= -->
+  <view class="ai-mask" wx:if="{{aiOpen}}" bindtap="closeAi"></view>
+  <view class="ai-panel {{aiOpen ? 'ai-open' : ''}}">
+    <view class="ai-head">
+      <view class="ai-head-left">
+        <view class="ai-title">🤖 AI 招工助手</view>
+        <view class="ai-sub">查招聘信息 · 师傅薪资行情 · 招工注意事项</view>
+      </view>
+      <view class="ai-close" bindtap="closeAi">收起</view>
+    </view>
+
+    <scroll-view class="ai-msgs" scroll-y scroll-into-view="{{aiScrollIntoView}}">
+      <block wx:if="{{aiMessages.length === 0}}">
+        <view class="ai-hint">试着问我：</view>
+        <view class="ai-chip" wx:for="{{aiSuggestions}}" wx:key="*this" data-text="{{item}}" bindtap="onAiSuggest">{{item}}</view>
+      </block>
+      <block wx:else>
+        <block wx:for="{{aiMessages}}" wx:key="id" wx:for-item="item">
+          <!-- AI 消息行：纯文字，无气泡 -->
+          <view class="ai-msg-row" wx:if="{{item.role === 'ai'}}" id="{{item.id}}">
+            <view class="ai-msg ai-msg-ai {{item.msgType === 'list' ? 'ai-msg-list' : ''}}">
+              <block wx:if="{{item.msgType === 'list'}}">
+                <view class="ai-list-head" wx:if="{{item.content}}">{{item.content}}</view>
+                <view class="post-card" wx:for="{{item.cards}}" wx:for-item="card" wx:key="_id">
+                  <view class="post-top">
+                    <text class="post-role">{{card.role || '招工'}}</text>
+                    <text class="post-location">{{card.locationText}}</text>
+                    <text class="post-time">{{card.timeText}}</text>
+                  </view>
+                  <view class="post-salary">💼 {{card.salaryText}}</view>
+                  <view class="post-line" wx:if="{{card.address}}">📍 {{card.address}}</view>
+                  <view class="post-line" wx:if="{{card.contactText}}">👤 {{card.contactText}}</view>
+                  <view class="post-desc" wx:if="{{card.raw_text}}">{{card.raw_text}}</view>
+                  <view class="post-tags" wx:if="{{card.tagItems && card.tagItems.length}}">
+                    <text
+                      class="post-tag {{tagItem.cls}}"
+                      wx:for="{{card.tagItems}}"
+                      wx:for-item="tagItem"
+                      wx:key="name"
+                    >{{tagItem.name}}</text>
+                  </view>
+                </view>
+              </block>
+              <block wx:else>
+                {{item.content}}<text class="cursor" wx:if="{{item.streaming}}">▍</text>
+              </block>
+            </view>
+          </view>
+
+          <!-- 用户消息行：深灰小气泡，文字居中 -->
+          <view class="ai-msg-row ai-msg-row-user" wx:else id="{{item.id}}">
+            <view class="ai-msg ai-msg-user">
+              {{item.content}}
+            </view>
+          </view>
+        </block>
+      </block>
+    </scroll-view>
+
+    <view class="ai-input-row">
+      <input
+        class="ai-input"
+        value="{{aiInput}}"
+        placeholder="问招工顾问…"
+        placeholder-class="ph"
+        confirm-type="send"
+        disabled="{{aiLoading}}"
+        bindinput="onAiInput"
+        bindconfirm="onAiSend"
+      />
+      <view class="ai-send {{aiLoading ? 'ai-send-disabled' : ''}}" bindtap="onAiSend">发送</view>
+    </view>
+  </view>
+
+  <!-- ================= 底部 AI 入口条 ================= -->
+  <view class="ai-bar" bindtap="openAi">
+    <view class="ai-bar-text">🤖 问招工顾问：招聘信息、师傅工资、注意事项</view>
+    <view class="ai-bar-btn">问 AI</view>
+  </view>
+  <view class="safe-area"></view>
+
+</view>
