@@ -54,9 +54,15 @@ const ALL_TAG_OPTIONS = [...WELFARE_OPTIONS, ...BOSS_REGION_OPTIONS, ...SHOP_TYP
 // ② 求职词
 const JOBSEEK_KEYWORDS = ["找活", "想找活", "找工作", "求职", "我是师傅", "我找工作", "待业"];
 // 招工词（② 排除 + ④ 信号）
-const RECRUIT_KEYWORDS = ["招", "招聘", "招工", "招人", "请人", "雇", "招师傅", "招阿姨", "招学徒"];
+const RECRUIT_KEYWORDS =
+ [
+  "招", "招聘", "招工", "招人", "请人", "雇", "招师傅", "招阿姨", "招学徒"
+];
 // ③ 查询 override
-const QUERY_OVERRIDE_KEYWORDS = ["有没有", "哪里有", "谁家", "推荐", "附近", "查一下", "搜一下", "哪些", "在哪", "哪里"];
+const QUERY_OVERRIDE_KEYWORDS = 
+[
+  "有没有", "哪里有", "谁家", "推荐", "附近", "查一下", "搜一下", "哪些", "在哪", "哪里"
+];
 // ④ 发布信号
 const PUBLISH_KEYWORDS = [...RECRUIT_KEYWORDS, "我要发", "帮我发", "我要招", "发布", "发个", "发一条", "发个招工"];
 // ④b 留电话式发布：雇主要求应聘者电话联系（"饼类师傅…请在上班时间内联系 138xxxx"）
@@ -116,7 +122,38 @@ exports.main = async (event) => {
     return handlePublishFlow(openid, question, null);
   }
 
-  // ④否 → 查询流 + 切发布提示
+  // ④否 → 关键词规则未命中：先保两类原能力，再走 DeepSeek 兜底分类
+  //   - other（问候/致谢）→ 原引导语；phone（纯手机号直查）→ 手机号精确匹配，避免被 DeepSeek 误判吞掉
+  //   - 否则 DeepSeek 三分类：1=查询 → 数据库 10 条招工；2=发布 → 引导发完整信息；0=都不是 → 暂无数据/转人工
+  const fallbackIntent0 = detectIntent(question);
+  if (fallbackIntent0.type === "other" || fallbackIntent0.type === "phone") {
+    return await handleQuery(question, true);
+  }
+  const fallbackIntent = await classifyByDeepSeek(question);
+  console.log("[recruitAI] 兜底 DeepSeek 意图 =", fallbackIntent);
+  if (fallbackIntent === 1) {
+    // 想查询：DeepSeek 已兜底判定为查询，跳过 detectIntent 二次解析（避免 keyword 过滤误伤），
+    // 直接返回数据库最近 10 条招工数据
+    return await handleQuery(question, false, { skipDetect: true });
+  }
+  if (fallbackIntent === 2) {
+    // 想发布：引导一次性发送完整招工信息（岗位/城市/薪资/电话），下一轮命中 ④ 发布信号走发布流
+    return {
+      msgType: "text",
+      reply:
+        "好的，你想发布招工信息。请一次性发送完整信息：岗位、城市、月薪、联系电话。\n\n" +
+        "例如：\n· 招大师傅 上海 6000-8000 18700009563\n· 招夫妻工 东莞 月薪7000 包吃住 13800001234",
+    };
+  }
+  if (fallbackIntent === 0) {
+    // 都不是（闲聊/无关/无法判断）：暂无数据 + 转人工引导（tipChip 由前端渲染为可点击追问，点击走查询流）
+    return {
+      msgType: "text",
+      reply: "抱歉，暂时没有找到相关信息。需要转人工客服吗？",
+      tipChip: "上海有哪些包子店在招工",
+    };
+  }
+  // DeepSeek 没配 Key / 调用失败 / 返回非合法 JSON → 回落原逻辑（查询流 + 切发布提示），不破坏现状
   return await handleQuery(question, true);
 };
 
@@ -394,7 +431,32 @@ async function publishToBaoziPosts(d) {
 
 // ============== handleQuery（查询流，原 main 主体抽出）==============
 // withPublishTip=true 时给结果加 tipChip="我要发布招工"，前端渲染为切发布按钮
-async function handleQuery(question, withPublishTip) {
+// options.skipDetect=true → DeepSeek 已兜底判定为查询，跳过 detectIntent 解析，直接返回最近 10 条
+async function handleQuery(question, withPublishTip, options = {}) {
+  if (options.skipDetect) {
+    try {
+      const res = await db.collection("baozi_posts")
+        .where({ data_type: "recruit", needs_review: _.neq(true) })
+        .orderBy("published_at", "desc")
+        .limit(10)
+        .get();
+      const posts = res.data || [];
+      if (!posts.length) {
+        return withTip({
+          msgType: "text",
+          reply: "抱歉，暂时还没有招工信息，晚点再来看看吧。",
+        }, withPublishTip);
+      }
+      const list = posts.map((p, i) => formatPost(p, i, false)).join("\n");
+      return withTip({
+        msgType: "list",
+        reply: `【最新招工 · 共${posts.length}条】\n\n` + list,
+        data: posts,
+      }, withPublishTip);
+    } catch (e) {
+      return withTip({ msgType: "text", reply: "查询数据库出错：" + (e.errMsg || e.message || e) }, withPublishTip);
+    }
+  }
   const intent = detectIntent(question);
   if (intent.type === "other") return withTip({ msgType: "text", reply: buildGuide() }, withPublishTip);
 
@@ -1085,6 +1147,60 @@ async function callDeepSeekInsight(stats, posts, question) {
       response.data.choices[0].message.content) ||
     ""
   ).trim();
+}
+
+// 兜底分类器：状态机 ①~④ 关键词全未命中时，用 DeepSeek 判断用户意图
+//   返回 1=查询招工信息  2=发布招工信息  0=都不是（闲聊/无关/无法判断）
+//   只允许 DeepSeek 返回 JSON：{"intent": 1|2|0}；解析失败或没配 Key → 返回 null（调用方回落原逻辑）
+async function classifyByDeepSeek(question) {
+  const apiKey = process.env.DEEPSEEK_API_KEY;
+  if (!apiKey) return null;
+  try {
+    const response = await axios.post(
+      DEEPSEEK_API_URL,
+      {
+        model: MODEL,
+        messages: [
+          {
+            role: "system",
+            content:
+              "你是包子行业信息平台的意图分类器，判断用户这句话是想【查询】还是【发布】招工信息。\n" +
+              "只允许返回一个 JSON 对象，禁止输出任何其他文字、解释或 Markdown 代码块标记。\n" +
+              'JSON 格式：{"intent": 1} 或 {"intent": 2} 或 {"intent": 0}\n' +
+              "1=查询招工信息：想查有哪些包子店在招工、师傅薪资行情、招聘信息等；\n" +
+              "2=发布招工信息：想发招聘帖子、招师傅、招人、挂招聘信息等；\n" +
+              "0=都不是：闲聊、问候、无关内容、或无法判断。\n" +
+              '示例：\n用户：上海有哪些包子店在招工 → {"intent": 1}\n' +
+              '用户：帮我发一条招工信息 → {"intent": 2}\n' +
+              '用户：今天天气怎么样 → {"intent": 0}',
+          },
+          { role: "user", content: question },
+        ],
+        temperature: 0,
+        max_tokens: 20,
+      },
+      {
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+        timeout: 15000,
+      }
+    );
+    const raw =
+      (response.data &&
+        response.data.choices &&
+        response.data.choices[0] &&
+        response.data.choices[0].message &&
+        response.data.choices[0].message.content) ||
+      "";
+    // 容错解析：剥掉 ```json 围栏，取首个 {...} 片段；JSON.parse 失败/值非法 → null（回落原逻辑）
+    const m = String(raw).replace(/```json|```/g, "").match(/\{[\s\S]*?\}/);
+    if (!m) return null;
+    const parsed = JSON.parse(m[0]);
+    const intent = Number(parsed && parsed.intent);
+    return [0, 1, 2].includes(intent) ? intent : null;
+  } catch (e) {
+    console.log("[recruitAI] classifyByDeepSeek 失败 =", (e && e.message) || e);
+    return null;
+  }
 }
 
 // 无 AI Key / 调用失败时的模板洞察

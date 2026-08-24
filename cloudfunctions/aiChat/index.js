@@ -559,3 +559,4 @@ function buildChips(intent) {
       return [`${c}包子店转让行情怎么样`, `${c}招包子师傅`, `${c}二手设备信息`];
   }
 }
+
