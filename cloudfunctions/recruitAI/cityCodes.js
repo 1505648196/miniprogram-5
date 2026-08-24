@@ -1,10 +1,11 @@
-// cloudfunctions/aiChat/cityCodes.js
+// cloudfunctions/recruitAI/cityCodes.js
 // 全国行政区划代码词典（GB/T 2260，与微信 picker mode="region" 的 code 一致）
 // 用途：提问侧把自然语言里的城市/省份名翻译成 code，与发布侧入库的 *_code 精确匹配
 // 说明：
 //   1. CITY_CODES 收录地级市/自治州/盟/地区 + 直辖市（code 用省级码）+ 省直管县级市 + 港澳台
 //   2. 省名放在 PROVINCE_CODES，检测时"先市后省"，因此"吉林"会优先命中市级 220200
 //   3. 检索侧对市级统一用 or([{city_code}, {district_code}])，兼容县级市/区发布的数据
+//   （本文件与 aiChat/cityCodes.js 逐字一致，属公共数据词典，不混业务逻辑）
 
 module.exports = {
   PROVINCE_CODES: {

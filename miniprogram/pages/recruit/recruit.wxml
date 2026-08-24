@@ -60,6 +60,12 @@
         <view class="ai-title">🤖 AI 招工助手</view>
         <view class="ai-sub">查招聘信息 · 师傅薪资行情 · 招工注意事项</view>
       </view>
+      <view
+        class="ai-clear {{aiLoading ? 'ai-clear-disabled' : ''}}"
+        wx:if="{{aiMessages.length > 0}}"
+        hover-class="ai-clear-hover"
+        bindtap="onAiClear"
+      >清空</view>
       <view class="ai-close" bindtap="closeAi">收起</view>
     </view>
 
@@ -95,8 +101,126 @@
                   </view>
                 </view>
               </block>
+              <!-- 分析类：KPI + 条形图 + 案例卡片 + 洞察 + 引导芯片 -->
+              <block wx:elif="{{item.msgType === 'analysis'}}">
+                <block wx:for="{{item.blocks}}" wx:for-item="b" wx:key="index">
+                  <!-- 标题 -->
+                  <view wx:if="{{b.type === 'head'}}" class="a-head">{{b.text}}</view>
+                  <!-- KPI 数字卡（横滑） -->
+                  <scroll-view wx:elif="{{b.type === 'kpi'}}" class="a-kpi-scroll" scroll-x enable-flex>
+                    <view class="a-kpi" wx:for="{{b.items}}" wx:for-item="k" wx:key="label">
+                      <view class="a-kpi-value">{{k.value}}<text class="a-kpi-unit" wx:if="{{k.unit}}">{{k.unit}}</text></view>
+                      <view class="a-kpi-label">{{k.label}}</view>
+                    </view>
+                  </scroll-view>
+                  <!-- 薪资条形图 -->
+                  <view wx:elif="{{b.type === 'bar'}}" class="a-block">
+                    <view class="a-sub-title" wx:if="{{b.title}}">{{b.title}}</view>
+                    <view class="a-bar-row" wx:for="{{b.items}}" wx:for-item="bar" wx:key="label">
+                      <view class="a-bar-label">
+                        <text class="a-bar-emoji" wx:if="{{bar.emoji}}">{{bar.emoji}}</text>
+                        <text class="a-bar-name">{{bar.label}}</text>
+                        <text class="a-bar-cnt" wx:if="{{bar.cnt > 1}}">×{{bar.cnt}}</text>
+                      </view>
+                      <view class="a-bar-track">
+                        <view class="a-bar-fill {{bar.hot ? 'a-bar-hot' : ''}}" style="{{bar.styleStr}}"></view>
+                      </view>
+                      <view class="a-bar-range {{bar.hot ? 'a-bar-range-hot' : ''}}">{{bar.low}}~{{bar.high}} 元</view>
+                    </view>
+                  </view>
+                  <!-- 案例卡片：默认折叠，前 3 条 + 展开全部 -->
+                  <view wx:elif="{{b.type === 'cases'}}" class="a-block">
+                    <view class="a-sub-title" wx:if="{{b.title}}">{{b.title}}</view>
+                    <view class="post-card" wx:for="{{b.visibleCards || b.cards}}" wx:for-item="card" wx:key="_id">
+                      <view class="post-top">
+                        <text class="post-role">{{card.role || '招工'}}</text>
+                        <text class="post-location">{{card.locationText}}</text>
+                        <text class="post-time">{{card.timeText}}</text>
+                      </view>
+                      <view class="post-salary">💼 {{card.salaryText}}</view>
+                      <view class="post-line" wx:if="{{card.address}}">📍 {{card.address}}</view>
+                      <view class="post-line" wx:if="{{card.contactText}}">👤 {{card.contactText}}</view>
+                      <view class="post-desc" wx:if="{{card.raw_text}}">{{card.raw_text}}</view>
+                      <view class="post-tags" wx:if="{{card.tagItems && card.tagItems.length}}">
+                        <text
+                          class="post-tag {{tagItem.cls}}"
+                          wx:for="{{card.tagItems}}"
+                          wx:for-item="tagItem"
+                          wx:key="name"
+                        >{{tagItem.name}}</text>
+                      </view>
+                    </view>
+                    <view class="cases-toggle" bindtap="onAiCasesToggle" data-msgid="{{item.id}}" wx:if="{{b.cards.length > 3}}">
+                      <text wx:if="{{item.casesCollapsed}}">展开全部 {{b.cards.length}} 条 ∨</text>
+                      <text wx:else>收起 ∧</text>
+                    </view>
+                  </view>
+                  <!-- 洞察（AI 叙事） -->
+                  <view wx:elif="{{b.type === 'insight'}}" class="a-insight">{{b.text}}</view>
+                  <!-- Tip 提示 -->
+                  <view wx:elif="{{b.type === 'tip'}}" class="a-tip">
+                    <text class="a-tip-emoji">{{b.emoji}}</text>
+                    <text class="a-tip-text">{{b.text}}</text>
+                  </view>
+                  <!-- 引导追问芯片 -->
+                  <view wx:elif="{{b.type === 'chips'}}" class="a-chips">
+                    <view class="a-chip" wx:for="{{b.items}}" wx:for-item="c" wx:key="*this" data-text="{{c}}" bindtap="onAiSuggest">{{c}}</view>
+                  </view>
+                </block>
+              </block>
+              <!-- 发布交互卡（confirm：确认发布 / draft_continue：续草稿 / draft_pending：草稿提示+跳过） -->
+              <block wx:elif="{{item.msgType === 'card'}}">
+                <view class="p-card {{item.cardType === 'confirm' ? 'p-card-confirm' : (item.cardType === 'draft_pending' ? 'p-card-pending' : 'p-card-draft')}}">
+                  <view class="p-card-head">
+                    <text class="p-card-title" wx:if="{{item.cardType === 'confirm'}}">📋 确认招工信息</text>
+                    <text class="p-card-title" wx:elif="{{item.cardType === 'draft_pending'}}">📝 您有一条未发布的招工草稿</text>
+                    <text class="p-card-title" wx:else>📝 继续完善招工信息</text>
+                    <text class="p-card-tag" wx:if="{{item.cardType === 'confirm'}}">待确认</text>
+                    <text class="p-card-tag p-card-tag-warn" wx:elif="{{item.cardType === 'draft_pending'}}">未发布</text>
+                    <text class="p-card-tag p-card-tag-warn" wx:else>还差 {{item.missing.length}} 项</text>
+                  </view>
+                  <view class="p-card-reply" wx:if="{{item.content}}">{{item.content}}</view>
+
+                  <!-- 已填字段 -->
+                  <view class="p-fields" wx:if="{{item.fields && item.fields.length}}">
+                    <view class="p-field-row" wx:for="{{item.fields}}" wx:for-item="f" wx:key="key">
+                      <text class="p-field-emoji">{{f.emoji || '📍'}}</text>
+                      <text class="p-field-label">{{f.label}}</text>
+                      <text class="p-field-value">{{f.value}}</text>
+                    </view>
+                  </view>
+
+                  <!-- 缺失项提示 -->
+                  <view class="p-missing" wx:if="{{item.missing && item.missing.length}}">
+                    <text class="p-missing-icon">⚠️</text>
+                    <text class="p-missing-text">还差：</text>
+                    <text class="p-missing-item" wx:for="{{item.missing}}" wx:for-item="m" wx:key="key">{{m.label}}</text>
+                  </view>
+
+                  <!-- 标签预览 -->
+                  <view class="p-tags" wx:if="{{item.tags && item.tags.length}}">
+                    <text class="p-tag" wx:for="{{item.tags}}" wx:for-item="t" wx:key="*this">{{t}}</text>
+                  </view>
+
+                  <!-- 操作按钮 -->
+                  <view class="p-btn-row" wx:if="{{item.cardType === 'confirm'}}">
+                    <view class="p-btn p-btn-primary" bindtap="onCardPublish">✅ 确认发布</view>
+                    <view class="p-btn p-btn-ghost" bindtap="onCardCancel">取消</view>
+                  </view>
+                  <view class="p-btn-row" wx:elif="{{item.cardType === 'draft_pending'}}">
+                    <view class="p-btn p-btn-primary" data-msgid="{{item.id}}" bindtap="onCardContinue">✏️ 继续补充</view>
+                    <view class="p-btn p-btn-ghost" data-msgid="{{item.id}}" bindtap="onCardSkip">跳过草稿</view>
+                  </view>
+                  <view class="p-btn-row" wx:else>
+                    <view class="p-btn-inline" bindtap="onQuerySwitch">🔍 需查询？点我查信息</view>
+                  </view>
+                </view>
+              </block>
               <block wx:else>
                 {{item.content}}<text class="cursor" wx:if="{{item.streaming}}">▍</text>
+                <view class="p-tipchip" wx:if="{{item.tipChip}}" data-text="{{item.tipChip}}" bindtap="onAiSuggest">
+                  <text class="p-tipchip-icon">✏️</text>{{item.tipChip}}
+                </view>
               </block>
             </view>
           </view>
@@ -132,5 +256,31 @@
     <view class="ai-bar-btn">问 AI</view>
   </view>
   <view class="safe-area"></view>
+
+  <!-- ================= 发布成功弹层 ================= -->
+  <view class="pub-mask" wx:if="{{publishDone}}" bindtap="onPublishDoneView"></view>
+  <view class="pub-modal" wx:if="{{publishDone}}">
+    <view class="pub-icon">✅</view>
+    <view class="pub-title">发布成功</view>
+    <view class="pub-sub">招工信息已同步到列表，求职者可以看到</view>
+    <view class="pub-summary">
+      <view class="pub-row">
+        <text class="pub-label">岗位</text>
+        <text class="pub-value">{{publishInfo.role}}</text>
+      </view>
+      <view class="pub-row">
+        <text class="pub-label">城市</text>
+        <text class="pub-value">{{publishInfo.city}}</text>
+      </view>
+      <view class="pub-row">
+        <text class="pub-label">薪资</text>
+        <text class="pub-value">{{publishInfo.salaryText}}</text>
+      </view>
+    </view>
+    <view class="pub-btns">
+      <view class="pub-btn pub-btn-primary" bindtap="onPublishAgain">再发一条</view>
+      <view class="pub-btn pub-btn-ghost" bindtap="onPublishDoneView">查看列表</view>
+    </view>
+  </view>
 
 </view>

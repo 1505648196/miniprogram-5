@@ -58,6 +58,68 @@
                   </view>
                 </view>
               </block>
+              <!-- 分析类：KPI + 条形图 + 案例卡片 + 洞察 + 引导芯片 -->
+              <block wx:elif="{{item.msgType === 'analysis'}}">
+                <block wx:for="{{item.blocks}}" wx:for-item="b" wx:key="index">
+                  <!-- 标题 -->
+                  <view wx:if="{{b.type === 'head'}}" class="a-head">{{b.text}}</view>
+                  <!-- KPI 数字卡（横滑） -->
+                  <scroll-view wx:elif="{{b.type === 'kpi'}}" class="a-kpi-scroll" scroll-x enable-flex>
+                    <view class="a-kpi" wx:for="{{b.items}}" wx:for-item="k" wx:key="label">
+                      <view class="a-kpi-value">{{k.value}}<text class="a-kpi-unit" wx:if="{{k.unit}}">{{k.unit}}</text></view>
+                      <view class="a-kpi-label">{{k.label}}</view>
+                    </view>
+                  </scroll-view>
+                  <!-- 薪资条形图 -->
+                  <view wx:elif="{{b.type === 'bar'}}" class="a-block">
+                    <view class="a-sub-title" wx:if="{{b.title}}">{{b.title}}</view>
+                    <view class="a-bar-row" wx:for="{{b.items}}" wx:for-item="bar" wx:key="label">
+                      <view class="a-bar-label">
+                        <text class="a-bar-emoji" wx:if="{{bar.emoji}}">{{bar.emoji}}</text>
+                        <text class="a-bar-name">{{bar.label}}</text>
+                        <text class="a-bar-cnt" wx:if="{{bar.cnt > 1}}">×{{bar.cnt}}</text>
+                      </view>
+                      <view class="a-bar-track">
+                        <view class="a-bar-fill {{bar.hot ? 'a-bar-hot' : ''}}" style="{{bar.styleStr}}"></view>
+                      </view>
+                      <view class="a-bar-range {{bar.hot ? 'a-bar-range-hot' : ''}}">{{bar.low}}~{{bar.high}} 元</view>
+                    </view>
+                  </view>
+                  <!-- 案例卡片：默认折叠，前 3 条 + 展开全部 -->
+                  <view wx:elif="{{b.type === 'cases'}}" class="a-block">
+                    <view class="a-sub-title" wx:if="{{b.title}}">{{b.title}}</view>
+                    <view class="post-card" wx:for="{{b.visibleCards || b.cards}}" wx:for-item="card" wx:key="_id">
+                      <view class="post-top">
+                        <text class="post-role">{{card.role || '信息'}}</text>
+                        <text class="post-location">{{card.locationText}}</text>
+                        <text class="post-time">{{card.timeText}}</text>
+                      </view>
+                      <view class="post-salary" wx:if="{{card.salaryText}}">💼 {{card.salaryText}}</view>
+                      <view class="post-line" wx:if="{{card.address}}">📍 {{card.address}}</view>
+                      <view class="post-line" wx:if="{{card.contactText}}">👤 {{card.contactText}}</view>
+                      <view class="post-desc" wx:if="{{card.raw_text}}">{{card.raw_text}}</view>
+                      <view class="post-tags" wx:if="{{card.tagItems && card.tagItems.length}}">
+                        <text class="post-tag {{tagItem.cls}}" wx:for="{{card.tagItems}}" wx:for-item="tagItem" wx:key="name">{{tagItem.name}}</text>
+                      </view>
+                    </view>
+                    <view class="cases-toggle" bindtap="onCasesToggle" data-msgid="{{item.id}}" wx:if="{{b.cards.length > 3}}">
+                      <text wx:if="{{item.casesCollapsed}}">展开全部 {{b.cards.length}} 条 ∨</text>
+                      <text wx:else>收起 ∧</text>
+                    </view>
+                  </view>
+                  <!-- 洞察（AI 叙事） -->
+                  <view wx:elif="{{b.type === 'insight'}}" class="a-insight">{{b.text}}</view>
+                  <!-- Tip 提示 -->
+                  <view wx:elif="{{b.type === 'tip'}}" class="a-tip">
+                    <text class="a-tip-emoji">{{b.emoji}}</text>
+                    <text class="a-tip-text">{{b.text}}</text>
+                  </view>
+                  <!-- 引导追问芯片 -->
+                  <view wx:elif="{{b.type === 'chips'}}" class="a-chips">
+                    <view class="a-chip" wx:for="{{b.items}}" wx:for-item="c" wx:key="*this" data-text="{{c}}" bindtap="onSuggestTap">{{c}}</view>
+                  </view>
+                </block>
+              </block>
               <!-- 普通文本 -->
               <block wx:else>
                 {{item.content}}<text class="cursor" wx:if="{{item.streaming}}">▍</text>

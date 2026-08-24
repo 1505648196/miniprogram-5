@@ -170,4 +170,30 @@
   </view>
   <view class="safe-area"></view>
 
+  <!-- ================= 发布成功弹层 ================= -->
+  <view class="pub-mask" wx:if="{{publishDone}}" bindtap="onPublishDoneGoBack"></view>
+  <view class="pub-modal" wx:if="{{publishDone}}">
+    <view class="pub-icon">✅</view>
+    <view class="pub-title">发布成功</view>
+    <view class="pub-sub">招工信息已同步到列表，求职者可以看到</view>
+    <view class="pub-summary">
+      <view class="pub-row">
+        <text class="pub-label">岗位</text>
+        <text class="pub-value">{{publishInfo.role}}</text>
+      </view>
+      <view class="pub-row">
+        <text class="pub-label">城市</text>
+        <text class="pub-value">{{publishInfo.city}}</text>
+      </view>
+      <view class="pub-row">
+        <text class="pub-label">薪资</text>
+        <text class="pub-value">{{publishInfo.salaryText}}</text>
+      </view>
+    </view>
+    <view class="pub-btns">
+      <view class="pub-btn pub-btn-primary" bindtap="onPublishAgain">再发一条</view>
+      <view class="pub-btn pub-btn-ghost" bindtap="onPublishDoneGoBack">完成</view>
+    </view>
+  </view>
+
 </view>

@@ -8,7 +8,7 @@ const ROLE_OPTIONS = [
   "学徒工",
   "小笼包师傅",
   "饼类师傅",
-  "二把刀",
+  "二把手",
   "油炸类师傅",
   "中工",
   "生煎类师傅",
@@ -54,6 +54,9 @@ Page({
     tagsOpen: true, // 标签卡是否展开（默认展开）
     tagCount: 0,     // 已选标签数
     submitting: false,
+    // 发布成功弹层
+    publishDone: false,
+    publishInfo: { role: "", city: "", salaryText: "" },
   },
 
   onLoad() {
@@ -215,8 +218,8 @@ Page({
     }
 
     const rc = d.regionCode || [];
-    // 直辖市归一化：如"天津市 天津市 和平区"的 code 前两位相同，city_code 取省级码（code[0]）
-    const isMunicipality = !!rc[0] && rc[0] === rc[1];
+    // 直辖市无需归一化：微信 picker 对直辖市返回 code = ["110000","110100","110105"]，
+    // rc[1] 即"市辖区"市级汇总码（110100），符合国标 city_code，直接取用
     const form = {
       role: d.roles[d.roleIndex],
       salaryHigh: d.isFaceTalk ? "" : d.salary, // 工资只存 salary_high（面议时为空）
@@ -225,7 +228,7 @@ Page({
       city: d.region[1] || "",
       district: d.region[2] || "",
       province_code: rc[0] || "",
-      city_code: isMunicipality ? rc[0] : rc[1] || "",
+      city_code: rc[1] || "",
       district_code: rc[2] || "",
       address: d.address,
       latitude: d.latitude,
@@ -253,12 +256,15 @@ Page({
         wx.hideLoading();
         const result = res.result || {};
         if (result.success) {
-          wx.showToast({ title: "发布成功", icon: "success" });
-          // 返回上一页（招工页），并在返回后触发列表刷新
-          const pages = getCurrentPages();
-          const prev = pages[pages.length - 2];
-          if (prev && prev.onPublished) prev.onPublished();
-          setTimeout(() => wx.navigateBack(), 800);
+          // 成功：显示自定义弹层（摘要 + 「完成/再发一条」），返回由用户点击触发
+          this.setData({
+            publishDone: true,
+            publishInfo: {
+              role: form.role,
+              city: [form.province, form.city, form.district].filter(Boolean).join(" "),
+              salaryText: form.salaryNote === "面议" ? "面议" : form.salaryHigh + " 元",
+            },
+          });
         } else {
           wx.showToast({ title: result.error || "发布失败", icon: "none", duration: 3000 });
         }
@@ -274,5 +280,44 @@ Page({
       .finally(() => {
         this.setData({ submitting: false });
       });
+  },
+
+  // ================= 发布成功弹层 =================
+  // 「完成」：返回招工页并触发列表刷新
+  onPublishDoneGoBack() {
+    const pages = getCurrentPages();
+    const prev = pages[pages.length - 2];
+    if (prev && prev.onPublished) prev.onPublished();
+    wx.navigateBack();
+  },
+
+  // 「再发一条」：重置表单继续发布
+  onPublishAgain() {
+    this.setData(
+      {
+        publishDone: false,
+        roleIndex: -1,
+        salary: "",
+        isFaceTalk: false,
+        region: ["", "", ""],
+        regionCode: ["", "", ""],
+        regionText: "",
+        address: "",
+        latitude: null,
+        longitude: null,
+        desc: "",
+        phone: "",
+        contact: "",
+        welfareActive: [],
+        welfareActiveMap: {},
+        bossRegionActive: [],
+        bossRegionActiveMap: {},
+        shopTypeActive: [],
+        shopTypeActiveMap: {},
+        tagCount: 0,
+      },
+      () => this.refreshVisibleRoles()
+    );
+    wx.pageScrollTo({ scrollTop: 0, duration: 0 });
   },
 });

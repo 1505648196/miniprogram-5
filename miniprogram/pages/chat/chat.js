@@ -16,6 +16,9 @@ const SUGGESTIONS = [
   "想接手一家包子店，求店要注意什么",
 ];
 
+// 案例卡片折叠：默认只展示前 N 条，点「展开全部」查看完整
+const CASES_FOLD_LIMIT = 3;
+
 // 从云函数返回的数据中提取 AI 文本（兼容多种返回结构）
 function extractContent(payload) {
   if (typeof payload === "string") {
@@ -39,6 +42,16 @@ function extractContent(payload) {
   return "";
 }
 
+// 按折叠状态为 analysis 消息的 cases 块计算 visibleCards
+function applyCasesFold(blocks, collapsed) {
+  if (!Array.isArray(blocks)) return blocks;
+  return blocks.map((b) => {
+    if (b.type !== "cases") return b;
+    const cards = Array.isArray(b.cards) ? b.cards : [];
+    return { ...b, visibleCards: collapsed ? cards.slice(0, CASES_FOLD_LIMIT) : cards };
+  });
+}
+
 Page({
   data: {
     messages: [], // { id, role: 'user'|'ai', content, streaming }
@@ -55,8 +68,12 @@ Page({
     // 从本地缓存恢复历史对话（多轮）
     const history = wx.getStorageSync("chat_history");
     if (Array.isArray(history) && history.length) {
-      // 恢复历史时清除残留的流式光标
-      const clean = history.map((m) => ({ ...m, streaming: false }));
+      // 恢复历史时清除残留的流式光标，并为 analysis 消息补齐折叠状态
+      const clean = history.map((m) => {
+        if (m.msgType !== "analysis" || !Array.isArray(m.blocks)) return { ...m, streaming: false };
+        const casesCollapsed = m.casesCollapsed !== false;
+        return { ...m, streaming: false, casesCollapsed, blocks: applyCasesFold(m.blocks, casesCollapsed) };
+      });
       this.setData({ messages: clean });
     }
   },
@@ -83,6 +100,17 @@ Page({
     const content = (this.data.inputValue || "").trim();
     if (!content || this.data.loading) return;
     this.sendMessage(content);
+  },
+
+  // 展开/收起案例卡片
+  onCasesToggle(e) {
+    const msgid = e.currentTarget.dataset.msgid;
+    const messages = this.data.messages.map((m) => {
+      if (m.id !== msgid || m.msgType !== "analysis") return m;
+      const casesCollapsed = !m.casesCollapsed;
+      return { ...m, casesCollapsed, blocks: applyCasesFold(m.blocks, casesCollapsed) };
+    });
+    this.setData({ messages });
   },
 
   // 发送消息：追加用户消息 + AI 占位消息，带上历史调 aiProxy
@@ -168,7 +196,31 @@ Page({
         }
         if (text) {
           this.setData({ [`messages[${aiIdx}].msgType`]: msgType });
-          if (msgType === "list" && Array.isArray(result.data) && result.data.length) {
+          if (msgType === "analysis" && Array.isArray(result.blocks)) {
+            // 分析类：统计卡 + 条形图 + 案例卡片，按块渲染（无需打字机）
+            const cards = (result.data || []).map((p) => decorate(p));
+            const blocks = result.blocks.map((b) => {
+              if (b.type === "cases") return { ...b, cards, visibleCards: cards.slice(0, CASES_FOLD_LIMIT) };
+              if (b.type === "bar") {
+                // 预计算条形宽度，避免 wxml 内联 style 里做运算
+                return {
+                  ...b,
+                  items: (b.items || []).map((bar) => ({
+                    ...bar,
+                    styleStr: "width:" + Math.max(bar.pct || 0, 2) + "%;",
+                  })),
+                };
+              }
+              return b;
+            });
+            this.setData({
+              [`messages[${aiIdx}].content`]: text.split("\n")[0] || "行情分析",
+              [`messages[${aiIdx}].blocks`]: blocks,
+              [`messages[${aiIdx}].casesCollapsed`]: true,
+              [`messages[${aiIdx}].streaming`]: false,
+              loading: false,
+            });
+          } else if (msgType === "list" && Array.isArray(result.data) && result.data.length) {
             // 列表类：转卡片视图模型（与招工列表卡片同款），秒回直接显示
             const cards = result.data.map((p) => decorate(p));
             const summary = text.split("\n")[0] || `共${cards.length}条相关数据`;

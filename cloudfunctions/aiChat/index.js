@@ -85,22 +85,26 @@ exports.main = async (event) => {
   // 4. 列表 → 直接返回（不调 AI，秒回）
   if (intent.type === "list") {
     if (!posts.length) {
-      // 诊断：查询集合总记录数，区分"集合空"和"条件不匹配"
-      let total = -1;
+      // 技术诊断：仅写日志，不暴露给客户
       try {
         const cnt = await db.collection("baozi_posts").count();
-        total = cnt.total;
+        console.log(
+          "[aiChat] 暂无匹配，库总条数 =", cnt.total,
+          "| 条件 =", JSON.stringify({ dataType: intent.dataType, city: intent.city })
+        );
       } catch (e2) {
-        total = -1;
+        console.log("[aiChat] 暂无匹配，count() 失败：", e2.errMsg || e2.message);
       }
-      let hint;
-      if (total === -1) hint = "baozi_posts 集合不存在或无法访问。";
-      else if (total === 0) hint = "baozi_posts 集合是空的，还没有任何数据。";
-      else
-        hint = `数据库中共有 ${total} 条记录，但没有匹配当前条件的数据（类型=${intent.dataType || "任意"}${intent.city ? "，城市=" + intent.city : ""}）。`;
+      const label = DATA_TYPE_LABEL[intent.dataType] || "相关";
       return {
         msgType: "text",
-        reply: `暂无${intent.city ? intent.city + "的" : ""}${DATA_TYPE_LABEL[intent.dataType] || "相关"}数据。\n\n${hint}\n\n检查：\n1) aiChat 云函数是否重新部署（改动不生效会出现此现象）；\n2) 数据是否已导入 baozi_posts 集合；\n3) 换个城市或类型再试。`,
+        reply:
+          `暂无${intent.city ? intent.city + "的" : ""}${label}信息。\n\n` +
+          `可以试试调整查询条件：\n` +
+          `· 换个城市\n` +
+          `· 换个信息类型（招工 / 转让 / 求店 / 设备出售 / 设备求购 / 求职）\n` +
+          `· 缩小或放宽其他条件\n\n` +
+          `💡 也可以直接问我行情，比如"${intent.city || " "}包子店转让行情怎么样"。`,
       };
     }
     const list = posts.map((p, i) => formatPost(p, i)).join("\n");
@@ -108,61 +112,31 @@ exports.main = async (event) => {
     return { msgType: "list", reply: head + list, data: posts };
   }
 
-  // 5. 分析 → 数据拼上下文 → 调 DeepSeek
+  // 5. 分析 → 服务端算真实统计 + 结构化块（KPI/条形图/案例卡片）；DeepSeek 只写叙事洞察
   if (intent.type === "analysis") {
+    const stats = buildStats(posts, intent);
+    const blocks = buildBlocks(intent, stats);
     const apiKey = process.env.DEEPSEEK_API_KEY;
-    if (!apiKey) {
-      return {
-        msgType: "text",
-        reply: "分析功能需要配置 DEEPSEEK_API_KEY 环境变量（列表查询不需要）。请到云开发控制台 → 云函数 aiChat → 配置环境变量。",
-      };
+    let insight = "";
+    if (apiKey && stats && stats.count > 0) {
+      try {
+        insight = await callDeepSeekInsight(stats, posts, question);
+      } catch (err) {
+        console.error("aiChat 调用 DeepSeek 失败:", err);
+        insight = "";
+      }
     }
-    const summary = buildSummary(posts, intent);
-    try {
-      const systemPrompt =
-        "你是包子行业数据分析师，基于下方云数据库中的真实帖子数据回答用户问题。" +
-        "回答要求：1) 先给整体概览（共几条、关键数值区间/中位数）；2) 再列代表性案例；3) 最后给出对从业者的建议。" +
-        "数据只做参考，有缺失的字段要如实说明，不要编造。\n\n" +
-        summary;
-      const response = await axios.post(
-        DEEPSEEK_API_URL,
-        {
-          model: MODEL,
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: question },
-          ],
-          temperature: 0.7,
-          max_tokens: 800,
-        },
-        {
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${apiKey}`,
-          },
-          timeout: 60000,
-        }
-      );
-      const reply =
-        (response.data &&
-          response.data.choices &&
-          response.data.choices[0] &&
-          response.data.choices[0].message &&
-          response.data.choices[0].message.content) ||
-        "";
-      return {
-        msgType: "text",
-        reply: reply || "分析结果为空",
-        sources: posts.slice(0, 5).map((p) => ({ id: p._id, title: (p.raw_text || "").slice(0, 30) })),
-      };
-    } catch (err) {
-      console.error("aiChat 调用 DeepSeek 失败:", err);
-      const msg =
-        (err.response && err.response.data && JSON.stringify(err.response.data)) ||
-        err.message ||
-        "请求 DeepSeek 失败";
-      return { msgType: "text", reply: "分析失败：" + msg };
-    }
+    if (insight) blocks.push({ type: "insight", text: insight });
+    else blocks.push({ type: "tip", emoji: "💡", text: templateTip(intent, stats) });
+    blocks.push({ type: "chips", items: buildChips(intent) });
+    const headText = blocks[0] && blocks[0].text ? blocks[0].text : "行情分析";
+    return {
+      msgType: "analysis",
+      reply: headText,
+      blocks,
+      data: posts.slice(0, 10),
+      sources: posts.slice(0, 5).map((p) => ({ id: p._id, title: (p.raw_text || "").slice(0, 30) })),
+    };
   }
 
   return { msgType: "text", reply: buildGuide() };
@@ -270,8 +244,12 @@ async function queryPosts(intent) {
       // 问的是省份：province_code 精确匹配
       query.province_code = intent.cityCode;
     } else {
-      // 市级：city_code 精确匹配；并 or 上 district_code，兜底县级市/区发布的数据（如监利）
-      query._ = db.command.or([{ city_code: intent.cityCode }, { district_code: intent.cityCode }]);
+      // 市级：city_code / district_code 精确匹配 + city 字段文本正则兜底（防历史脏数据 code 缺失/写错）
+      query._ = db.command.or([
+        { city_code: intent.cityCode },
+        { district_code: intent.cityCode },
+        ...(intent.city ? [{ city: db.RegExp({ regexp: escapeRe(intent.city), options: "i" }) }] : []),
+      ]);
     }
   }
 
@@ -291,9 +269,13 @@ async function queryPosts(intent) {
   return res.data || [];
 }
 
+// RegExp 特殊字符转义，防止用户输入里的 . * + ? 等破坏正则
+function escapeRe(s) {
+  return String(s || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 // ---------- 格式化单条记录 ----------
 function formatPost(p, i) {
-  const wan = (v) => (v >= 10000 ? (v % 10000 === 0 ? v / 10000 + "万" : (v / 10000).toFixed(1) + "万") : String(v));
   const parts = [`${i + 1}. ${p.city || ""}`];
 
   switch (p.data_type) {
@@ -338,16 +320,6 @@ function formatPost(p, i) {
   return parts.join(" | ");
 }
 
-// ---------- 分析上下文 ----------
-function buildSummary(posts, intent) {
-  if (!posts.length) return "（无匹配数据）";
-  let s = `匹配到 ${posts.length} 条${DATA_TYPE_LABEL[intent.dataType] || ""}数据：\n`;
-  posts.forEach((p, i) => {
-    s += `${i + 1}. ${formatPost(p, i)}\n`;
-  });
-  return s;
-}
-
 // ---------- 引导语 ----------
 function buildGuide() {
   return (
@@ -381,4 +353,209 @@ function lastUserMessage(messages) {
     if (messages[i] && messages[i].role === "user") return messages[i].content || "";
   }
   return "";
+}
+
+// ---------- 分析类：真实统计 + 结构化块 ----------
+function wan(v) {
+  if (v == null) return "";
+  return v >= 10000
+    ? v % 10000 === 0
+      ? v / 10000 + "万"
+      : (v / 10000).toFixed(1) + "万"
+    : String(v);
+}
+
+// 各类型 KPI 数值的口径名称
+const KPI_LABEL = {
+  transfer: "转让费",
+  want_shop: "预算租金",
+  recruit: "月薪",
+  jobseek: "期望月薪",
+  equip_sell: "报价",
+  equip_buy: "预算",
+};
+
+// 岗位 emoji（仅招工/求职条形图用）
+const ROLE_EMOJI = {
+  大师傅: "👨🍳",
+  中工: "👨🍳",
+  学徒工: "🧑🍳",
+  短期顶班: "⏱️",
+  夫妻工: "👫",
+  售卖员: "🛎️",
+  收银员: "🛎️",
+};
+
+// 从一条帖子提取 [low, high] 数值区间；面议/0/缺失 返回 null（不污染统计）
+function pickNum(p, dataType) {
+  switch (dataType) {
+    case "transfer":
+      if (p.transfer_fee > 0) return [p.transfer_fee, p.transfer_fee];
+      if (p.rent > 0) return [p.rent, p.rent];
+      if (p.turnover_low > 0) return [p.turnover_low, p.turnover_high > 0 ? p.turnover_high : p.turnover_low];
+      return null;
+    case "want_shop":
+      if (p.rent_max > 0) return [p.rent_max, p.rent_max];
+      if (p.transfer_fee_expect > 0) return [p.transfer_fee_expect, p.transfer_fee_expect];
+      if (p.turnover_expect > 0) return [p.turnover_expect, p.turnover_expect];
+      return null;
+    case "recruit":
+    case "jobseek":
+      if (p.salary_low > 0) return [p.salary_low, p.salary_high > 0 ? p.salary_high : p.salary_low];
+      return null;
+    case "equip_sell":
+    case "equip_buy":
+      if (p.equip_price > 0) return [p.equip_price, p.equip_price];
+      return null;
+    default:
+      return null;
+  }
+}
+
+// 服务端真实统计：样本量 / 中位数 / 最高值 / 岗位薪资条形图
+function buildStats(posts, intent) {
+  if (!posts.length) return null;
+  const dataType = intent.dataType;
+  const nums = posts.map((p) => pickNum(p, dataType)).filter(Boolean);
+  const highs = nums.map((r) => r[1]).sort((a, b) => a - b);
+  const median = highs.length ? highs[Math.floor(highs.length / 2)] : 0;
+  const max = highs.length ? highs[highs.length - 1] : 0;
+  const stats = {
+    count: posts.length,
+    kpiLabel: KPI_LABEL[dataType] || "金额",
+    median,
+    max,
+    medianText: wan(median),
+    maxText: wan(max),
+  };
+  // 岗位条形图：仅招工/求职有 role 维度
+  if (dataType === "recruit" || dataType === "jobseek") {
+    const byRole = {};
+    posts.forEach((p) => {
+      if (!p.role) return;
+      const r = pickNum(p, dataType);
+      if (!r) return;
+      (byRole[p.role] = byRole[p.role] || []).push(r);
+    });
+    const entries = Object.entries(byRole);
+    const maxHigh = Math.max(...entries.map(([, arr]) => Math.max(...arr.map((r) => r[1]))), 1);
+    const bars = entries
+      .map(([label, arr]) => {
+        const lows = arr.map((r) => r[0]);
+        const highs2 = arr.map((r) => r[1]);
+        const high = Math.round(highs2.reduce((a, b) => a + b, 0) / highs2.length);
+        return {
+          label,
+          emoji: ROLE_EMOJI[label] || "🧑🍳",
+          low: Math.round(lows.reduce((a, b) => a + b, 0) / lows.length),
+          high,
+          max: maxHigh,
+          pct: Math.round((high / maxHigh) * 100),
+          cnt: arr.length,
+        };
+      })
+      .sort((a, b) => b.high - a.high);
+    if (bars.length) bars[0].hot = true;
+    stats.bars = bars;
+  }
+  return stats;
+}
+
+// 组装结构化块：标题 → KPI → 条形图 → 案例占位（前端挂卡片）
+function buildBlocks(intent, stats) {
+  const label = DATA_TYPE_LABEL[intent.dataType] || "信息";
+  const cityLabel = intent.city ? intent.city + "的" : "";
+  const blocks = [];
+  blocks.push({ type: "head", text: `${cityLabel}${label}行情` });
+  if (stats) {
+    blocks.push({
+      type: "kpi",
+      items: [
+        { label: "匹配样本", value: String(stats.count), unit: "条" },
+        { label: `${stats.kpiLabel}中位数`, value: stats.medianText, unit: "元" },
+        { label: `${stats.kpiLabel}最高`, value: stats.maxText, unit: "元" },
+      ],
+    });
+    if (stats.bars && stats.bars.length) {
+      blocks.push({ type: "bar", title: "岗位薪资排行", items: stats.bars });
+    }
+  }
+  blocks.push({ type: "cases", title: "代表案例" });
+  return blocks;
+}
+
+// DeepSeek 只写叙事洞察：禁止编数字、禁止 Markdown
+async function callDeepSeekInsight(stats, posts, question) {
+  const apiKey = process.env.DEEPSEEK_API_KEY;
+  const examples = posts
+    .slice(0, 5)
+    .map((p, i) => `${i + 1}. ${formatPost(p, i)}`)
+    .join("\n");
+  const systemPrompt =
+    "你是包子行业数据分析师。请根据【统计事实】和【代表案例】，用不超过150字写一段'洞察与建议'。" +
+    "要求：1) 只能引用统计事实中的数字，禁止编造；2) 2-4个短句，平实口语；" +
+    "3) 纯文本，禁止任何 Markdown 符号（#、**、表格、列表标记）；" +
+    "4) 内容侧重：数字反映的趋势 + 对从业者的实用建议。\n\n" +
+    `【统计事实】${JSON.stringify({
+      count: stats.count,
+      kpiLabel: stats.kpiLabel,
+      median: stats.median,
+      max: stats.max,
+      bars: stats.bars || null,
+    })}\n` +
+    `【代表案例】\n${examples}\n` +
+    `【用户问题】${question}`;
+  const response = await axios.post(
+    DEEPSEEK_API_URL,
+    {
+      model: MODEL,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: question },
+      ],
+      temperature: 0.7,
+      max_tokens: 300,
+    },
+    {
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      timeout: 60000,
+    }
+  );
+  return (
+    (response.data &&
+      response.data.choices &&
+      response.data.choices[0] &&
+      response.data.choices[0].message &&
+      response.data.choices[0].message.content) ||
+    ""
+  ).trim();
+}
+
+// 无 AI Key / 调用失败时的模板洞察
+function templateTip(intent, stats) {
+  const c = intent.city || "该地区";
+  const label = DATA_TYPE_LABEL[intent.dataType] || "相关";
+  if (!stats) return `${c}暂时没有匹配的${label}数据，换个城市或条件再试试。`;
+  return `${c}共收录 ${stats.count} 条${label}信息，${stats.kpiLabel}中位数约 ${stats.medianText} 元，最高 ${stats.maxText} 元。建议多方比价、问清关键条款再决定。`;
+}
+
+// 分析回答末尾的引导追问芯片
+function buildChips(intent) {
+  const c = intent.city ? intent.city : " ";
+  switch (intent.dataType) {
+    case "recruit":
+      return [`${c}有哪些包子店在招工`, `${c}大师傅工资一般多少`, "招工要注意什么"];
+    case "transfer":
+      return [`${c}包子店转让多少钱`, `${c}求店怎么找`, "接手转让店要注意什么"];
+    case "want_shop":
+      return [`${c}有哪些店在转让`, `${c}求店租金预算多少合适`, "求店要注意什么"];
+    case "jobseek":
+      return [`${c}有哪些师傅在求职`, `${c}师傅工资一般多少`, "求职要注意什么"];
+    case "equip_sell":
+      return [`${c}二手设备多少钱`, `${c}包子设备有哪些`, "买二手设备要注意什么"];
+    case "equip_buy":
+      return [`${c}有人卖二手设备吗`, `${c}二手设备行情怎么样`, "卖设备要注意什么"];
+    default:
+      return [`${c}包子店转让行情怎么样`, `${c}招包子师傅`, `${c}二手设备信息`];
+  }
 }
