@@ -91,20 +91,30 @@ exports.main = async (event) => {
   // ① 草稿检查（按 openid 查 recruit_drafts）
   const draft = await getDraft(openid);
   if (draft) {
-    console.log("[recruitAI] ① 命中草稿, 已填 =", summarize(draft));
-    // 用户消息是补字段意图 → 走发布流（合并 + 校验）
-    if (isCompletingDraft(question)) {
-      return handlePublishFlow(openid, question, draft);
+    // ①.0 空草稿（4项必填全缺）＝用户没真想发 → 自动清理，放行主流程（优先级最高）
+    if (checkMissing(draft).length === 4) {
+      await deleteDraftById(openid, draft._id);
+      console.log("[recruitAI] ① 空草稿自动清理（4项必填全缺），放行主流程");
+      // 用户明确表达放弃草稿 → 直接给明确反馈，不落入 DeepSeek 兜底话术
+      if (ABANDON_KEYWORDS.some((k) => question.includes(k))) {
+        return { msgType: "text", reply: "已取消发布草稿。" };
+      }
+    } else {
+      console.log("[recruitAI] ① 命中草稿, 已填 =", summarize(draft));
+      // 用户消息是补字段意图 → 走发布流（合并 + 校验）
+      if (isCompletingDraft(question)) {
+        return handlePublishFlow(openid, question, draft);
+      }
+      // 非补字段意图（查询/闲聊）：返回草稿提示卡（不拼接用户消息到 desc），
+      // 等待用户显式选择"继续补充"或"跳过"，避免把"上海有哪些包子店在招工"这种查询问句吞进 desc
+      return {
+        msgType: "card", cardType: "draft_pending",
+        reply: "您有一条未发布的招工草稿",
+        fields: formatFieldsForCard(draft),
+        missing: checkMissing(draft),
+        pendingQuestion: question,
+      };
     }
-    // 非补字段意图（查询/闲聊）：返回草稿提示卡（不拼接用户消息到 desc），
-    // 等待用户显式选择"继续补充"或"跳过"，避免把"上海有哪些包子店在招工"这种查询问句吞进 desc
-    return {
-      msgType: "card", cardType: "draft_pending",
-      reply: "您有一条未发布的招工草稿",
-      fields: formatFieldsForCard(draft),
-      missing: checkMissing(draft),
-      pendingQuestion: question,
-    };
   }
 
   // ② 求职词（命中且招工词未命中 → 暂未开放）
