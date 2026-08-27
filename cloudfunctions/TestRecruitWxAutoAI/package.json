@@ -1,0 +1,15 @@
+{
+  "name": "TestRecruitWxAutoAI",
+  "version": "1.0.0",
+  "description": "测试版：发布信息意图判断(6大类型/无关) + 三要素完整性 + DeepSeek 结构化 JSON",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.7.2",
+    "wx-server-sdk": "~2.6.3"
+  }
+}

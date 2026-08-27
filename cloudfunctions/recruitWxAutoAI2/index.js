@@ -1,4 +1,9 @@
-// cloudfunctions/recruitAI/index.js
+// cloudfunctions/recruitWxAutoAI2/index.js
+// ============ HTTP 访问服务专用副本 ============
+// 本函数 = recruitAI 的逐字复制（业务逻辑一字未改），唯一差异：入口适配外部 HTTP 调用
+// （HTTP 网关把请求体 JSON 直接作为 event 传入，question 直接读 event.question）。
+// 后续 recruitAI 业务改动需手动同步到此文件。
+// =============================================
 // 招工对话路由（详细流程图版 · 2026-08-24 落地）
 //
 // 入口状态机（客户消息 = 默认查询态）：
@@ -75,10 +80,15 @@ const CN_DIGITS = { 零: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六:
 // 状态机入口 + ⑤⑥⑦⑧⑨ 发布模式 + handleQuery
 // 详细路由见文件头部注释
 exports.main = async (event) => {
+  // ★ HTTP 访问服务实测结论（用 debugHttpEvent 探测确认）：
+  //   event 顶层直接是请求体 {question:"上海", tcbContext:{...}}，
+  //   没有 event.body、event.httpMessage。question 直接读 event.question 即可
+  //   （recruitAI 原提取逻辑本就兼容 HTTP 网关，此处仅加日志便于排查）。
+  console.log("[recruitWxAutoAI2] ① 收到原始 event =", JSON.stringify(event)); // ★排查
   const wx = cloud.getWXContext();
   const openid = wx.OPENID || "";
   const question = String(event.question || lastUserMessage(event.messages) || "").trim();
-  console.log("[recruitAI] action =", event.action || "(无)", "| question =", question);
+  console.log("[recruitWxAutoAI2] ② 提取 | action =", event.action || "(无)", "| question =", question, "| has_tcbContext =", !!event.tcbContext); // ★排查
 
   // 0. action 路由（按钮触发，不走主状态机）
   if (event.action === "publish") return handlePublish(openid);
@@ -138,11 +148,6 @@ exports.main = async (event) => {
   const fallbackIntent0 = detectIntent(question);
   if (fallbackIntent0.type === "other" || fallbackIntent0.type === "phone") {
     return await handleQuery(question, true);
-  }
-  // 规则已明确判定为行情分析（薪资行情/一般多少/平均/趋势/注意什么等）→ 直接走分析流，
-  // 不让 DeepSeek 三分类把"分析"误判成"查询"而退化成最新列表
-  if (fallbackIntent0.type === "analysis") {
-    return await handleQuery(question, false);
   }
   const fallbackIntent = await classifyByDeepSeek(question);
   console.log("[recruitAI] 兜底 DeepSeek 意图 =", fallbackIntent);

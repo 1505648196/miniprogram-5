@@ -1,0 +1,62 @@
+{
+  "说明": "TestRecruitWxAutoAI 云函数测试用例：每个用例都是 HTTP POST 的 body。期望回复见 reply 字段。",
+  "注意": "场景 2-8 依赖云函数环境变量 DEEPSEEK_API_KEY；未配置时统一走「暂时无法分析」error 分支。",
+  "test_cases": [
+    {
+      "name": "招聘-完整信息（应判 intent=3，回复 已发）",
+      "question": "招北京大师傅15975937411工资7000",
+      "期望intent": 3,
+      "期望reply": "已发",
+      "期望fields": {
+        "city": "北京",
+        "phone": "15975937411",
+        "role": "大师傅",
+        "salary_low": 7000
+      }
+    },
+    {
+      "name": "转店-完整信息（应判 intent=1，回复 已发）",
+      "question": "上海浦东包子店转让设备齐全13800001111",
+      "期望intent": 1,
+      "期望reply": "已发"
+    },
+    {
+      "name": "求购设备-完整信息（应判 intent=6，回复 已发）",
+      "question": "求购一台二手和面机郑州15000002222",
+      "期望intent": 6,
+      "期望reply": "已发"
+    },
+    {
+      "name": "辱骂/争吵-无关内容（应判 intent=0，回复 请稍等）",
+      "question": "你傻逼吧，我要投诉你",
+      "期望intent": 0,
+      "期望reply": "请稍等。"
+    },
+    {
+      "name": "暴力威胁-无关内容（应判 intent=0，回复 请稍等）",
+      "question": "再废话我去砸你店",
+      "期望intent": 0,
+      "期望reply": "请稍等。"
+    },
+    {
+      "name": "招聘-缺电话缺地址（应判 intent=3，is_complete=false，提示补全）",
+      "question": "招大师傅工资7000",
+      "期望intent": 3,
+      "期望is_complete": false,
+      "期望missing包含": ["电话", "地址"]
+    },
+    {
+      "name": "求店-缺内容（应判 intent=2，is_complete=false，提示补全）",
+      "question": "东莞13800001111",
+      "期望intent": 2,
+      "期望is_complete": false,
+      "期望missing包含": ["内容"]
+    },
+    {
+      "name": "求职-完整信息（应判 intent=4，回复 已发）",
+      "question": "广东广州顶班师傅求职15900002222随时到岗",
+      "期望intent": 4,
+      "期望reply": "已发"
+    }
+  ]
+}

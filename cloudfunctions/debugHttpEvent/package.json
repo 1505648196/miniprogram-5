@@ -1,0 +1,14 @@
+{
+  "name": "debugHttpEvent",
+  "version": "1.0.0",
+  "description": "HTTP 事件探测：打印完整 event 结构到数据库和响应，排查网关传参格式",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

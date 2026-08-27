@@ -1,0 +1,15 @@
+{
+  "name": "recruitWxAutoAI",
+  "version": "1.0.0",
+  "description": "recruitAI 的 Python/HTTP 专用副本：逻辑与 recruitAI 完全一致，入口额外兼容 HTTP 访问服务（event.body 为 JSON 字符串时解析铺平）",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.7.2",
+    "wx-server-sdk": "~2.6.3"
+  }
+}

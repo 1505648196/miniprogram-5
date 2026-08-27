@@ -1,4 +1,7 @@
-// cloudfunctions/recruitAI/index.js
+// cloudfunctions/recruitWxAutoAI/index.js
+// recruitAI 的 Python/HTTP 专用副本（2026-08-25 新建）：业务逻辑与 recruitAI 完全一致，
+// 唯一差异 = 入口兼容 HTTP 访问服务（event.body 为 JSON 字符串时解析铺平到顶层），供外部 Python 调用；
+// 小程序入口 recruitAI 保持不变。后续 recruitAI 业务改动需手动同步到此文件。
 // 招工对话路由（详细流程图版 · 2026-08-24 落地）
 //
 // 入口状态机（客户消息 = 默认查询态）：
@@ -25,6 +28,7 @@
 //
 // 入参：{ question | messages } 或 { action: "publish" | "cancel" }
 // 环境变量：DEEPSEEK_API_KEY（仅"分析"类需要）
+console.log('开始进来')
 const cloud = require("wx-server-sdk");
 const axios = require("axios");
 
@@ -73,12 +77,38 @@ const ABANDON_KEYWORDS = ["取消", "不发了", "算了", "放弃", "不要了"
 const CN_DIGITS = { 零: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
 
 // 状态机入口 + ⑤⑥⑦⑧⑨ 发布模式 + handleQuery
-// 详细路由见文件头部注释
+// 详细路由见文件头部注释event
 exports.main = async (event) => {
+  // ★ HTTP 访问服务实测结论（用 debugHttpEvent 探测确认）：
+  //   event 顶层直接是请求体 {question:"北京", tcbContext:{accessToken:...}}，
+  //   没有 event.body、event.httpMessage。question 直接读 event.question 即可。
+  //   此前那三形态 body 解析块是死代码，已删除。
+  console.log("[recruitWxAutoAI] ① 收到原始 event =", JSON.stringify(event)); // ★排查
+
   const wx = cloud.getWXContext();
   const openid = wx.OPENID || "";
   const question = String(event.question || lastUserMessage(event.messages) || "").trim();
-  console.log("[recruitAI] action =", event.action || "(无)", "| question =", question);
+  console.log("[recruitWxAutoAI] ② 提取 | action =", event.action || "(无)", "| question =", question, "| has_tcbContext =", !!event.tcbContext); // ★排查
+
+  // ★ 记录 HTTP 调用日志到云数据库 recruit_http_logs（仅 HTTP 网关调用；小程序 callFunction 不记）
+  const isHttp = !!(event.httpMethod || (event.httpMessage && event.httpMessage.httpMethod) || event.tcbContext);
+  if (isHttp) {
+    try {
+      await db.collection("recruit_http_logs").add({ data: {
+        _openid: event.openid || "",
+        created_at: Date.now(),
+        http_method: (event.httpMessage && event.httpMessage.httpMethod) || event.httpMethod || "POST",
+        path: (event.httpMessage && event.httpMessage.path) || event.path || "",
+        raw_event: JSON.stringify(event).slice(0, 4000),   // 截断防超限
+        question: event.question || "",
+        action: event.action || "",
+        has_messages: Array.isArray(event.messages),
+      }});
+      console.log("[recruitWxAutoAI] 已记录 HTTP 日志"); // ★排查
+    } catch (e) {
+      console.log("[recruitWxAutoAI] 日志写入失败（检查 recruit_http_logs 集合是否存在）:", (e && e.message) || e);
+    }
+  }
 
   // 0. action 路由（按钮触发，不走主状态机）
   if (event.action === "publish") return handlePublish(openid);
@@ -134,15 +164,15 @@ exports.main = async (event) => {
 
   // ④否 → 关键词规则未命中：先保两类原能力，再走 DeepSeek 兜底分类
   //   - other（问候/致谢）→ 原引导语；phone（纯手机号直查）→ 手机号精确匹配，避免被 DeepSeek 误判吞掉
-  //   - 否则 DeepSeek 三分类：1=查询 → 数据库 10 条招工；2=发布 → 引导发完整信息；0=都不是 → 暂无数据/转人工
+  //   - list/analysis 且本地区规则已识别出明确查询维度（城市/岗位/薪资/模糊词/时间/数量任一）
+  //     → 直接查库，跳过 DeepSeek：实测裸城市名"上海"会被 DeepSeek 判成 0=闲聊/无法判断，吞掉正常查询
+  //   - 其余 → DeepSeek 三分类：1=查询 → 数据库 10 条招工；2=发布 → 引导发完整信息；0=都不是 → 暂无数据/转人工
   const fallbackIntent0 = detectIntent(question);
   if (fallbackIntent0.type === "other" || fallbackIntent0.type === "phone") {
     return await handleQuery(question, true);
   }
-  // 规则已明确判定为行情分析（薪资行情/一般多少/平均/趋势/注意什么等）→ 直接走分析流，
-  // 不让 DeepSeek 三分类把"分析"误判成"查询"而退化成最新列表
-  if (fallbackIntent0.type === "analysis") {
-    return await handleQuery(question, false);
+  if ((fallbackIntent0.type === "list" || fallbackIntent0.type === "analysis") && hasQueryFields(fallbackIntent0)) {
+    return await handleQuery(question, true);
   }
   const fallbackIntent = await classifyByDeepSeek(question);
   console.log("[recruitAI] 兜底 DeepSeek 意图 =", fallbackIntent);
@@ -612,6 +642,7 @@ function detectIntent(text) {
 
   // 问候/无关
   const greetings = ["你好", "您好", "在吗", "hello", "hi", "谢谢", "感谢", "再见"];
+  const greetings = [ "hi", ];
   if (greetings.some((g) => t.includes(g))) {
     console.log("[recruitAI] detectIntent 问候词命中 → other");
     return { type: "other" };
@@ -707,6 +738,20 @@ function detectIntent(text) {
     keyword,
     limit,
   };
+}
+
+// 是否有明确的查询维度（任一命中即视为查询意图，直接查库，跳过 DeepSeek 兜底分类）
+// 用途：裸城市名"上海"等本地规则可识别的查询，不被 DeepSeek 判成 0=闲聊/无法判断而吞掉
+function hasQueryFields(intent) {
+  return !!(
+    intent.city ||
+    intent.role ||
+    intent.salaryMin != null ||
+    intent.salaryMax != null ||
+    intent.keyword ||
+    intent.timeRange ||
+    intent.limit
+  );
 }
 
 // ---------- 工资解析 ----------
