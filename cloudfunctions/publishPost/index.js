@@ -5,9 +5,9 @@
 // 入参：
 //   {
 //     form: {
-//       role: "大师傅",            // 师傅类型（写死选项）
-//       salaryHigh: "6000",        // 工资（唯一薪资字段，面议时为空）
-//       salaryNote: "面议",        // 薪资备注（选了"面议"时用）
+//       role: "大师傅",            // 师傅类型中文名（写死选项，展示用）
+//       roleId: 1,                 // 师傅类型稳定角色 ID（写死选项，入库写 role_id）
+//       salary: "6000",            // 薪资（元/月，单一数字；面议时传 0 或不传）
 //       province: "广东省",        // 省
 //       city: "深圳市",            // 市
 //       district: "南山区",        // 区/县（可空）
@@ -20,11 +20,14 @@
 //       desc: "店内主营小笼包...",   // 具体描述
 //       phone: "18700009563",     // 电话（完整，11 位校验）
 //       contact: "张老板",         // 联系人
+//       username: "包子一哥",       // 发布者昵称/称呼（展示发布用户是谁，可空）
+//       credit: 1,                 // 信用评分（1优秀/2极好/3良好/4一般，可空=0）
 //     }
 //   }
 // 返回：
 //   { success: true, _id: "..." } | { success: false, error: "..." }
 const cloud = require("wx-server-sdk");
+const { checkText } = require("./secCheck.js");
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
@@ -37,6 +40,7 @@ function maskPhone(p) {
 }
 
 exports.main = async (event) => {
+  const { OPENID } = cloud.getWXContext();
   const f = event.form || {};
 
   // ---- 必填校验 ----
@@ -49,11 +53,17 @@ exports.main = async (event) => {
 
   const phone = String(f.phone).trim();
 
-  // ---- 工资解析 ----
-  // salaryNote 为 "面议" 时存 salary_note；否则解析 salaryHigh（前端只传工资单一值，salaryLow 不再传）
+  // ---- 薪资解析 ----
+  // 只存单一 salary(元/月)：有明确薪资存数字，面议/未填存 0（前端判空显示"面议"）
+  const salary = parseInt(String(f.salary || "").trim(), 10);
+  // 师傅类型稳定角色 ID：前端传数字（1-14）；非法/缺省为 0
+  const roleId = parseInt(String(f.roleId != null ? f.roleId : "").trim(), 10) || 0;
   const record = {
     data_type: "recruit",
+    _openid: OPENID || "",
+    userid: OPENID || "", // 显式存唯一用户标识（小程序内即 openid），与 _openid 并存
     role: f.role,
+    role_id: roleId > 0 ? roleId : 0,
     city: String(f.city || "").trim(),
     province: String(f.province || "").trim(),
     district: String(f.district || "").trim(),
@@ -67,7 +77,10 @@ exports.main = async (event) => {
     phone,
     phone_masked: maskPhone(phone),
     contact: String(f.contact || "").trim(),
-    salary_note: "",
+    username: String(f.username || "").trim(), // 发布者昵称/称呼（展示发布用户，可空）
+    // 信用评分：1优秀/2极好/3良好/4一般；非法/缺省为 0（前端不显示信用标签）
+    credit: parseInt(String(f.credit != null ? f.credit : "").trim(), 10) || 0,
+    salary: !isNaN(salary) && salary > 0 ? salary : 0,
     published_at: Date.now(),
     source: "user",
     needs_review: false,
@@ -76,21 +89,21 @@ exports.main = async (event) => {
       : [],
   };
 
-  if (String(f.salaryNote || "").trim() === "面议") {
-    record.salary_note = "面议";
-  } else {
-    const lo = parseInt(String(f.salaryLow || "").trim(), 10);
-    const hi = parseInt(String(f.salaryHigh || "").trim(), 10);
-    if (!isNaN(lo) && lo > 0) record.salary_low = lo;
-    if (!isNaN(hi) && hi > 0) record.salary_high = hi;
-    if (isNaN(lo) && isNaN(hi)) {
-      // 既没填数字也没选面议 → 允许为空，不报错
-    }
-  }
+  // 内容安全审核：pass → 正常展示；risky/reject/接口异常 → 入库待人工复核（列表不展示）
+  const sec = await checkText([f.desc, f.contact, f.address, f.role].join("\n"), OPENID);
+  record.needs_review = sec.suggest === "pass" ? false : true;
+  record.sec_status = sec.suggest;
+  if (sec.label) record.sec_label = sec.label;
+  record.sec_checked_at = sec.checkedAt;
 
   try {
     const res = await db.collection("baozi_posts").add({ data: record });
-    return { success: true, _id: res._id };
+    return {
+      success: true,
+      _id: res._id,
+      needs_review: record.needs_review,
+      sec_status: record.sec_status,
+    };
   } catch (e) {
     console.error("publishPost 入库失败:", e);
     return {

@@ -1,0 +1,216 @@
+<!-- pages/demo/demo.wxml -->
+<!-- 包子行业信息平台 · 首页 —— TDesign(tdesign-miniprogram) -->
+<view class="page">
+
+  <!-- 模块 1:黄色 Header:Logo | t-search | t-button 发布 -->
+  <view class="header">
+    <view class="header-logo">包子一哥</view>
+    <t-search
+      class="hdr-search"
+      shape="round"
+      placeholder="招聘，求职，转让，设备"
+      clearable="{{true}}"
+    />
+    <!-- <t-button
+      class="hdr-publish"
+      size="small"
+      theme="default"
+      shape="round"
+      variant="dark"
+      bind:tap="onPublish"
+    >
+      发布
+    </t-button> -->
+  </view>
+
+  <!-- 主内容 -->
+  <view class="content">
+
+    <!-- 模块 3:金刚位(5 入口：招聘求职/转让求店/二手设备/顺风车/其他) -->
+    <t-grid class="kk" column="{{5}}" hover>
+      <t-grid-item
+        wx:for="{{kingkong}}" wx:key="id"
+        data-id="{{item.id}}" bind:click="onEntry"
+      >
+        <!-- 有图格用图片图标，无图格回退 emoji -->
+        <view class="kk-icon" style="background: {{item.bg}};">
+          <image wx:if="{{item.image}}" class="kk-img" src="{{item.image}}" mode="aspectFit" />
+          <text wx:else>{{item.emoji}}</text>
+        </view>
+        <view class="kk-name">{{item.name}}</view>
+      </t-grid-item>
+    </t-grid>
+
+    <!-- 模块 4:Banner 双卡(AI顾问 / 免费发布) -->
+    <view class="banners">
+      <view class="banner banner-ai" data-id="ai" bindtap="onEntry">
+        <view class="banner-emoji">🤖</view>
+        <view class="banner-info">
+          <view style="font-size: 23rpx;">AI 查询发布助手</view>
+          <view style="font-size: 18rpx;" class="banner-sub">转让 / 招聘 / 求职 / 设备</view>
+        </view>
+      </view>
+      <view class="banner banner-pub" data-id="publish" bindtap="onTap">
+        <view class="banner-emoji">📝</view>
+        <view class="banner-info">
+          <view style="font-size: 23rpx;">免费发布</view>
+          <view style="font-size: 18rpx;" class="banner-sub">转让 / 招聘 / 求职 / 设备</view>
+        </view>
+      </view>
+    </view>
+
+  </view>
+
+  <!-- 模块 5:顶部选项卡(最新/附近/VIP/求职招聘) · TDesign 原生吸顶 -->
+  <t-tabs
+    class="top-tabs {{tabsSticky ? 'is-sticky' : ''}}"
+    value="{{activeTopTab}}"
+    sticky="{{true}}"
+    sticky-props="{{stickyProps}}"
+    show-bottom-line="{{true}}"
+    split="{{false}}"
+    bind:change="onTopTab"
+    bind:scroll="onTabsScroll"
+    t-class-content="tabs-hide-content"
+  >
+    <t-tab-panel wx:for="{{topTabs}}" wx:key="id" label="{{item.label}}" value="{{item.id}}" />
+  </t-tabs>
+
+  <!-- 模块 6:帖子双列信息流 -->
+  <!-- loading 时展示双列卡片骨架屏(t-skeleton)；否则按 空态/列表 渲染 -->
+  <view class="feed">
+    <t-skeleton
+      wx:if="{{loading}}"
+      class="feed-skeleton"
+      theme="paragraph"
+      animation="flashed"
+      row-col="{{skeletonRows}}"
+    />
+    <view class="goods-empty" wx:elif="{{!goodsLeft.length && !goodsRight.length}}">暂无相关帖子</view>
+
+    <view class="goods" wx:else>
+      <view class="goods-col">
+        <view class="goods-card"
+              wx:for="{{goodsLeft}}" wx:key="id"
+              data-id="{{item.id}}" bindtap="onTap">
+          <!-- 有图时只显示真实图片 + 类型徽章；无图则整块不渲染（含 emoji） -->
+          <view class="goods-img" wx:if="{{item.image}}" style="background: {{item.light}};">
+            <image class="goods-pic" src="{{item.image}}" mode="widthFix" />
+            <view class="goods-type" style="background: {{item.color}};">{{item.typeName}}</view>
+          </view>
+          <view class="goods-title">{{item.title}}</view>
+          <view class="goods-tags" wx:if="{{item.tags.length}}">
+            <t-tag wx:for="{{item.tags}}" wx:for-item="tg" wx:key="*this" size="small" variant="light" t-class="goods-tag">{{tg}}</t-tag>
+          </view>
+          <!-- 发布用户昵称/称呼：有值才展示；旁边附信用评分标签 -->
+          <view class="goods-user" wx:if="{{item.username}}">
+            <t-icon name="user" size="24rpx" color="#FFE60A" />
+            <!-- <text>👤 {{item.username}}</text> -->
+            <text class="goods-credit" wx:if="{{item.creditMeta}}" style="color: {{item.creditMeta.color}}; background: {{item.creditMeta.bg}};">{{item.creditMeta.label}}</text>
+            <text wx:if="{{!item.image}}" class="goods-meta-type" style="background: {{item.color}};">{{item.typeName}}</text>
+          </view>
+          <!-- 地区·时间 行：无图时在前面补业务类型高亮标签 -->
+          <view class="goods-meta">
+            <!-- <text wx:if="{{!item.image}}" class="goods-meta-type" style="background: {{item.color}};">{{item.typeName}}</text> -->
+            <text>{{item.meta}}</text>
+          </view>
+          <view class="goods-price-row">
+            <view class="goods-price">{{item.priceText}}</view>
+            <view class="goods-arrow">查看 ›</view>
+          </view>
+        </view>
+      </view>
+      <view class="goods-col">
+        <view class="goods-card"
+              wx:for="{{goodsRight}}" wx:key="id"
+              data-id="{{item.id}}" bindtap="onTap">
+          <!-- 有图时只显示真实图片 + 类型徽章；无图则整块不渲染（含 emoji） -->
+          <view class="goods-img" wx:if="{{item.image}}" style="background: {{item.light}};">
+            <image class="goods-pic" src="{{item.image}}" mode="widthFix" />
+            <view class="goods-type" style="background: {{item.color}};">{{item.typeName}}</view>
+          </view>
+          <view class="goods-title">{{item.title}}</view>
+          <view class="goods-tags" wx:if="{{item.tags.length}}">
+            <t-tag wx:for="{{item.tags}}" wx:for-item="tg" wx:key="*this" size="small" variant="light" t-class="goods-tag">{{tg}}</t-tag>
+          </view>
+          <!-- 发布用户昵称/称呼：有值才展示；旁边附信用评分标签 -->
+          <view class="goods-user" wx:if="{{item.username}}">
+            <t-icon name="user" size="24rpx" color="#FFE60A" />
+            <!-- <text>👤 {{item.username}}</text> -->
+            <text class="goods-credit" wx:if="{{item.creditMeta}}" style="color: {{item.creditMeta.color}}; background: {{item.creditMeta.bg}};">{{item.creditMeta.label}}</text>
+            <text wx:if="{{!item.image}}" class="goods-meta-type" style="background: {{item.color}};">{{item.typeName}}</text>
+          </view>
+          <!-- 地区·时间 行：无图时在前面补业务类型高亮标签 -->
+          <view class="goods-meta">
+            <!-- <text wx:if="{{!item.image}}" class="goods-meta-type" style="background: {{item.color}};">{{item.typeName}}</text> -->
+            <text>{{item.meta}}</text>
+          </view>
+          <view class="goods-price-row">
+            <view class="goods-price">{{item.priceText}}</view>
+            <view class="goods-arrow">查看 ›</view>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 触底加载更多状态：加载中=局部 loading，到底=没有更多（局部反馈，不切骨架屏） -->
+    <view class="feed-footer">
+      <t-loading wx:if="{{loadingMore}}" theme="circular" size="32rpx" text="加载更多…" layout="vertical" />
+      <text wx:elif="{{firstLoaded && !hasMore && !loading}}" class="feed-end-text">— 没有更多了 —</text>
+    </view>
+  </view>
+
+  <!-- 模块 7:底部 TabBar · TDesign(t-tab-bar) -->
+  <t-tab-bar
+    class="demo-tabbar"
+    value="{{activeBar}}"
+    bindchange="onTabBar"
+    theme="normal"
+    fixed="{{true}}"
+    placeholder="{{true}}"
+    split="{{false}}"
+  >
+    <t-tab-bar-item wx:for="{{tabbar}}" wx:key="id" value="{{item.id}}" icon="{{item.icon}}">{{item.label}}</t-tab-bar-item>
+  </t-tab-bar>
+
+  <!-- 模块 8:发布类型选择弹层(TDesign t-popup + t-grid) -->
+  <t-popup
+    visible="{{publishSheetVisible}}"
+    placement="bottom"
+    bind:visible-change="onPublishSheetClose"
+  >
+    <view class="pub-sheet">
+      <view class="pub-sheet-title">选择发布类型</view>
+      <t-grid class="pub-grid" column="{{4}}" hover>
+        <t-grid-item
+          wx:for="{{publishTypes}}" wx:key="id"
+          data-item="{{item}}" bind:click="onPickPublishType"
+        >
+          <view class="pub-icon" style="background: {{item.light}};">{{item.emoji}}</view>
+          <view class="pub-name">{{item.name}}</view>
+        </t-grid-item>
+      </t-grid>
+    </view>
+  </t-popup>
+
+  <!-- 模块 9:手机号授权弹层(发布前引导授权；button open-type=getPhoneNumber) -->
+  <t-popup
+    visible="{{phoneAuthVisible}}"
+    placement="bottom"
+    bind:visible-change="onPhoneAuthClose"
+  >
+    <view class="auth-sheet">
+      <view class="auth-emoji">📱</view>
+      <view class="auth-title">授权手机号</view>
+      <view class="auth-desc">发布信息需绑定手机号，方便买家/商家联系你。你的手机号仅用于平台撮合，不会对外泄露。</view>
+      <!-- 微信原生授权按钮：open-type 必须用原生 button，才能拿到 code -->
+      <button
+        class="auth-btn"
+        open-type="getPhoneNumber"
+        bindgetphonenumber="onGetPhoneNumber"
+        loading="{{authing}}"
+      >授权并继续</button>
+      <view class="auth-cancel" bindtap="onPhoneAuthClose" data-close="1">暂不授权</view>
+    </view>
+  </t-popup>
+</view>

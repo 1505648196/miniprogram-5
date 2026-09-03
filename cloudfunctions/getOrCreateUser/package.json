@@ -1,0 +1,14 @@
+{
+  "name": "getOrCreateUser",
+  "version": "1.0.0",
+  "description": "静默建号 + 绑定手机号：首次调用按 openid 在 baozi_users 建记录(默认信用分100)，已有则返回；带 phoneCode 时绑定微信授权手机号",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

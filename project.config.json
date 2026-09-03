@@ -32,8 +32,13 @@
     "useCompilerModule": true,
     "userConfirmedUseCompilerModuleSwitch": false,
     "userConfirmedBundleSwitch": false,
-    "packNpmManually": false,
-    "packNpmRelationList": [],
+    "packNpmManually": true,
+    "packNpmRelationList": [
+      {
+        "packageJsonPath": "./miniprogram/package.json",
+        "miniprogramNpmDistDir": "./miniprogram/"
+      }
+    ],
     "minifyWXSS": true,
     "compileWorklet": false,
     "minifyWXML": true,
@@ -65,8 +70,8 @@
       "list": [
         {
           "id": -1,
-          "name": "db guide",
-          "pathName": "pages/databaseGuide/databaseGuide"
+          "name": "首页",
+          "pathName": "pages/demo/demo"
         }
       ]
     }
@@ -74,7 +79,11 @@
   "compileType": "miniprogram",
   "srcMiniprogramRoot": "miniprogram/",
   "packOptions": {
-    "ignore": [],
+    "ignore": [
+      { "type": "folder", "value": "miniprogram/miniprogram_npm_bak_1.9.5" },
+      { "type": "folder", "value": "miniprogram/node_modules" },
+      { "type": "folder", "value": "miniprogram_npm_bak_1.9.5" }
+    ],
     "include": []
   },
   "editorSetting": {

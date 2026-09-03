@@ -1,0 +1,102 @@
+<!-- pages/detail/detail.wxml -->
+<!-- 帖子详情页：招聘/求职共用展示结构，语义由 data 区分 -->
+<view class="page" wx:if="{{d}}">
+  <!-- 顶部信息卡：类型徽章 + 标题 -->
+  <view class="head">
+    <view class="head-type" style="color:{{d.typeColor}}; background:{{d.typeBg}};">{{d.typeName}}</view>
+    <view class="head-title">{{d.title}}</view>
+    <!-- 发布人 + 信用 + 时间 -->
+    <!-- <view class="head-sub">
+      <text wx:if="{{d.username}}" class="head-user">{{d.username}}</text>
+      <text wx:if="{{d.creditMeta}}" class="credit-tag" style="color:{{d.creditMeta.color}}; background:{{d.creditMeta.bg}};">{{d.creditMeta.label}}</text>
+      <text class="head-time">{{d.agoText}}</text>
+    </view> -->
+  </view>
+
+  <!-- 有图时展示图片 -->
+  <image wx:if="{{d.image}}" class="cover" src="{{d.image}}" mode="widthFix" />
+
+  <!-- 关键信息 -->
+  <view class="card">
+    <view class="card-row">
+      <text class="card-key">薪资</text>
+      <text class="card-val salary">{{d.salaryText}}</text>
+    </view>
+    <view wx:if="{{d.salaryNote}}" class="card-row">
+      <text class="card-key">薪资说明</text>
+      <text class="card-val">{{d.salaryNote}}</text>
+    </view>
+    <view class="card-row">
+      <text class="card-key">师傅类型</text>
+      <text class="card-val">{{d.role}}</text>
+    </view>
+    <view class="card-row">
+      <text class="card-key">所在地区</text>
+      <text class="card-val">{{d.regionText}}</text>
+    </view>
+    <!-- 联系电话：正文/联系方式里识别出的号统一脱敏后单独一栏展示；右侧"查看电话"按钮(后续接付费查看完整号) -->
+    <view wx:if="{{d.hasPhone}}" class="card-row phone-row">
+      <text class="card-key">联系电话</text>
+      <text class="card-val phone-val" user-select>{{d.phonesText}}</text>
+      <view class="phone-action" bind:tap="onRevealPhone">查看电话</view>
+    </view>
+    <view wx:if="{{d.address}}" class="card-row">
+      <text class="card-key">详细地址</text>
+      <text class="card-val">{{d.address}}</text>
+    </view>
+    <!-- 求职专属 -->
+    <view wx:if="{{d.isJobseek && d.availability}}" class="card-row">
+      <text class="card-key">到岗方式</text>
+      <text class="card-val">{{d.availability}}</text>
+    </view>
+    <view wx:if="{{d.isJobseek && d.serviceArea}}" class="card-row">
+      <text class="card-key">可服务地区</text>
+      <text class="card-val">{{d.serviceArea}}</text>
+    </view>
+    <!-- 求职诉求 / 招聘条件 标签 -->
+    <view wx:if="{{(d.isJobseek && d.wants.length) || (!d.isJobseek && d.conds.length)}}" class="card-row tags-row">
+      <text class="card-key">{{d.isJobseek ? '求职诉求' : '工作条件'}}</text>
+      <view class="tags">
+        <t-tag wx:for="{{d.isJobseek ? d.wants : d.conds}}" wx:key="*this" size="small" variant="light">{{item}}</t-tag>
+      </view>
+    </view>
+  </view>
+
+  <!-- 详情描述 -->
+  <view class="card desc-card">
+    <view class="card-section-title">详情描述</view>
+    <text class="desc-text" user-select>{{d.body}}</text>
+  </view>
+
+  <!-- 发布信息 -->
+  <view class="card meta-card">
+    <view class="card-row">
+      <text class="card-key">发布时间</text>
+      <text class="card-val">{{d.publishedText}} {{d.agoText}}</text>
+    </view>
+    <view wx:if="{{d.username}}" class="card-row">
+      <text class="card-key">发布用户</text>
+      <text class="card-val">{{d.username}}</text>
+    </view>
+    <view wx:if="{{d.username}}" class="card-row">
+      <text class="card-key">信用等级</text>
+      <text class="card-val"> <text wx:if="{{d.creditMeta}}"  style="color:{{d.creditMeta.color}}; background:{{d.creditMeta.bg}};">{{d.creditMeta.label}}</text></text>
+    </view>
+   
+  </view>
+
+  <!-- 底部联系方式操作区：点"查看联系方式" -->
+  <view class="footer-bar">
+    <view class="contact-hint">温馨提示：联系时请核实对方身份</view>
+    <t-button
+      class="contact-btn"
+      theme="primary"
+      block="{{true}}"
+      bind:tap="onViewContact"
+    >查看联系方式</t-button>
+  </view>
+</view>
+
+<!-- 加载中 / 空态 -->
+<t-loading wx:elif="{{loading}}" theme="circular" text="加载中…" layout="vertical" class="state" />
+<t-empty wx:else description="{{loadError || '帖子不存在'}}" class="state" />

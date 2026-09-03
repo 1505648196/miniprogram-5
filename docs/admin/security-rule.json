@@ -1,0 +1,27 @@
+{
+  "_comment": "包子招聘后台安全规则说明",
+  "environment": "cloud1-9gcxv3wk28637b62",
+  "database_engine": "FlexDB",
+  "finding": "当前环境为 FlexDB（新版数据库引擎），控制台只有 4 个预设权限（READONLY / PRIVATE / ADMINWRITE / ADMINONLY），不支持自定义安全规则 JSON。",
+  "implication": "无需也不可配置自定义安全规则。云函数运行在 admin 上下文，不受前端权限限制，可自由读写 baozi_posts。",
+  "recommended_preset": "READONLY",
+  "preset_rules": {
+    "READONLY": {
+      "description": "客户端可读全部数据，但只能修改自己的数据（按 _openid）。",
+      "suitability": "后台写操作全部走 adminAuth 云函数（admin 上下文不受限），因此 READONLY 足够。前端不走 SDK 直连写。"
+    },
+    "PRIVATE": {
+      "description": "客户端只能读写自己的数据。",
+      "suitability": "如需严格隔离前端读取，可选此项，但会限制前端直连读列表，须全部走云函数。"
+    },
+    "ADMINWRITE": {
+      "description": "客户端只能读，不能写。",
+      "suitability": "同样可用，后台写走云函数即可。"
+    },
+    "ADMINONLY": {
+      "description": "客户端完全无权限。",
+      "suitability": "最严格，前端读写全部走云函数。需调整前端代码（当前列表走直连读）。"
+    }
+  },
+  "conclusion": "维持默认 READONLY 即可，后台所有增删改查均通过 adminAuth 云函数完成，安全边界由云函数内账号密码校验保证。"
+}

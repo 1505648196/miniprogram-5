@@ -1,0 +1,17 @@
+# 依赖
+node_modules/
+
+# 构建产物
+dist/
+
+# 本地环境变量（含敏感信息，勿提交）
+.env.local
+.env.*.local
+
+# 日志
+*.log
+
+# 临时检查文件
+check_result.txt
+install_log.txt
+build_log.txt

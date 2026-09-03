@@ -1,0 +1,194 @@
+/* pages/detail/detail.wxss */
+.page {
+  min-height: 100vh;
+  background: #F6F6F6;
+  padding: 16rpx 16rpx 200rpx;
+  box-sizing: border-box;
+}
+
+.state {
+  padding: 160rpx 0;
+}
+
+/* ============ 顶部信息卡 ============ */
+.head {
+  background: #FFFFFF;
+  border-radius: 20rpx;
+  padding: 28rpx 24rpx 20rpx;
+}
+
+.head-type {
+  display: inline-block;
+  font-size: 28rpx;
+  font-weight: 800;
+  line-height: 1.2;
+  padding: 8rpx 20rpx;
+  border-radius: 12rpx;
+  margin-bottom: 18rpx;
+}
+
+
+.head-title {
+  font-size: 36rpx;
+  font-weight: 700;
+  color: #1A1A1A;
+  line-height: 1.4;
+}
+
+.head-sub {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin-top: 20rpx;
+  font-size: 24rpx;
+  color: #999999;
+}
+
+.head-user {
+  color: #666666;
+}
+
+.credit-tag {
+  font-size: 20rpx;
+  line-height: 1;
+  padding: 6rpx 12rpx;
+  border-radius: 999rpx;
+}
+
+/* ============ 封面图 ============ */
+.cover {
+  width: 100%;
+  border-radius: 20rpx;
+  margin-top: 16rpx;
+  display: block;
+}
+
+/* ============ 通用信息卡 ============ */
+.card {
+  background: #FFFFFF;
+  border-radius: 20rpx;
+  margin-top: 16rpx;
+  padding: 8rpx 24rpx;
+}
+
+.card-row {
+  display: flex;
+  padding: 20rpx 0;
+  font-size: 28rpx;
+  line-height: 1.5;
+  border-bottom: 1rpx solid #F5F5F5;
+}
+.card-row:last-child {
+  border-bottom: none;
+}
+
+.card-key {
+  flex-shrink: 0;
+  width: 160rpx;
+  color: #999999;
+}
+
+.card-val {
+  flex: 1;
+  color: #1A1A1A;
+  word-break: break-all;
+}
+
+.card-val.salary {
+  color: #FF7A45;
+  font-weight: 700;
+  font-size: 32rpx;
+}
+
+/* 联系电话栏：脱敏号醒目展示 + 右侧"查看电话"按钮(后续接付费查看完整号) */
+.phone-row {
+  background: #FFF7E6;
+  border-radius: 12rpx;
+  margin: 4rpx 0;
+  padding-left: 8rpx;
+  padding-right: 8rpx;
+}
+.phone-val {
+  color: #FF7A45;
+  font-weight: 700;
+  font-size: 32rpx;
+  letter-spacing: 2rpx;
+  /* 占用剩余空间，让"查看电话"按钮自动推最右 */
+  flex: 1 1 auto;
+}
+/* 行内右侧按钮：品牌色小药丸 */
+.phone-action {
+  flex-shrink: 0;
+  margin-left: 16rpx;
+  padding: 8rpx 20rpx;
+  font-size: 24rpx;
+  color: #1A1A1A;
+  background: #FFE60A;
+  border-radius: 999rpx;
+  border: 2rpx solid #F5D800;
+  line-height: 1.2;
+  white-space: nowrap;
+  /* 按钮轻反馈 */
+  transition: all 0.2s ease;
+}
+.phone-action:active {
+  background: #F5D800;
+  transform: scale(0.96);
+}
+
+.tags-row {
+  align-items: flex-start;
+}
+.tags {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10rpx;
+}
+
+/* ============ 详情描述 ============ */
+.desc-card {
+  padding: 8rpx 24rpx 28rpx;
+}
+
+.card-section-title {
+  font-size: 24rpx;
+  color: #999999;
+  padding: 20rpx 0 12rpx;
+}
+
+.desc-text {
+  font-size: 30rpx;
+  color: #333333;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-all;
+  user-select: text;
+}
+
+/* ============ 底部联系方式栏 ============ */
+.footer-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #FFFFFF;
+  padding: 16rpx 24rpx calc(16rpx + env(safe-area-inset-bottom));
+  box-shadow: 0 -2rpx 12rpx rgba(0, 0, 0, 0.05);
+}
+
+.contact-hint {
+  font-size: 20rpx;
+  color: #b6b6b6;
+  text-align: center;
+  margin-bottom: 12rpx;
+}
+
+.contact-btn {
+  --td-button-primary-bg-color: #FFE60A;
+  --td-button-primary-border-color: #FFE60A;
+  --td-button-primary-color: #1A1A1A;
+  --td-button-primary-active-bg-color: #F5D800;
+  --td-button-primary-active-border-color: #F5D800;
+  --td-button-font-size: 30rpx;
+}

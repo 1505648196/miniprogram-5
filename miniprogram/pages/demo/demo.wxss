@@ -1,0 +1,461 @@
+/* pages/demo/demo.wxss */
+/* 包子行业信息平台 · 首页 —— TDesign CSS 变量覆盖，不改组件源码 */
+
+.page {
+  min-height: 100vh;
+  position: relative;
+  padding-bottom: 180rpx;
+}
+
+/* ============ 黄色 Header ============ */
+.header {
+  height: 96rpx;
+  background: #FFE60A;
+  display: flex;
+  align-items: center;
+  padding: 0 32rpx;
+  gap: 20rpx;
+}
+
+.header-logo {
+  font-size: 36rpx;
+  font-weight: 800;
+  color: #1A1A1A;
+  letter-spacing: 2rpx;
+  flex-shrink: 0;
+  width: 144rpx;
+  white-space: nowrap;
+}
+
+.hdr-search {
+  flex: 1;
+  min-width: 0;
+  /* 黄色胶囊搜索框：黄底 + 黑字黑图标 + 黑色边框（从 Header 黄色中区分出来） */
+  --td-search-bg-color: #FFE60A;
+  --td-search-height: 72rpx;
+  --td-search-padding: 12rpx 28rpx;
+  --td-search-font: 28rpx;
+  --td-search-icon-size: 36rpx;
+  --td-search-placeholder-color: #1A1A1A;
+  --td-search-text-color: #1A1A1A;
+  --td-search-icon-color: #1A1A1A;
+  --td-search-clear-icon-color: #1A1A1A;
+  --td-search-action-color: #1A1A1A;
+  border: 3rpx solid #1A1A1A;
+  border-radius: 36rpx;
+  overflow: hidden;
+}
+
+.hdr-publish {
+  flex-shrink: 0;
+  --td-button-bg-color: #1A1A1A;
+  --td-button-border-color: #1A1A1A;
+  --td-button-font: 24rpx;
+}
+
+/* ============ 顶部选项卡(t-tabs line) ============ */
+.top-tabs {
+  background: #FFFFFF;
+  border-bottom: 1rpx solid #F0F0F0;
+  --td-tab-nav-bg-color: #ffffff;
+  --td-tab-item-height: 88rpx;
+  --td-tab-item-color: #666666;
+  --td-tab-item-active-color: #1A1A1A;
+  --td-tab-item-active-font: 700;
+  --td-tab-track-color: #1A1A1A;
+  --td-tab-track-width: 48rpx;
+  --td-tab-track-thickness: 6rpx;
+  --td-tab-font: 28rpx;
+}
+
+/* 吸顶态阴影：tabs 为 apply-shared，页面样式可作用到内部 __wrapper */
+.top-tabs .t-tabs__wrapper {
+  transition: box-shadow 0.18s ease;
+}
+
+.top-tabs.is-sticky .t-tabs__wrapper {
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.06);
+}
+
+/* ============ 主内容 ============ */
+.content {
+  background: #FFFFFF;
+  padding: 0 16rpx;
+  border-radius: 0 0 24rpx 24rpx;
+}
+
+/* ============ 帖子流容器（模块 5 吸顶后独立全宽，帖子流在白底区内） ============ */
+.feed {
+  background: #FFFFFF;
+  padding: 0 16rpx;
+}
+
+/* ============ 金刚位 8 宫格 ============ */
+.kk {
+  padding: 16rpx 0 8rpx;
+  --td-grid-item-padding: 20rpx 0;
+}
+
+.kk-icon {
+  width: 84rpx;
+  height: 84rpx;
+  border-radius: 20rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 42rpx;
+  box-shadow: 0 4rpx 10rpx rgba(0, 0, 0, 0.06);
+}
+
+/* 金刚位图片图标：等比缩放居中填满格子，圆角裁剪 */
+.kk-img {
+  width: 100%;
+  height: 100%;
+  border-radius: 20rpx;
+  display: block;
+}
+
+.kk-name {
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  color: #1A1A1A;
+}
+
+/* ============ Banner ============ */
+.banners {
+  display: flex;
+  gap: 16rpx;
+  padding: 16rpx 0 0;
+}
+
+.banner {
+  flex: 1;
+  height: 108rpx;
+  border-radius: 16rpx;
+  display: flex;
+  align-items: center;
+  padding: 0 16rpx;
+  gap: 12rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
+}
+
+.banner-ai {
+background: #eae5e55e;
+}
+
+.banner-pub {
+ background: #eae5e55e;
+}
+
+.banner-emoji {
+  font-size: 57rpx;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.banner-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+  min-width: 0;
+}
+
+.banner-title {
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #FF7A45;
+}
+
+.banner-sub {
+  font-size: 22rpx;
+  color:#FF7A45
+}
+
+/* ============ 筛选 Tab ============ */
+.goods-tabs {
+  border-bottom: 1rpx solid #F0F0F0;
+  --td-tab-nav-bg-color: #ffffff;
+  --td-tab-item-height: 80rpx;
+  --td-tab-item-tag-height: 56rpx;
+  --td-tab-item-tag-bg: #F5F5F5;
+  --td-tab-item-tag-active-bg: #1A1A1A;
+  --td-tab-item-color: #666666;
+  --td-tab-item-active-color: #FFFFFF;
+  --td-tab-font: 26rpx;
+  --td-tab-item-active-font: 600;
+}
+
+.tabs-hide-content {
+  display: none;
+}
+
+/* ============ 帖子双列 ============ */
+.goods {
+  display: flex;
+  gap: 16rpx;
+  padding: 16rpx 0 32rpx;
+}
+
+.goods-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  min-width: 0;
+}
+
+.goods-card {
+  background: #FFFFFF;
+  border-radius: 20rpx;
+  overflow: hidden;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.06);
+  /* 定位上下文：无图时 goods-card-badge 绝对定位锚定在卡片左上角 */
+  position: relative;
+}
+
+/* 无图时，地区·时间行内的业务类型高亮小标签（品牌色底 + 白字圆角） */
+.goods-meta-type {
+  flex-shrink: 0;
+  color: #FFFFFF;
+  font-size: 20rpx;
+  line-height: 1;
+  padding: 4rpx 12rpx;
+  border-radius: 999rpx;
+  max-width: 40%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.goods-img {
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.goods-emoji {
+  font-size: 84rpx;
+  line-height: 1;
+}
+
+/* 帖子图片：宽度撑满、高度按图片原比例自适应（widthFix），不同尺寸形成瀑布流错落 */
+.goods-pic {
+  width: 100%;
+  display: block;
+}
+
+.goods-type {
+  position: absolute;
+  top: 12rpx;
+  left: 12rpx;
+  color: #FFFFFF;
+  font-size: 20rpx;
+  padding: 4rpx 14rpx;
+  border-radius: 999rpx;
+  line-height: 1.4;
+  max-width: 70%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.goods-title {
+  font-size: 26rpx;
+  color: #1A1A1A;
+  line-height: 1.4;
+  padding: 16rpx 16rpx 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.goods-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8rpx;
+  padding: 12rpx 16rpx 0;
+}
+
+.goods-meta {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  font-size: 22rpx;
+  color: #999999;
+  padding: 8rpx 16rpx 0;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* 发布用户昵称/称呼（有 username 才展示）；昵称 + 信用标签横排 */
+.goods-user {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  font-size: 22rpx;
+  color: #666666;
+  padding: 8rpx 16rpx 0;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* 信用评分标签（有 credit 才显示；颜色/底色由 creditMeta 内联控制） */
+.goods-credit {
+  flex-shrink: 0;
+  font-size: 20rpx;
+  line-height: 1;
+  padding: 4rpx 10rpx;
+  border-radius: 999rpx;
+}
+
+.goods-price-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8rpx 16rpx 16rpx;
+  gap: 8rpx;
+}
+
+.goods-price {
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #FF7A45;
+  line-height: 1.2;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.goods-arrow {
+  font-size: 20rpx;
+  color: #999999;
+  flex-shrink: 0;
+}
+
+.goods-loading,
+.goods-empty {
+  padding: 80rpx 0;
+  text-align: center;
+  font-size: 24rpx;
+  color: #999999;
+}
+
+/* 列表加载骨架屏：与真实帖子流同款左右留白与上下间距 */
+.feed-skeleton {
+  padding: 32rpx 0 16rpx;
+}
+
+/* 触底加载更多 / 没有更多 */
+.feed-footer {
+  padding: 16rpx 0 40rpx;
+  display: flex;
+  justify-content: center;
+}
+
+.feed-end-text {
+  font-size: 22rpx;
+  color: #cccccc;
+}
+
+/* ============ 底部 TabBar ============ */
+.demo-tabbar {
+  --td-tab-bar-height: 96rpx;
+  --td-tab-bar-color: #666666;
+  --td-tab-bar-active-color: #FF7A45;
+  --td-tab-bar-font: 20rpx;
+}
+
+/* ============ 发布类型选择弹层（TDesign t-popup + t-grid） ============ */
+.pub-sheet {
+  background: #FFFFFF;
+  border-radius: 24rpx 24rpx 0 0;
+  padding: 32rpx 16rpx calc(32rpx + env(safe-area-inset-bottom));
+}
+
+.pub-sheet-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #1A1A1A;
+  text-align: center;
+  margin-bottom: 24rpx;
+}
+
+.pub-grid {
+  --td-grid-item-padding: 20rpx 0;
+}
+
+.pub-icon {
+  width: 84rpx;
+  height: 84rpx;
+  border-radius: 20rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 42rpx;
+  box-shadow: 0 4rpx 10rpx rgba(0, 0, 0, 0.06);
+}
+
+.pub-name {
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  color: #1A1A1A;
+}
+
+/* ============ 手机号授权弹层 ============ */
+.auth-sheet {
+  background: #FFFFFF;
+  border-radius: 24rpx 24rpx 0 0;
+  padding: 48rpx 40rpx calc(48rpx + env(safe-area-inset-bottom));
+  text-align: center;
+}
+
+.auth-emoji {
+  font-size: 72rpx;
+  line-height: 1;
+}
+
+.auth-title {
+  margin-top: 24rpx;
+  font-size: 34rpx;
+  font-weight: 700;
+  color: #1A1A1A;
+}
+
+.auth-desc {
+  margin: 20rpx auto 40rpx;
+  font-size: 26rpx;
+  color: #666666;
+  line-height: 1.6;
+}
+
+/* 微信原生授权按钮：重置默认样式 + 用 TDesign 视觉 */
+.auth-btn {
+  width: 100%;
+  height: 88rpx;
+  line-height: 88rpx;
+  border-radius: 44rpx;
+  background: #1A1A1A;
+  color: #FFFFFF;
+  font-size: 30rpx;
+  font-weight: 600;
+  padding: 0;
+  border: none;
+  text-align: center;
+}
+
+.auth-btn::after {
+  border: none;
+}
+
+.auth-cancel {
+  margin-top: 28rpx;
+  font-size: 26rpx;
+  color: #999999;
+  padding: 8rpx 0;
+}
+
+

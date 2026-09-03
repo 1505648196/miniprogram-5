@@ -1,286 +1,327 @@
-<!-- pages/recruit/recruit.wxml 招工独立页 -->
+<!-- pages/recruit/recruit.wxml -->
+<!-- 包子行业信息平台 · 招聘求职频道页 —— TDesign(tdesign-miniprogram) -->
+<!-- 运营位（轮播 / Banner / 数字卡）在数组为空时整块不渲染，不留占位 -->
+<wxs src="./contain.wxs" module="tc" />
 <view class="page">
 
-  <!-- ================= 招聘信息流 ================= -->
-  <scroll-view
-    class="list-scroll"
-    scroll-y
-    scroll-with-animation
-    bindscrolltolower="onListLower"
-  >
-    <view class="list-inner">
-      <!-- 空状态 -->
-      <block wx:if="{{listLoaded && list.length === 0}}">
-        <view class="empty">
-          <view class="empty-icon">🧑‍🍳</view>
-          <view class="empty-title">还没有招工信息</view>
-          <view class="empty-sub">发布第一条招聘，让师傅找到你</view>
-          <view class="empty-btn" bindtap="goPublish">＋ 我要发布招工</view>
+  <!-- 模块 1:黄色 Header:Logo | t-search | t-button 发布 -->
+  <!-- <view class="header">
+    <view class="header-logo">包子一哥</view>
+    <t-search
+      class="hdr-search"
+      shape="round"
+      placeholder="搜索 招工岗位/城市…"
+      clearable="{{true}}"image.png
+      bind:change="onSearch"
+    />
+    <t-button
+      class="hdr-publish"
+      size="small"
+      theme="default"
+      shape="round"
+      variant="dark"
+      bind:tap="onPublish"
+    >
+      发布
+    </t-button>
+  </view> -->
+
+  <!-- 模块 2:品牌区(常显) -->
+  <!-- <view class="brand">
+    <view class="brand-title">我要招聘</view>
+    <view class="brand-sub">招心动啦 · 包子行业专业招工频道</view>
+  </view> -->
+
+  <view class="content">
+
+    <!-- 模块 3:金刚位(师傅类型) · 默认 9 个 + 第 10 格"更多"，点更多下方展示剩余 5 个 -->
+    <t-grid class="kk" column="{{5}}" hover>
+      <t-grid-item
+        wx:for="{{visibleSubCats}}" wx:key="id"
+        data-item="{{item}}" bind:click="onSubCat"
+      >
+        <view class="kk-icon {{activeSub === item.id ? 'is-active' : ''}}" style="background: {{item.bg}};">{{item.emoji}}</view>
+        <view class="kk-name">{{item.name}}</view>
+      </t-grid-item>
+      <!-- 第 10 格：更多类型/收起 入口（占用"生煎类师傅"的格子；向下箭头=更多，展开后向上箭头=收起） -->
+      <t-grid-item bind:click="toggleSubExpand">
+        <view class="kk-icon kk-more">
+          <t-icon class="kk-more-arrow {{subExpanded ? 'is-up' : ''}}" name="chevron-down" size="52rpx" />
         </view>
-      </block>
+        <view class="kk-name">{{subExpanded ? '收起' : '更多类型'}}</view>
+      </t-grid-item>
+    </t-grid>
 
-      <!-- 列表 -->
-      <block wx:else>
-        <view class="post-card" wx:for="{{list}}" wx:key="_id">
-          <view class="post-top">
-            <text class="post-role">{{item.role || '招工'}}</text>
-            <text class="post-location">{{item.locationText}}</text>
-            <text class="post-time">{{item.timeText}}</text>
-          </view>
-          <view class="post-salary">💼 {{item.salaryText}}</view>
-          <view class="post-line" wx:if="{{item.address}}">📍 {{item.address}}</view>
-          <view class="post-line" wx:if="{{item.contactText}}">👤 {{item.contactText}}</view>
-          <view class="post-desc" wx:if="{{item.raw_text}}">{{item.raw_text}}</view>
-          <view class="post-tags" wx:if="{{item.tagItems && item.tagItems.length}}">
-            <text
-              class="post-tag {{tagItem.cls}}"
-              wx:for="{{item.tagItems}}"
-              wx:for-item="tagItem"
-              wx:key="name"
-            >{{tagItem.name}}</text>
-          </view>
-        </view>
+    <!-- 展开后下方展示剩余品类（默认隐藏） -->
+    <t-grid class="kk kk-extra" wx:if="{{subExpanded}}" column="{{5}}" hover>
+      <t-grid-item
+        wx:for="{{extraSubCats}}" wx:key="id"
+        data-item="{{item}}" bind:click="onSubCat"
+      >
+        <view class="kk-icon {{activeSub === item.id ? 'is-active' : ''}}" style="background: {{item.bg}};">{{item.emoji}}</view>
+        <view class="kk-name">{{item.name}}</view>
+      </t-grid-item>
+    </t-grid>
 
-        <!-- 加载更多 -->
-        <view class="list-more" wx:if="{{listLoading}}">加载中...</view>
-        <view class="list-more" wx:elif="{{!hasMore && list.length > 0}}">— 已经到底啦 —</view>
-        <view class="list-more" wx:elif="{{list.length > 0}}" bindtap="onListLower">上拉加载更多</view>
-
-        <!-- 列表底部发布入口 -->
-        <view class="publish-entry" bindtap="goPublish">＋ 我要发布招工</view>
-      </block>
-    </view>
-  </scroll-view>
-
-  <!-- ================= AI 招工助手弹层 ================= -->
-  <view class="ai-mask" wx:if="{{aiOpen}}" bindtap="closeAi"></view>
-  <view class="ai-panel {{aiOpen ? 'ai-open' : ''}}">
-    <view class="ai-head">
-      <view class="ai-head-left">
-        <view class="ai-title">🤖 AI 招工助手</view>
-        <view class="ai-sub">查招聘信息 · 师傅薪资行情 · 招工注意事项</view>
-      </view>
-      <view
-        class="ai-clear {{aiLoading ? 'ai-clear-disabled' : ''}}"
-        wx:if="{{aiMessages.length > 0}}"
-        hover-class="ai-clear-hover"
-        bindtap="onAiClear"
-      >清空</view>
-      <view class="ai-close" bindtap="closeAi">收起</view>
-    </view>
-
-    <scroll-view class="ai-msgs" scroll-y scroll-into-view="{{aiScrollIntoView}}">
-      <block wx:if="{{aiMessages.length === 0}}">
-        <view class="ai-hint">试着问我：</view>
-        <view class="ai-chip" wx:for="{{aiSuggestions}}" wx:key="*this" data-text="{{item}}" bindtap="onAiSuggest">{{item}}</view>
-      </block>
-      <block wx:else>
-        <block wx:for="{{aiMessages}}" wx:key="id" wx:for-item="item">
-          <!-- AI 消息行：纯文字，无气泡 -->
-          <view class="ai-msg-row" wx:if="{{item.role === 'ai'}}" id="{{item.id}}">
-            <view class="ai-msg ai-msg-ai {{item.msgType === 'list' ? 'ai-msg-list' : ''}}">
-              <block wx:if="{{item.msgType === 'list'}}">
-                <view class="ai-list-head" wx:if="{{item.content}}">{{item.content}}</view>
-                <view class="post-card" wx:for="{{item.cards}}" wx:for-item="card" wx:key="_id">
-                  <view class="post-top">
-                    <text class="post-role">{{card.role || '招工'}}</text>
-                    <text class="post-location">{{card.locationText}}</text>
-                    <text class="post-time">{{card.timeText}}</text>
-                  </view>
-                  <view class="post-salary">💼 {{card.salaryText}}</view>
-                  <view class="post-line" wx:if="{{card.address}}">📍 {{card.address}}</view>
-                  <view class="post-line" wx:if="{{card.contactText}}">👤 {{card.contactText}}</view>
-                  <view class="post-desc" wx:if="{{card.raw_text}}">{{card.raw_text}}</view>
-                  <view class="post-tags" wx:if="{{card.tagItems && card.tagItems.length}}">
-                    <text
-                      class="post-tag {{tagItem.cls}}"
-                      wx:for="{{card.tagItems}}"
-                      wx:for-item="tagItem"
-                      wx:key="name"
-                    >{{tagItem.name}}</text>
-                  </view>
-                </view>
-              </block>
-              <!-- 分析类：KPI + 条形图 + 案例卡片 + 洞察 + 引导芯片 -->
-              <block wx:elif="{{item.msgType === 'analysis'}}">
-                <block wx:for="{{item.blocks}}" wx:for-item="b" wx:key="index">
-                  <!-- 标题 -->
-                  <view wx:if="{{b.type === 'head'}}" class="a-head">{{b.text}}</view>
-                  <!-- KPI 数字卡（横滑） -->
-                  <scroll-view wx:elif="{{b.type === 'kpi'}}" class="a-kpi-scroll" scroll-x enable-flex>
-                    <view class="a-kpi" wx:for="{{b.items}}" wx:for-item="k" wx:key="label">
-                      <view class="a-kpi-value">{{k.value}}<text class="a-kpi-unit" wx:if="{{k.unit}}">{{k.unit}}</text></view>
-                      <view class="a-kpi-label">{{k.label}}</view>
-                    </view>
-                  </scroll-view>
-                  <!-- 薪资条形图 -->
-                  <view wx:elif="{{b.type === 'bar'}}" class="a-block">
-                    <view class="a-sub-title" wx:if="{{b.title}}">{{b.title}}</view>
-                    <view class="a-bar-row" wx:for="{{b.items}}" wx:for-item="bar" wx:key="label">
-                      <view class="a-bar-label">
-                        <text class="a-bar-emoji" wx:if="{{bar.emoji}}">{{bar.emoji}}</text>
-                        <text class="a-bar-name">{{bar.label}}</text>
-                        <text class="a-bar-cnt" wx:if="{{bar.cnt > 1}}">×{{bar.cnt}}</text>
-                      </view>
-                      <view class="a-bar-track">
-                        <view class="a-bar-fill {{bar.hot ? 'a-bar-hot' : ''}}" style="{{bar.styleStr}}"></view>
-                      </view>
-                      <view class="a-bar-range {{bar.hot ? 'a-bar-range-hot' : ''}}">{{bar.low}}~{{bar.high}} 元</view>
-                    </view>
-                  </view>
-                  <!-- 案例卡片：默认折叠，前 3 条 + 展开全部 -->
-                  <view wx:elif="{{b.type === 'cases'}}" class="a-block">
-                    <view class="a-sub-title" wx:if="{{b.title}}">{{b.title}}</view>
-                    <view class="post-card" wx:for="{{b.visibleCards || b.cards}}" wx:for-item="card" wx:key="_id">
-                      <view class="post-top">
-                        <text class="post-role">{{card.role || '招工'}}</text>
-                        <text class="post-location">{{card.locationText}}</text>
-                        <text class="post-time">{{card.timeText}}</text>
-                      </view>
-                      <view class="post-salary">💼 {{card.salaryText}}</view>
-                      <view class="post-line" wx:if="{{card.address}}">📍 {{card.address}}</view>
-                      <view class="post-line" wx:if="{{card.contactText}}">👤 {{card.contactText}}</view>
-                      <view class="post-desc" wx:if="{{card.raw_text}}">{{card.raw_text}}</view>
-                      <view class="post-tags" wx:if="{{card.tagItems && card.tagItems.length}}">
-                        <text
-                          class="post-tag {{tagItem.cls}}"
-                          wx:for="{{card.tagItems}}"
-                          wx:for-item="tagItem"
-                          wx:key="name"
-                        >{{tagItem.name}}</text>
-                      </view>
-                    </view>
-                    <view class="cases-toggle" bindtap="onAiCasesToggle" data-msgid="{{item.id}}" wx:if="{{b.cards.length > 3}}">
-                      <text wx:if="{{item.casesCollapsed}}">展开全部 {{b.cards.length}} 条 ∨</text>
-                      <text wx:else>收起 ∧</text>
-                    </view>
-                  </view>
-                  <!-- 洞察（AI 叙事） -->
-                  <view wx:elif="{{b.type === 'insight'}}" class="a-insight">{{b.text}}</view>
-                  <!-- Tip 提示 -->
-                  <view wx:elif="{{b.type === 'tip'}}" class="a-tip">
-                    <text class="a-tip-emoji">{{b.emoji}}</text>
-                    <text class="a-tip-text">{{b.text}}</text>
-                  </view>
-                  <!-- 引导追问芯片 -->
-                  <view wx:elif="{{b.type === 'chips'}}" class="a-chips">
-                    <view class="a-chip" wx:for="{{b.items}}" wx:for-item="c" wx:key="*this" data-text="{{c}}" bindtap="onAiSuggest">{{c}}</view>
-                  </view>
-                </block>
-              </block>
-              <!-- 发布交互卡（confirm：确认发布 / draft_continue：续草稿 / draft_pending：草稿提示+跳过） -->
-              <block wx:elif="{{item.msgType === 'card'}}">
-                <view class="p-card {{item.cardType === 'confirm' ? 'p-card-confirm' : (item.cardType === 'draft_pending' ? 'p-card-pending' : 'p-card-draft')}}">
-                  <view class="p-card-head">
-                    <text class="p-card-title" wx:if="{{item.cardType === 'confirm'}}">📋 确认招工信息</text>
-                    <text class="p-card-title" wx:elif="{{item.cardType === 'draft_pending'}}">📝 您有一条未发布的招工草稿</text>
-                    <text class="p-card-title" wx:else>📝 继续完善招工信息</text>
-                    <text class="p-card-tag" wx:if="{{item.cardType === 'confirm'}}">待确认</text>
-                    <text class="p-card-tag p-card-tag-warn" wx:elif="{{item.cardType === 'draft_pending'}}">未发布</text>
-                    <text class="p-card-tag p-card-tag-warn" wx:else>还差 {{item.missing.length}} 项</text>
-                  </view>
-                  <view class="p-card-reply" wx:if="{{item.content}}">{{item.content}}</view>
-
-                  <!-- 已填字段 -->
-                  <view class="p-fields" wx:if="{{item.fields && item.fields.length}}">
-                    <view class="p-field-row" wx:for="{{item.fields}}" wx:for-item="f" wx:key="key">
-                      <text class="p-field-emoji">{{f.emoji || '📍'}}</text>
-                      <text class="p-field-label">{{f.label}}</text>
-                      <text class="p-field-value">{{f.value}}</text>
-                    </view>
-                  </view>
-
-                  <!-- 缺失项提示 -->
-                  <view class="p-missing" wx:if="{{item.missing && item.missing.length}}">
-                    <text class="p-missing-icon">⚠️</text>
-                    <text class="p-missing-text">还差：</text>
-                    <text class="p-missing-item" wx:for="{{item.missing}}" wx:for-item="m" wx:key="key">{{m.label}}</text>
-                  </view>
-
-                  <!-- 标签预览 -->
-                  <view class="p-tags" wx:if="{{item.tags && item.tags.length}}">
-                    <text class="p-tag" wx:for="{{item.tags}}" wx:for-item="t" wx:key="*this">{{t}}</text>
-                  </view>
-
-                  <!-- 操作按钮 -->
-                  <view class="p-btn-row" wx:if="{{item.cardType === 'confirm'}}">
-                    <view class="p-btn p-btn-primary" bindtap="onCardPublish">✅ 确认发布</view>
-                    <view class="p-btn p-btn-ghost" bindtap="onCardCancel">取消</view>
-                  </view>
-                  <view class="p-btn-row" wx:elif="{{item.cardType === 'draft_pending'}}">
-                    <view class="p-btn p-btn-primary" data-msgid="{{item.id}}" bindtap="onCardContinue">✏️ 继续补充</view>
-                    <view class="p-btn p-btn-ghost" data-msgid="{{item.id}}" bindtap="onCardSkip">跳过草稿</view>
-                  </view>
-                  <view class="p-btn-row" wx:else>
-                    <view class="p-btn-inline" bindtap="onQuerySwitch">🔍 需查询？点我查信息</view>
-                  </view>
-                </view>
-              </block>
-              <block wx:else>
-                {{item.content}}<text class="cursor" wx:if="{{item.streaming}}">▍</text>
-                <view class="p-tipchip" wx:if="{{item.tipChip}}" data-text="{{item.tipChip}}" bindtap="onAiSuggest">
-                  <text class="p-tipchip-icon">✏️</text>{{item.tipChip}}
-                </view>
-              </block>
-            </view>
-          </view>
-
-          <!-- 用户消息行：深灰小气泡，文字居中 -->
-          <view class="ai-msg-row ai-msg-row-user" wx:else id="{{item.id}}">
-            <view class="ai-msg ai-msg-user">
-              {{item.content}}
-            </view>
-          </view>
-        </block>
-      </block>
-    </scroll-view>
-
-    <view class="ai-input-row">
-      <input
-        class="ai-input"
-        value="{{aiInput}}"
-        placeholder="问招工顾问…"
-        placeholder-class="ph"
-        confirm-type="send"
-        disabled="{{aiLoading}}"
-        bindinput="onAiInput"
-        bindconfirm="onAiSend"
+    <!-- 模块 4:广告轮播位(ads 为空时整块不渲染) -->
+    <view class="ads" wx:if="{{ads.length}}">
+      <t-swiper
+        class="ads-swiper"
+        list="{{ads}}"
+        height="{{200}}"
+        autoplay="{{true}}"
+        interval="{{5000}}"
+        navigation="{{swiperNav}}"
+        bind:click="onAdTap"
       />
-      <view class="ai-send {{aiLoading ? 'ai-send-disabled' : ''}}" bindtap="onAiSend">发送</view>
+    </view>
+
+    <!-- 模块 5:Banner 运营卡位(banners 为空时整块不渲染) -->
+    <view class="banners" wx:if="{{banners.length}}">
+      <view
+        class="banner"
+        wx:for="{{banners}}" wx:key="id"
+        style="background: linear-gradient(135deg, {{item.bgFrom}} 0%, {{item.bgTo}} 100%);"
+        data-item="{{item}}" bindtap="onBannerTap"
+      >
+        <view class="banner-emoji">{{item.emoji}}</view>
+        <view class="banner-info">
+          <view class="banner-title">{{item.title}}</view>
+          <view class="banner-sub">{{item.sub}}</view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 模块 6:服务保障数字卡位(stats 为空时整块不渲染) -->
+    <view class="stats" wx:if="{{stats.length}}">
+      <view class="stat" wx:for="{{stats}}" wx:key="id">
+        <view class="stat-value">{{item.value}}</view>
+        <view class="stat-label">{{item.label}}</view>
+      </view>
+    </view>
+
+  </view>
+
+  <!-- 模块 7 已临时隐藏：用 wx:if="{{false}}" 不渲染（WXML 注释不能嵌套，故不用注释包裹）。
+       恢复时把 false 改回 filterBarVisible 即可。 -->
+  <block >
+  <t-sticky
+    offset-top="{{stickyTop}}"
+    z-index="{{20000}}"
+    bind:scroll="onStickyScroll"
+  >
+  <t-dropdown-menu id="topDropdownMenu" class="top-dropdown {{tabsSticky ? 'is-sticky' : ''}} {{subPick && subPick !== '__all__' ? 'has-sub' : ''}} {{regionPick ? 'has-region' : ''}} {{salary ? 'has-salary' : ''}}" show-overlay="{{false}}">
+
+    <!-- 师傅类型:下拉面板内嵌单选列表，点击即选即生效 -->
+    <t-dropdown-item id="subDropdownItem" label="{{subLabel}}" bind:open="onSubDropdownOpen">
+      <view class="drop-sub">
+        <view class="drop-sub-title">选择师傅类型</view>
+        <view class="drop-sub-list">
+          <view
+            wx:for="{{subOptions}}" wx:key="value"
+            data-value="{{item.value}}"
+            class="drop-sub-row {{subDraftPick === item.value ? 'is-on' : ''}}"
+            bind:tap="onSubRowTap"
+          >
+            <text class="drop-sub-row-label">{{item.label}}</text>
+            <text wx:if="{{subDraftPick === item.value}}" class="drop-sub-row-tick">✓</text>
+          </view>
+        </view>
+      </view>
+    </t-dropdown-item>
+
+    <!-- 区域:下拉内常用城市快捷选择 + 完整省市区(t-cascader) -->
+    <t-dropdown-item id="regionDropdownItem" label="{{regionPick || '区域'}}" bind:open="onRegionDropdownOpen">
+      <view class="drop-region">
+        <view class="drop-region-title">常用城市</view>
+        <view class="drop-region-tags">
+          <view
+            wx:for="{{hotCities}}" wx:key="code"
+            class="drop-city-wrap {{regionCode === item.code ? 'is-on' : ''}}"
+            data-name="{{item.name}}"
+            data-code="{{item.code}}"
+            bind:tap="onHotCity"
+          >
+            <t-tag
+              size="extra-large" variant="light"
+              class="drop-city-tag {{regionCode === item.code ? 'is-on' : ''}}"
+            >{{item.name}}</t-tag>
+          </view>
+        </view>
+        <view class="drop-region-actions">
+          <t-button
+            class="drop-region-more"
+            theme="primary"
+            bind:tap="openCascader"
+          >查看完整省市区</t-button>
+          <t-button
+            wx:if="{{regionPick}}"
+            class="drop-region-reset"
+            theme="default" variant="text"
+            bind:tap="onRegionReset"
+          >重置</t-button>
+        </view>
+      </view>
+    </t-dropdown-item>
+  
+  
+    <!-- 工资:下拉内输入最低薪资 + 清空/确定 -->
+    <t-dropdown-item id="salaryDropdownItem" label="{{salaryLabel}}">
+      <view class="drop-salary">
+        <view class="drop-salary-row">
+          <t-input
+            key="salary-{{salaryInputKey}}"
+            class="drop-salary-input"
+            type="number" placeholder="最低薪资"
+            maxlength="6"
+            value="{{salary}}"
+            bind:change="onSalary"
+            bind:blur="onSalaryBlur"
+          />
+          <text class="drop-salary-unit">元/月</text>
+        </view>
+        <view class="drop-salary-tip">限填数字，最高 10 万元/月</view>
+        <view class="drop-salary-actions">
+          <t-button class="drop-salary-btn-reset" theme="default" variant="outline" bind:tap="onSalaryClear">清空</t-button>
+          <t-button class="drop-salary-btn-confirm" theme="primary" bind:tap="onSalaryConfirm">确定</t-button>
+        </view>
+      </view>
+    </t-dropdown-item>
+  </t-dropdown-menu>
+  </t-sticky>
+  </block>
+
+  <!-- 模块 7.5:信息类别(招聘/求职)多选卡片 · TDesign t-checkbox-group -->
+  <!-- value=selectedTypes(勾选数组)：两类全勾=全部混排；取消任一=只看另一类；全不勾自动回两类全看 -->
+  <!-- 卡片激活态由 tc.contain(selectedTypes, item.value) 判断；勾选图标用 t-icon check，checkbox 本体 icon="none" -->
+  <!-- 打开"查看完整省市区"弹层时整组隐藏，避免遮挡 cascader(与上方 sticky 同步控制) -->
+     <!-- <view class="type-check-title">信息类别</view> -->
+    <!-- 招聘/求职/会员 都作为多选卡(同组件)；筛选时只认 recruit/jobseek，member 触发也返回空不影响 -->
+  <block wx:if="{{filterBarVisible}}">
+  <view class="type-check">
+ 
+    <t-checkbox-group
+      class="type-check-list"
+      value="{{selectedTypes}}"
+      bind:change="onTypeChange"
+    >
+      <view
+        wx:for="{{typeCards}}" wx:key="value"
+        class="type-check-item {{tc.contain(selectedTypes, item.value) ? 'is-on' : ''}}"
+      >
+        <t-icon
+          wx:if="{{tc.contain(selectedTypes, item.value)}}"
+          name="check"
+          t-class="type-check-check"
+          ariaHidden="{{true}}"
+        />
+        <t-checkbox value="{{item.value}}" icon="none" borderless>
+          <view class="type-check-label">
+            <view class="type-check-name">{{item.label}}</view>
+            <view class="type-check-desc">{{item.desc}}</view>
+          </view>
+        </t-checkbox>
+      </view>
+    </t-checkbox-group>
+  </view>
+  </block>
+
+  <!-- 模块 8:招聘求职信息双列瀑布流 -->
+  <!-- loading 时展示双列卡片骨架屏(t-skeleton)；否则按 空态/列表 渲染 -->
+  <view class="feed">
+    <t-skeleton
+      wx:if="{{loading}}"
+      class="feed-skeleton"
+      theme="paragraph"
+      animation="flashed"
+      row-col="{{skeletonRows}}"
+    />
+    <view class="goods-empty" wx:elif="{{!goodsLeft.length && !goodsRight.length}}">
+      <t-empty icon="search" description="{{emptyText}}" />
+    </view>
+
+    <view class="goods" wx:else>
+      <view class="goods-col">
+        <view class="goods-card"
+              wx:for="{{goodsLeft}}" wx:key="id"
+              data-id="{{item.id}}" bindtap="onTap">
+          <!-- 有图时显示真实图片 + 类型徽章；无图则整块不渲染（含 emoji） -->
+          <view class="goods-img" wx:if="{{item.image}}" style="background: {{item.light}};">
+            <image class="goods-pic" src="{{item.image}}" mode="widthFix" />
+            <view class="goods-type" style="background: {{item.color}};">{{item.typeName}}</view>
+          </view>
+          <view class="goods-title">{{item.title}}</view>
+          <view class="goods-tags" wx:if="{{item.tags.length}}">
+            <t-tag wx:for="{{item.tags}}" wx:for-item="tg" wx:key="*this" size="small" variant="light" t-class="goods-tag">{{tg}}</t-tag>
+          </view>
+          <!-- 发布用户昵称/称呼：有值才展示；旁边附信用评分标签（有 credit 才显示） -->
+          <view class="goods-user" wx:if="{{item.username}}">
+            <t-icon name="user" size="24rpx" color="#FFE60A" />
+            <text>{{item.username}}</text>
+            <text class="goods-credit" wx:if="{{item.creditMeta}}" style="color: {{item.creditMeta.color}}; background: {{item.creditMeta.bg}};">{{item.creditMeta.label}}</text>
+          </view>
+          <!-- 地区·时间 行：无图时在前面补业务类型高亮标签 -->
+          <view class="goods-meta">
+            <text wx:if="{{!item.image}}" class="goods-meta-type" style="background: {{item.color}};">{{item.typeName}}</text>
+            <text>{{item.meta}}</text>
+          </view>
+          <view class="goods-price-row">
+            <view class="goods-price">{{item.priceText}}</view>
+            <view class="goods-arrow">查看 ›</view>
+          </view>
+        </view>
+      </view>
+      <view class="goods-col">
+        <view class="goods-card"
+              wx:for="{{goodsRight}}" wx:key="id"
+              data-id="{{item.id}}" bindtap="onTap">
+          <!-- 有图时显示真实图片 + 类型徽章；无图则整块不渲染（含 emoji） -->
+          <view class="goods-img" wx:if="{{item.image}}" style="background: {{item.light}};">
+            <image class="goods-pic" src="{{item.image}}" mode="widthFix" />
+            <view class="goods-type" style="background: {{item.color}};">{{item.typeName}}</view>
+          </view>
+          <view class="goods-title">{{item.title}}</view>
+          <view class="goods-tags" wx:if="{{item.tags.length}}">
+            <t-tag wx:for="{{item.tags}}" wx:for-item="tg" wx:key="*this" size="small" variant="light" t-class="goods-tag">{{tg}}</t-tag>
+          </view>
+          <!-- 发布用户昵称/称呼：有值才展示；旁边附信用评分标签（有 credit 才显示） -->
+          <view class="goods-user" wx:if="{{item.username}}">
+            <t-icon name="user" size="24rpx" color="#FFE60A" />
+            <text>{{item.username}}</text>
+            <text class="goods-credit" wx:if="{{item.creditMeta}}" style="color: {{item.creditMeta.color}}; background: {{item.creditMeta.bg}};">{{item.creditMeta.label}}</text>
+          </view>
+          <!-- 地区·时间 行：无图时在前面补业务类型高亮标签 -->
+          <view class="goods-meta">
+            <text wx:if="{{!item.image}}" class="goods-meta-type" style="background: {{item.color}};">{{item.typeName}}</text>
+            <text>{{item.meta}}</text>
+          </view>
+          <view class="goods-price-row">
+            <view class="goods-price">{{item.priceText}}</view>
+            <view class="goods-arrow">查看 ›</view>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 触底加载更多状态：加载中=局部 loading，到底=没有更多（局部反馈，不切骨架屏） -->
+    <view class="feed-footer">
+      <t-loading wx:if="{{loadingMore}}" theme="circular" size="32rpx" text="加载更多…" layout="vertical" />
+      <text wx:elif="{{firstLoaded && !hasMore && !loading}}" class="feed-end-text">— 没有更多了 —</text>
     </view>
   </view>
 
-  <!-- ================= 底部 AI 入口条 ================= -->
-  <view class="ai-bar" bindtap="openAi">
-    <view class="ai-bar-text">🤖 问招工顾问：招聘信息、师傅工资、注意事项</view>
-    <view class="ai-bar-btn">问 AI</view>
-  </view>
-  <view class="safe-area"></view>
-
-  <!-- ================= 发布成功弹层 ================= -->
-  <view class="pub-mask" wx:if="{{publishDone}}" bindtap="onPublishDoneView"></view>
-  <view class="pub-modal" wx:if="{{publishDone}}">
-    <view class="pub-icon">✅</view>
-    <view class="pub-title">发布成功</view>
-    <view class="pub-sub">招工信息已同步到列表，求职者可以看到</view>
-    <view class="pub-summary">
-      <view class="pub-row">
-        <text class="pub-label">岗位</text>
-        <text class="pub-value">{{publishInfo.role}}</text>
-      </view>
-      <view class="pub-row">
-        <text class="pub-label">城市</text>
-        <text class="pub-value">{{publishInfo.city}}</text>
-      </view>
-      <view class="pub-row">
-        <text class="pub-label">薪资</text>
-        <text class="pub-value">{{publishInfo.salaryText}}</text>
-      </view>
-    </view>
-    <view class="pub-btns">
-      <view class="pub-btn pub-btn-primary" bindtap="onPublishAgain">再发一条</view>
-      <view class="pub-btn pub-btn-ghost" bindtap="onPublishDoneView">查看列表</view>
-    </view>
-  </view>
+  <!-- ========== 模块 9:区域选择弹层(t-cascader) ========== -->
+  <!-- 由 openCascader 先关闭 dropdown 再打开,无弹层冲突 -->
+  <t-cascader
+    visible="{{regionVisible}}"
+    title="选择城市"
+    options="{{regionOptions}}"
+    theme="tab"
+    filterable="{{true}}"
+    filter-placeholder="搜索城市/区域"
+    bind:change="onRegionChange"
+    bind:pick="onRegionPick"
+    bind:close="onRegionClose"
+  />
 
 </view>

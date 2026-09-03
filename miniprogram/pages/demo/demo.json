@@ -1,0 +1,19 @@
+{
+  "navigationBarTitleText": "包子一哥传媒",
+  "enablePullDownRefresh": true,
+  "usingComponents": {
+    "t-search": "/miniprogram_npm/tdesign-miniprogram/search/search",
+    "t-grid": "/miniprogram_npm/tdesign-miniprogram/grid/grid",
+    "t-grid-item": "/miniprogram_npm/tdesign-miniprogram/grid-item/grid-item",
+    "t-tabs": "/miniprogram_npm/tdesign-miniprogram/tabs/tabs",
+    "t-tab-panel": "/miniprogram_npm/tdesign-miniprogram/tab-panel/tab-panel",
+    "t-tab-bar": "/miniprogram_npm/tdesign-miniprogram/tab-bar/tab-bar",
+    "t-tab-bar-item": "/miniprogram_npm/tdesign-miniprogram/tab-bar-item/tab-bar-item",
+    "t-tag": "/miniprogram_npm/tdesign-miniprogram/tag/tag",
+    "t-button": "/miniprogram_npm/tdesign-miniprogram/button/button",
+    "t-popup": "/miniprogram_npm/tdesign-miniprogram/popup/popup",
+    "t-skeleton": "/miniprogram_npm/tdesign-miniprogram/skeleton/skeleton",
+    "t-loading": "/miniprogram_npm/tdesign-miniprogram/loading/loading",
+    "t-icon": "/miniprogram_npm/tdesign-miniprogram/icon/icon"
+  }
+}

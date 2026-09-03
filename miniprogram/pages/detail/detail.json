@@ -1,0 +1,10 @@
+{
+  "navigationBarTitleText": "帖子详情",
+  "usingComponents": {
+    "t-tag": "/miniprogram_npm/tdesign-miniprogram/tag/tag",
+    "t-button": "/miniprogram_npm/tdesign-miniprogram/button/button",
+    "t-icon": "/miniprogram_npm/tdesign-miniprogram/icon/icon",
+    "t-loading": "/miniprogram_npm/tdesign-miniprogram/loading/loading",
+    "t-empty": "/miniprogram_npm/tdesign-miniprogram/empty/empty"
+  }
+}

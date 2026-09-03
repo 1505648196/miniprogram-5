@@ -26,6 +26,7 @@
 // 入参：{ question | messages } 或 { action: "publish" | "cancel" }
 // 环境变量：DEEPSEEK_API_KEY（仅"分析"类需要）
 const cloud = require("wx-server-sdk");
+const { checkText } = require("./secCheck.js");
 const axios = require("axios");
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
@@ -219,8 +220,8 @@ async function handlePublish(openid) {
   const missing = checkMissing(draft);
   if (missing.length) return { msgType: "text",
     reply: `草稿信息不完整，还差 ${missing.map((m) => m.label).join("、")}，请继续补充。` };
-  let postId;
-  try { postId = await publishToBaoziPosts(draft); }
+  let pub;
+  try { pub = await publishToBaoziPosts(draft, openid); }
   catch (e) { return { msgType: "text", reply: "发布失败：" + (e.errMsg || e.message || e) }; }
   await deleteDraftById(openid, draft._id);
   // 发布摘要：供前端成功弹层展示（岗位/城市/薪资）
@@ -233,8 +234,12 @@ async function handlePublish(openid) {
   return {
     success: true,
     msgType: "text",
-    reply: "✅ 发布成功！招工信息已出现在列表里，求职者可以直接看到。",
-    postId,
+    reply: pub.needs_review
+      ? "✅ 已提交审核！通过后招工信息会出现在列表里，求职者即可看到。"
+      : "✅ 发布成功！招工信息已出现在列表里，求职者可以直接看到。",
+    postId: pub._id,
+    needs_review: pub.needs_review,
+    sec_status: pub.sec_status,
     summary: { role: draft.role || "", city: draft.city || "", salaryText },
   };
 }
@@ -421,7 +426,8 @@ function maskPhone(p) {
 }
 
 // ============== publishToBaoziPosts（内联，避免 cloud→cloud 调用）==============
-async function publishToBaoziPosts(d) {
+// 返回 { _id, needs_review, sec_status }：入库即完成内容安全审核
+async function publishToBaoziPosts(d, openid) {
   const phone = String(d.phone || "").trim();
   if (!/^1\d{10}$/.test(phone)) throw new Error("手机号不合法");
   const record = {
@@ -432,6 +438,7 @@ async function publishToBaoziPosts(d) {
     latitude: d.latitude != null ? Number(d.latitude) : null,
     longitude: d.longitude != null ? Number(d.longitude) : null,
     raw_text: d.desc || "", phone, phone_masked: maskPhone(phone), contact: d.contact || "",
+    _openid: openid || "",
     published_at: Date.now(), source: "user", needs_review: false,
     tags: Array.isArray(d.tags) ? d.tags.slice(0, 12) : [],
   };
@@ -440,8 +447,14 @@ async function publishToBaoziPosts(d) {
     if (d.salary_low) record.salary_low = d.salary_low;
     if (d.salary_high) record.salary_high = d.salary_high;
   }
+  // 内容安全审核：pass → 正常展示；risky/reject/接口异常 → 入库待人工复核（列表不展示）
+  const sec = await checkText([d.desc, d.address, d.contact, d.role].join("\n"), openid);
+  record.needs_review = sec.suggest === "pass" ? false : true;
+  record.sec_status = sec.suggest;
+  if (sec.label) record.sec_label = sec.label;
+  record.sec_checked_at = sec.checkedAt;
   const res = await db.collection("baozi_posts").add({ data: record });
-  return res._id;
+  return { _id: res._id, needs_review: record.needs_review, sec_status: record.sec_status };
 }
 
 // ============== handleQuery（查询流，原 main 主体抽出）==============
@@ -466,7 +479,7 @@ async function handleQuery(question, withPublishTip, options = {}) {
       return withTip({
         msgType: "list",
         reply: `【最新招工 · 共${posts.length}条】\n\n` + list,
-        data: posts,
+        data: posts.map(stripPhone),
       }, withPublishTip);
     } catch (e) {
       return withTip({ msgType: "text", reply: "查询数据库出错：" + (e.errMsg || e.message || e) }, withPublishTip);
@@ -488,7 +501,7 @@ async function handleQuery(question, withPublishTip, options = {}) {
       return withTip({
         msgType: "list",
         reply: `【${found.city || "全部"}招工 · 手机号精确匹配 1 条】\n\n` + formatPost(found, 0, true),
-        data: [found],
+        data: [stripPhone(found)],
       }, withPublishTip);
     } catch (e) {
       return withTip({ msgType: "text", reply: "手机号查询出错：" + (e.errMsg || e.message || e) }, withPublishTip);
@@ -519,7 +532,7 @@ async function handleQuery(question, withPublishTip, options = {}) {
     return withTip({
       msgType: "list",
       reply: `【${timeTag}${intent.city || "全部"}招工 · 共${posts.length}条】\n\n` + list,
-      data: posts,
+      data: posts.map(stripPhone),
     }, withPublishTip);
   }
 
@@ -539,7 +552,7 @@ async function handleQuery(question, withPublishTip, options = {}) {
     return withTip({
       msgType: "analysis",
       reply: headText, blocks,
-      data: posts.slice(0, 10),
+      data: posts.slice(0, 10).map(stripPhone),
       sources: posts.slice(0, 5).map((p) => ({ id: p._id, title: (p.raw_text || "").slice(0, 30) })),
     }, withPublishTip);
   }
@@ -929,7 +942,8 @@ async function queryPosts(intent) {
   }
   if (ors.length) query._ = db.command.or(ors);
 
-  const limit = intent.limit || 10;
+  // 分析（行情统计）场景取全量样本（上限 100），列表检索仍默认 10 —— 中位数/条形图需要足够样本量才有意义
+  const limit = intent.type === "analysis" ? Math.min(intent.limit || 100, 100) : intent.limit || 10;
   // ---- 日志：本次查询的完整条件 ----
   console.log("[recruitAI] queryPosts 条件 =", JSON.stringify(query));
   console.log("[recruitAI] queryPosts limit =", limit, "| orderBy = published_at desc");
@@ -979,6 +993,13 @@ function formatPost(p, i, wantPhone) {
   else if (phone) parts.push(phone);
 
   return parts.join(" | ");
+}
+
+// 返回体不下发完整 phone（前端只展示 phone_masked；完整号仅发布本人经 managePost.get 可见）
+function stripPhone(p) {
+  const o = Object.assign({}, p);
+  delete o.phone;
+  return o;
 }
 
 // 相对时间："今天" / "昨天" / "N天前" / "N个月前" / "N年前"
@@ -1045,9 +1066,13 @@ const ROLE_EMOJI = {
   其他类型: "📦",
 };
 
-// 提取招工帖子的 [low, high] 月薪区间；面议/无薪资（0 或缺字段）返回 null
+// 提取招工帖子的 [low, high] 月薪区间；面议/无薪资（0 或缺字段）返回 null（不污染统计）
+// 兼容三种入库形态：salary_low+salary_high 区间 / 只有 salary_high（发布表单只填单值） / 面议无薪资
 function pickNum(p) {
-  if (p.salary_low > 0) return [p.salary_low, p.salary_high > 0 ? p.salary_high : p.salary_low];
+  const lo = Number(p.salary_low) || 0;
+  const hi = Number(p.salary_high) || 0;
+  if (lo > 0) return [lo, hi > 0 ? hi : lo];
+  if (hi > 0) return [hi, hi];
   return null;
 }
 
@@ -1060,6 +1085,7 @@ function buildStats(posts, intent) {
   const max = highs.length ? highs[highs.length - 1] : 0;
   const stats = {
     count: posts.length,
+    validCount: nums.length, // 有明确薪资的有效样本数（面议/无薪资不参与统计）
     median,
     max,
     medianText: wan(median),
@@ -1102,12 +1128,13 @@ function buildBlocks(intent, stats) {
   const blocks = [];
   blocks.push({ type: "head", text: `${cityLabel}招工行情` });
   if (stats) {
+    const hasNum = stats.validCount > 0; // 无有效薪资样本时不硬报 0 元
     blocks.push({
       type: "kpi",
       items: [
         { label: "匹配岗位", value: String(stats.count), unit: "条" },
-        { label: "月薪中位数", value: stats.medianText, unit: "元" },
-        { label: "月薪最高", value: stats.maxText, unit: "元" },
+        { label: "月薪中位数", value: hasNum ? stats.medianText : "—", unit: hasNum ? "元" : "" },
+        { label: "月薪最高", value: hasNum ? stats.maxText : "—", unit: hasNum ? "元" : "" },
       ],
     });
     if (stats.bars && stats.bars.length) {
@@ -1127,11 +1154,12 @@ async function callDeepSeekInsight(stats, posts, question) {
     .join("\n");
   const systemPrompt =
     "你是包子行业招工资讯分析师。请根据【统计事实】和【代表案例】，用不超过150字写一段'洞察与建议'。" +
-    "要求：1) 只能引用统计事实中的数字，禁止编造；2) 2-4个短句，平实口语；" +
+    "要求：1) 只能引用统计事实中的数字，禁止编造；若 validCount 为 0 则明确说明'暂无明确薪资样本'，不要编造具体金额；2) 2-4个短句，平实口语；" +
     "3) 纯文本，禁止任何 Markdown 符号（#、**、表格、列表标记）；" +
     "4) 内容侧重：数字反映的薪资趋势 + 对求职师傅的实用建议。\n\n" +
     `【统计事实】${JSON.stringify({
       count: stats.count,
+      validCount: stats.validCount,
       median: stats.median,
       max: stats.max,
       bars: stats.bars || null,
@@ -1218,10 +1246,12 @@ async function classifyByDeepSeek(question) {
   }
 }
 
-// 无 AI Key / 调用失败时的模板洞察
+// 无 AI Key / 调用失败时的模板洞察（validCount 为 0 时不硬报 0 元）
 function templateTip(intent, stats) {
   const c = intent.city || "该地区";
   if (!stats) return `${c}暂时没有匹配的招工信息，换个城市、岗位或工资条件再试试。`;
+  const hasNum = stats.validCount > 0;
+  if (!hasNum) return `${c}共收录 ${stats.count} 条招工信息，但均未标注明确薪资（多为面议），暂无法给出中位数参考。建议直接联系老板问清包吃住与月休天数。`;
   return `${c}共收录 ${stats.count} 条招工信息，月薪中位数约 ${stats.medianText} 元，最高 ${stats.maxText} 元。面议岗位未计入统计，建议求职时问清包吃住与月休天数。`;
 }
 

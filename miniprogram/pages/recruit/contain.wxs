@@ -1,0 +1,13 @@
+// 供 checkbox-group 卡片判断某 value 是否在勾选数组内
+// WXML 表达式不支持 indexOf，故用 wxs 封装
+function contain(arr, v) {
+  if (!arr) return false;
+  for (var i = 0; i < arr.length; i += 1) {
+    if (arr[i] === v) return true;
+  }
+  return false;
+}
+
+module.exports = {
+  contain: contain
+};
