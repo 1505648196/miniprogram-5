@@ -1,0 +1,14 @@
+{
+  "name": "favorite",
+  "version": "1.0.0",
+  "description": "收藏功能：收藏/取消/我的收藏/批量判断",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

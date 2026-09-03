@@ -1,0 +1,110 @@
+<!-- pages/nearby/nearby.wxml -->
+<!-- 包子行业信息平台 · 附近页（定位授权 → 同城全板块帖子）—— TDesign(tdesign-miniprogram) -->
+<view class="page">
+
+  <!-- 顶部定位条：固定吸顶(t-sticky)，列表滚动时定位条不变 -->
+  <t-sticky offset-top="{{0}}" bind:scroll="onLocSticky">
+    <view class="loc-bar {{locSticky ? 'is-sticky' : ''}}">
+      <block wx:if="{{located}}">
+        <t-icon name="location" size="28rpx" color="#FF7A45" />
+        <text class="loc-city">{{cityName}}</text>
+        <text class="loc-tip">附近的信息</text>
+      </block>
+      <block wx:elif="{{locating}}">
+        <t-loading theme="circular" size="24rpx" />
+        <text class="loc-tip">定位中…</text>
+      </block>
+      <block wx:else>
+        <t-icon name="location" size="28rpx" color="#FF7A45" />
+        <text class="loc-tip">{{failText}}</text>
+        <text class="loc-btn" bindtap="onRetry">去设置</text>
+      </block>
+    </view>
+  </t-sticky>
+
+  <!-- 同城帖子双列 -->
+  <view class="feed" wx:if="{{located || firstLoaded}}">
+    <t-skeleton
+      wx:if="{{loading}}"
+      class="feed-skeleton"
+      theme="paragraph"
+      animation="flashed"
+      row-col="{{skeletonRows}}"
+    />
+    <view class="goods-empty" wx:elif="{{!goodsLeft.length && !goodsRight.length}}">
+      <t-empty icon="search" description="附近暂无信息" />
+    </view>
+
+    <view class="goods" wx:else>
+      <view class="goods-col">
+        <view class="goods-card"
+              wx:for="{{goodsLeft}}" wx:key="id"
+              data-id="{{item.id}}" bindtap="onTap">
+          <view class="goods-img" wx:if="{{item.image}}" style="background: {{item.light}};">
+            <image class="goods-pic" src="{{item.image}}" mode="widthFix" />
+            <view class="goods-type" style="background: {{item.color}};">{{item.typeName}}</view>
+          </view>
+          <view class="goods-title">{{item.title}}</view>
+          <view class="goods-tags" wx:if="{{item.tags.length}}">
+            <t-tag wx:for="{{item.tags}}" wx:for-item="tg" wx:key="*this" size="small" variant="light">{{tg}}</t-tag>
+          </view>
+          <view class="goods-user" wx:if="{{item.username}}">
+            <t-icon name="user" size="24rpx" color="#FFE60A" />
+            <text>{{item.username}}</text>
+            <text class="goods-credit" wx:if="{{item.creditMeta}}" style="color: {{item.creditMeta.color}}; background: {{item.creditMeta.bg}};">{{item.creditMeta.label}}</text>
+          </view>
+          <view class="goods-meta">
+            <text wx:if="{{!item.image}}" class="goods-meta-type" style="background: {{item.color}};">{{item.typeName}}</text>
+            <text>{{item.meta}}</text>
+          </view>
+          <view class="goods-price-row">
+            <view class="goods-price">{{item.priceText || '查看'}}</view>
+            <view class="goods-arrow">详情 ›</view>
+          </view>
+        </view>
+      </view>
+      <view class="goods-col">
+        <view class="goods-card"
+              wx:for="{{goodsRight}}" wx:key="id"
+              data-id="{{item.id}}" bindtap="onTap">
+          <view class="goods-img" wx:if="{{item.image}}" style="background: {{item.light}};">
+            <image class="goods-pic" src="{{item.image}}" mode="widthFix" />
+            <view class="goods-type" style="background: {{item.color}};">{{item.typeName}}</view>
+          </view>
+          <view class="goods-title">{{item.title}}</view>
+          <view class="goods-tags" wx:if="{{item.tags.length}}">
+            <t-tag wx:for="{{item.tags}}" wx:for-item="tg" wx:key="*this" size="small" variant="light">{{tg}}</t-tag>
+          </view>
+          <view class="goods-user" wx:if="{{item.username}}">
+            <t-icon name="user" size="24rpx" color="#FFE60A" />
+            <text>{{item.username}}</text>
+            <text class="goods-credit" wx:if="{{item.creditMeta}}" style="color: {{item.creditMeta.color}}; background: {{item.creditMeta.bg}};">{{item.creditMeta.label}}</text>
+          </view>
+          <view class="goods-meta">
+            <text wx:if="{{!item.image}}" class="goods-meta-type" style="background: {{item.color}};">{{item.typeName}}</text>
+            <text>{{item.meta}}</text>
+          </view>
+          <view class="goods-price-row">
+            <view class="goods-price">{{item.priceText || '查看'}}</view>
+            <view class="goods-arrow">详情 ›</view>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <view class="feed-footer">
+      <t-loading wx:if="{{loadingMore}}" theme="circular" size="32rpx" text="加载更多…" layout="vertical" />
+      <text wx:elif="{{firstLoaded && !hasMore && !loading}}" class="feed-end-text">— 没有更多了 —</text>
+    </view>
+  </view>
+
+  <!-- 定位失败：提示 + 去设置（页面未定位时不加载帖子） -->
+  <view class="fail-panel" wx:elif="{{!located && !locating}}">
+    <t-empty description="{{failText || '定位失败'}}" />
+    <view class="fail-retry" bindtap="onRetry">去设置开启定位</view>
+  </view>
+
+  <!-- 底部导航 -->
+  <comp-tabbar current="nearby" />
+
+</view>

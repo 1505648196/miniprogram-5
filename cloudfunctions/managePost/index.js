@@ -13,12 +13,20 @@ const db = cloud.database();
 const COLLECTION = "baozi_posts";
 
 // 表单能表达的字段白名单：编辑只允许改这些，其余字段（boss_style/source/published_at 等）原样保留
+// 与发布侧(publishPost)字段对齐，覆盖：招工/求职 salary + 期望/到岗/诉求、转让/求店专项、设备成色、图片等。
 const EDITABLE = [
   "role", "role_id", "salary",
+  // 求职(jobseek)专项
+  "salary_expect", "salary_note", "availability", "want_terms", "service_area",
+  // 转让/求店 专属可编辑字段
+  "price", "monthly_rent", "area_sqm", "daily_revenue", "has_equipment",
+  "terms", "rent_max", "area_min",
+  // 二手设备 专属可编辑字段
+  "cond",
   "province", "city", "district",
   "province_code", "city_code", "district_code",
   "address", "latitude", "longitude",
-  "raw_text", "phone", "contact", "tags",
+  "raw_text", "phone", "contact", "tags", "image",
 ];
 
 // 列表只下发展示所需字段（去 phone / _openid 等敏感字段）
@@ -29,6 +37,13 @@ const LIST_KEYS = [
   "raw_text", "tags", "published_at", "needs_review", "sec_status", "sec_label",
   // 求职专属字段
   "salary_expect", "salary_note", "availability", "want_terms", "service_area",
+  // 转让/求店专属字段
+  "price", "monthly_rent", "area_sqm", "daily_revenue", "has_equipment",
+  "terms", "rent_max", "area_min",
+  // 二手设备专属字段
+  "cond",
+  // 顺风车专属字段
+  "from_place", "to_place", "depart_time", "depart_deadline", "seats",
   // 地址定位 / 图片 / 时间
   "address", "latitude", "longitude", "image", "created_at", "updated_at",
 ];
@@ -46,6 +61,33 @@ function same(a, b) {
   if (a === b) return true;
   if (a == null && b == null) return true;
   return false;
+}
+
+const DATA_TYPE_NAMES = {
+  recruit: "招工", jobseek: "求职", transfer: "店铺转让", want_shop: "求店",
+  equip_sell: "设备出售", equip_buy: "设备求购", carpool_car: "车找人",
+  carpool_person: "人找车", other: "信息",
+};
+
+// 给发帖人推一条审核结果站内通知（write baozi_messages, type=review）
+async function pushReviewNotify(openid, dataType, postId, content) {
+  if (!openid || !postId) return;
+  try {
+    await db.collection("baozi_messages").add({
+      data: {
+        type: "review",
+        to_openid: openid,
+        title: "信息更新已通过审核",
+        content,
+        post_id: postId,
+        read_by: [],
+        sender: "system",
+        created_at: Date.now(),
+      },
+    });
+  } catch (e) {
+    console.error("managePost 推送审核通知失败:", e && e.errMsg);
+  }
 }
 
 async function getOwned(openid, id) {
@@ -77,9 +119,11 @@ exports.main = async (event) => {
 };
 
 // 我发布的帖子：不过滤 needs_review（本人可见"审核中"状态）
+// 全部分类（recruit/jobseek/transfer/want_shop/equip_sell/equip_buy/other 等）都返回，
+// 不再限定 data_type —— 发布侧已支持全分类，我的发布要能看到自己发的全部信息。
 async function actionListMine(openid) {
   const res = await db.collection(COLLECTION)
-    .where({ data_type: "recruit", _openid: openid })
+    .where({ _openid: openid })
     .orderBy("published_at", "desc")
     .limit(50)
     .get();
@@ -133,15 +177,22 @@ async function actionUpdate(openid, event) {
   const content = [patch.raw_text, patch.address, patch.contact, patch.role]
     .filter((v) => v != null && String(v).trim())
     .join("\n");
+  let reReviewPassed = false;
   if (content) {
     const sec = await checkText(content, openid);
     patch.needs_review = sec.suggest === "pass" ? false : true;
     patch.sec_status = sec.suggest;
     if (sec.label) patch.sec_label = sec.label;
     patch.sec_checked_at = sec.checkedAt;
+    reReviewPassed = sec.suggest === "pass";
   }
   patch.updated_at = Date.now(); // published_at 不动，不刷榜
   await db.collection(COLLECTION).doc(event._id).update({ data: patch });
+  // 编辑后重新审核通过 → 推站内通知（避免打扰：仅当确实触发过内容审核且通过时）
+  if (reReviewPassed) {
+    const typeName = DATA_TYPE_NAMES[d.data_type] || DATA_TYPE_NAMES.other;
+    await pushReviewNotify(openid, d.data_type, event._id, `您的「${typeName}」信息已更新并重新审核通过。`);
+  }
   return ok({
     updated: 1,
     needs_review: !!patch.needs_review,

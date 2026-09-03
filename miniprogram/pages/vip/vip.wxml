@@ -1,0 +1,51 @@
+<!-- pages/vip/vip.wxml -->
+<!-- 开通会员（模拟支付） -->
+<view class="page">
+
+  <!-- VIP 顶部横幅 -->
+  <view class="hero">
+    <view class="hero-tag">VIP</view>
+    <view class="hero-title">包子一哥 · 会员</view>
+    <view class="hero-sub">发布更显眼 · 曝光更多 · 专属标识</view>
+  </view>
+
+  <!-- 当前会员状态 -->
+  <view class="status {{ isVip ? 'is-vip' : '' }}">
+    <view class="status-row">
+      <text class="status-name">{{ isVip ? '您是会员' : '当前未开通会员' }}</text>
+      <t-tag theme="{{ isVip ? 'warning' : 'default' }}" variant="light" size="small">{{ isVip ? '生效中' : '普通用户' }}</t-tag>
+    </view>
+    <view class="status-line" wx:if="{{isVip}}">会员有效期至 <text class="status-expire">{{expireText}}</text></view>
+    <view class="status-line" wx:else>开通后享受多项专属权益</view>
+  </view>
+
+  <!-- 会员权益 -->
+  <view class="benefits">
+    <view class="benefit-title">会员专属权益</view>
+    <view class="benefit-item"><text class="benefit-dot">✔</text><text>发布信息获得「会员专属标识」</text></view>
+    <view class="benefit-item"><text class="benefit-dot">✔</text><text>信息展示更靠前、曝光更多</text></view>
+    <view class="benefit-item"><text class="benefit-dot">✔</text><text>发布频次与权益持续扩充中</text></view>
+  </view>
+
+  <!-- 套餐选择 -->
+  <view class="plans">
+    <view
+      class="plan {{ activePlan === item.id ? 'active' : '' }}"
+      wx:for="{{plans}}" wx:key="id"
+      data-id="{{item.id}}" bindtap="selectPlan">
+      <t-tag wx:if="{{item.tag}}" theme="danger" variant="light" size="small" class="plan-tag">{{item.tag}}</t-tag>
+      <view class="plan-name">{{item.name}}</view>
+      <view class="plan-price"><text class="plan-yuan">¥</text>{{item.price}}</view>
+      <view class="plan-tip">{{item.tip}}</view>
+    </view>
+  </view>
+
+  <!-- 支付按钮 -->
+  <view class="pay">
+    <t-button theme="primary" block="{{true}}" size="large" loading="{{paying}}" bind:tap="onPay">
+      {{ isVip ? '续费会员' : '立即开通' }}
+    </t-button>
+    <view class="pay-note">当前为模拟支付演示，不产生真实扣款</view>
+  </view>
+
+</view>

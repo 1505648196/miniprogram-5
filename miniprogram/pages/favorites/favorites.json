@@ -1,0 +1,10 @@
+{
+  "navigationBarTitleText": "我的收藏",
+  "usingComponents": {
+    "t-icon": "/miniprogram_npm/tdesign-miniprogram/icon/icon",
+    "t-tag": "/miniprogram_npm/tdesign-miniprogram/tag/tag",
+    "t-empty": "/miniprogram_npm/tdesign-miniprogram/empty/empty",
+    "t-loading": "/miniprogram_npm/tdesign-miniprogram/loading/loading",
+    "t-skeleton": "/miniprogram_npm/tdesign-miniprogram/skeleton/skeleton"
+  }
+}

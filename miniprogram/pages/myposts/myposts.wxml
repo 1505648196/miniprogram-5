@@ -1,0 +1,62 @@
+<!-- pages/myposts/myposts.wxml -->
+<!-- 我的发布：管理自己发布的信息（编辑 / 删除） -->
+<view class="page">
+
+  <!-- 加载骨架 -->
+  <t-skeleton
+    wx:if="{{loading}}"
+    class="list-skeleton"
+    theme="paragraph"
+    animation="flashed"
+    row-col="{{skeletonRows}}"
+  />
+
+  <!-- 空态 -->
+  <view class="empty-wrap" wx:elif="{{!list.length}}">
+    <t-empty icon="info-circle-filled" description="还没有发布过信息">
+      <t-button slot="action" theme="primary" size="medium" bind:tap="goPublish">去发布</t-button>
+    </t-empty>
+  </view>
+
+  <!-- 列表 -->
+  <view class="list" wx:else>
+    <view class="card" wx:for="{{list}}" wx:key="id">
+      <!-- 主体：点进详情 -->
+      <view class="card-main" data-id="{{item.id}}" bindtap="onTap">
+        <view class="card-top">
+          <text class="card-type" style="background: {{item.color}};">{{item.typeName}}</text>
+          <t-tag theme="{{item.statusTheme}}" variant="light" size="small">{{item.statusText}}</t-tag>
+        </view>
+        <view class="card-title">{{item.title}}</view>
+        <view class="card-price">{{item.priceText}}</view>
+        <view class="card-meta">{{item.meta}}</view>
+      </view>
+      <!-- 操作：编辑 / 删除（catchtap 防止冒泡到卡片详情） -->
+      <view class="card-actions">
+        <t-button
+          theme="default" size="small" variant="outline"
+          data-id="{{item.id}}" data-type="{{item.data_type}}"
+          catch:tap="onEdit"
+        >编辑</t-button>
+        <t-button
+          theme="danger" size="small" variant="outline"
+          data-id="{{item.id}}"
+          catch:tap="onDelete"
+        >删除</t-button>
+      </view>
+    </view>
+  </view>
+
+  <!-- 删除确认 -->
+  <t-dialog
+    visible="{{deleteDialogVisible}}"
+    title="删除信息"
+    content="删除后不可恢复，确定删除这条信息？"
+    confirm-btn="{{ { content: '确定删除', theme: 'danger' } }}"
+    cancel-btn="取消"
+    bind:confirm="onDeleteConfirm"
+    bind:cancel="onDeleteDialogClose"
+    bind:close="onDeleteDialogClose"
+  />
+
+</view>

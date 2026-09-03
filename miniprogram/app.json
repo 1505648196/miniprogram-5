@@ -2,6 +2,20 @@
   "pages": [
     "pages/demo/demo",
     "pages/recruit/recruit",
+    "pages/turnover/turnover",
+    "pages/equip/equip",
+    "pages/carpool/carpool",
+    "pages/other/other",
+    "pages/nearby/nearby",
+    "pages/publish_recruit/publish_recruit",
+    "pages/publish/publish",
+    "pages/search/search",
+    "pages/mine/mine",
+    "pages/myposts/myposts",
+    "pages/history/history",
+    "pages/favorites/favorites",
+    "pages/message/message",
+    "pages/vip/vip",
     "pages/detail/detail"
   ],
   "window": {
@@ -12,5 +26,11 @@
     "navigationBarTextStyle": "black"
   },
   "sitemapLocation": "sitemap.json",
-  "lazyCodeLoading": "requiredComponents"
+  "lazyCodeLoading": "requiredComponents",
+  "permission": {
+    "scope.userLocation": {
+      "desc": "你的位置信息将用于展示你所在城市的附近信息"
+    }
+  },
+  "requiredPrivateInfos": ["getLocation"]
 }

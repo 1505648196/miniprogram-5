@@ -4,33 +4,18 @@
 <wxs src="./contain.wxs" module="tc" />
 <view class="page">
 
-  <!-- 模块 1:黄色 Header:Logo | t-search | t-button 发布 -->
-  <!-- <view class="header">
+  <!-- 模块 1:黄色 Header（与 demo 首页一致：Logo + 圆角搜索，无发布按钮） -->
+  
+  <view class="header">
     <view class="header-logo">包子一哥</view>
     <t-search
       class="hdr-search"
       shape="round"
       placeholder="搜索 招工岗位/城市…"
-      clearable="{{true}}"image.png
+      clearable="{{true}}"
       bind:change="onSearch"
     />
-    <t-button
-      class="hdr-publish"
-      size="small"
-      theme="default"
-      shape="round"
-      variant="dark"
-      bind:tap="onPublish"
-    >
-      发布
-    </t-button>
-  </view> -->
-
-  <!-- 模块 2:品牌区(常显) -->
-  <!-- <view class="brand">
-    <view class="brand-title">我要招聘</view>
-    <view class="brand-sub">招心动啦 · 包子行业专业招工频道</view>
-  </view> -->
+  </view>
 
   <view class="content">
 
@@ -323,5 +308,8 @@
     bind:pick="onRegionPick"
     bind:close="onRegionClose"
   />
+
+  <!-- 底部导航 -->
+  <comp-tabbar current="home" />
 
 </view>

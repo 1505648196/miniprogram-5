@@ -1,0 +1,16 @@
+{
+  "navigationBarTitleText": "顺风车",
+  "enablePullDownRefresh": true,
+  "usingComponents": {
+    "t-search": "/miniprogram_npm/tdesign-miniprogram/search/search",
+    "t-tag": "/miniprogram_npm/tdesign-miniprogram/tag/tag",
+    "t-button": "/miniprogram_npm/tdesign-miniprogram/button/button",
+    "t-empty": "/miniprogram_npm/tdesign-miniprogram/empty/empty",
+    "t-loading": "/miniprogram_npm/tdesign-miniprogram/loading/loading",
+    "t-icon": "/miniprogram_npm/tdesign-miniprogram/icon/icon",
+    "t-skeleton": "/miniprogram_npm/tdesign-miniprogram/skeleton/skeleton",
+    "t-checkbox": "/miniprogram_npm/tdesign-miniprogram/checkbox/checkbox",
+    "t-checkbox-group": "/miniprogram_npm/tdesign-miniprogram/checkbox-group/checkbox-group",
+    "comp-tabbar": "/components/tabbar/index"
+  }
+}

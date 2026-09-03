@@ -1,0 +1,242 @@
+<!-- pages/turnover/turnover.wxml -->
+<!-- 包子行业信息平台 · 转让求店频道页 —— TDesign(tdesign-miniprogram) 复刻招聘求职页风格 -->
+<wxs src="./contain.wxs" module="tc" />
+<view class="page">
+
+  <!-- 模块 1:黄色 Header（与 demo 首页一致：Logo + 圆角搜索，无发布按钮） -->
+  <view class="header">
+    <view class="header-logo">包子一哥</view>
+    <t-search
+      class="hdr-search"
+      shape="round"
+      placeholder="搜索 转让/求店/城市…"
+      clearable="{{true}}"
+      bind:change="onSearch"
+    />
+  </view>
+
+  <view class="content">
+
+    <!-- 模块 2:金刚位（店铺类型 5 格，点选即按该店铺类型筛选；再点一次取消） -->
+    <t-grid class="kk" column="{{5}}" hover>
+      <t-grid-item
+        wx:for="{{shopTypes}}" wx:key="id"
+        data-item="{{item}}" bind:click="onShopCat"
+      >
+        <view class="kk-icon {{activeShop === item.id ? 'is-active' : ''}}" style="background: {{item.bg}};">{{item.emoji}}</view>
+        <view class="kk-name">{{item.name}}</view>
+      </t-grid-item>
+    </t-grid>
+
+  </view>
+
+  <!-- 模块 3:筛选条(店铺类型 / 区域 / 价格) · t-sticky 吸顶 -->
+  <t-sticky
+    offset-top="{{stickyTop}}"
+    z-index="{{20000}}"
+    bind:scroll="onStickyScroll"
+  >
+    <t-dropdown-menu
+      id="topDropdownMenu"
+      class="top-dropdown {{tabsSticky ? 'is-sticky' : ''}} {{shopPick && shopPick !== '__all__' ? 'has-shop' : ''}} {{regionPick ? 'has-region' : ''}} {{price ? 'has-price' : ''}}"
+      show-overlay="{{false}}"
+    >
+      <!-- 店铺类型:下拉面板内嵌单选列表 -->
+      <t-dropdown-item id="shopDropdownItem" label="{{shopLabel}}" bind:open="onShopDropdownOpen">
+        <view class="drop-sub">
+          <view class="drop-sub-title">选择店铺类型</view>
+          <view class="drop-sub-list">
+            <view
+              wx:for="{{shopOptions}}" wx:key="value"
+              data-value="{{item.value}}"
+              class="drop-sub-row {{shopDraftPick === item.value ? 'is-on' : ''}}"
+              bind:tap="onShopRowTap"
+            >
+              <text class="drop-sub-row-label">{{item.label}}</text>
+              <text wx:if="{{shopDraftPick === item.value}}" class="drop-sub-row-tick">✓</text>
+            </view>
+          </view>
+        </view>
+      </t-dropdown-item>
+
+      <!-- 区域:下拉内常用城市 + t-cascader -->
+      <t-dropdown-item id="regionDropdownItem" label="{{regionPick || '区域'}}" bind:open="onRegionDropdownOpen">
+        <view class="drop-region">
+          <view class="drop-region-title">常用城市</view>
+          <view class="drop-region-tags">
+            <view
+              wx:for="{{hotCities}}" wx:key="code"
+              class="drop-city-wrap {{regionCode === item.code ? 'is-on' : ''}}"
+              data-name="{{item.name}}"
+              data-code="{{item.code}}"
+              bind:tap="onHotCity"
+            >
+              <t-tag
+                size="extra-large" variant="light"
+                class="drop-city-tag {{regionCode === item.code ? 'is-on' : ''}}"
+              >{{item.name}}</t-tag>
+            </view>
+          </view>
+          <view class="drop-region-actions">
+            <t-button
+              class="drop-region-more"
+              theme="primary"
+              bind:tap="openCascader"
+            >查看完整省市区</t-button>
+            <t-button
+              wx:if="{{regionPick}}"
+              class="drop-region-reset"
+              theme="default" variant="text"
+              bind:tap="onRegionReset"
+            >重置</t-button>
+          </view>
+        </view>
+      </t-dropdown-item>
+
+      <!-- 价格:下拉内输入最低"转让费/预算" -->
+      <t-dropdown-item id="priceDropdownItem" label="{{priceLabel}}">
+        <view class="drop-salary">
+          <view class="drop-salary-row">
+            <t-input
+              key="price-{{priceInputKey}}"
+              class="drop-salary-input"
+              type="number" placeholder="最低价格"
+              maxlength="7"
+              value="{{price}}"
+              bind:change="onPrice"
+              bind:blur="onPriceBlur"
+            />
+            <text class="drop-salary-unit">元</text>
+          </view>
+          <view class="drop-salary-tip">填最低转让费/预算，限数字，最高 500 万</view>
+          <view class="drop-salary-actions">
+            <t-button class="drop-salary-btn-reset" theme="default" variant="outline" bind:tap="onPriceClear">清空</t-button>
+            <t-button class="drop-salary-btn-confirm" theme="primary" bind:tap="onPriceConfirm">确定</t-button>
+          </view>
+        </view>
+      </t-dropdown-item>
+    </t-dropdown-menu>
+  </t-sticky>
+
+  <!-- 模块 4:信息类别（转让/求店）双选卡片 · t-checkbox-group -->
+  <block wx:if="{{filterBarVisible}}">
+    <view class="type-check">
+      <t-checkbox-group
+        class="type-check-list"
+        value="{{selectedTypes}}"
+        bind:change="onTypeChange"
+      >
+        <view
+          wx:for="{{typeCards}}" wx:key="value"
+          class="type-check-item {{tc.contain(selectedTypes, item.value) ? 'is-on' : ''}}"
+        >
+          <t-icon
+            wx:if="{{tc.contain(selectedTypes, item.value)}}"
+            name="check"
+            t-class="type-check-check"
+            ariaHidden="{{true}}"
+          />
+          <t-checkbox value="{{item.value}}" icon="none" borderless>
+            <view class="type-check-label">
+              <view class="type-check-name">{{item.label}}</view>
+              <view class="type-check-desc">{{item.desc}}</view>
+            </view>
+          </t-checkbox>
+        </view>
+      </t-checkbox-group>
+    </view>
+  </block>
+
+  <!-- 模块 5:转让求店信息双列瀑布流 -->
+  <view class="feed">
+    <t-skeleton
+      wx:if="{{loading}}"
+      class="feed-skeleton"
+      theme="paragraph"
+      animation="flashed"
+      row-col="{{skeletonRows}}"
+    />
+    <view class="goods-empty" wx:elif="{{!goodsLeft.length && !goodsRight.length}}">
+      <t-empty icon="search" description="{{emptyText}}" />
+    </view>
+
+    <view class="goods" wx:else>
+      <view class="goods-col">
+        <view class="goods-card"
+              wx:for="{{goodsLeft}}" wx:key="id"
+              data-id="{{item.id}}" bindtap="onTap">
+          <view class="goods-img" wx:if="{{item.image}}" style="background: {{item.light}};">
+            <image class="goods-pic" src="{{item.image}}" mode="widthFix" />
+            <view class="goods-type" style="background: {{item.color}};">{{item.typeName}}</view>
+          </view>
+          <view class="goods-title">{{item.title}}</view>
+          <view class="goods-tags" wx:if="{{item.tags.length}}">
+            <t-tag wx:for="{{item.tags}}" wx:for-item="tg" wx:key="*this" size="small" variant="light" t-class="goods-tag">{{tg}}</t-tag>
+          </view>
+          <view class="goods-user" wx:if="{{item.username}}">
+            <t-icon name="user" size="24rpx" color="#FFE60A" />
+            <text>{{item.username}}</text>
+            <text class="goods-credit" wx:if="{{item.creditMeta}}" style="color: {{item.creditMeta.color}}; background: {{item.creditMeta.bg}};">{{item.creditMeta.label}}</text>
+          </view>
+          <view class="goods-meta">
+            <text wx:if="{{!item.image}}" class="goods-meta-type" style="background: {{item.color}};">{{item.typeName}}</text>
+            <text>{{item.meta}}</text>
+          </view>
+          <view class="goods-price-row">
+            <view class="goods-price">{{item.priceText}}</view>
+            <view class="goods-arrow">查看 ›</view>
+          </view>
+        </view>
+      </view>
+      <view class="goods-col">
+        <view class="goods-card"
+              wx:for="{{goodsRight}}" wx:key="id"
+              data-id="{{item.id}}" bindtap="onTap">
+          <view class="goods-img" wx:if="{{item.image}}" style="background: {{item.light}};">
+            <image class="goods-pic" src="{{item.image}}" mode="widthFix" />
+            <view class="goods-type" style="background: {{item.color}};">{{item.typeName}}</view>
+          </view>
+          <view class="goods-title">{{item.title}}</view>
+          <view class="goods-tags" wx:if="{{item.tags.length}}">
+            <t-tag wx:for="{{item.tags}}" wx:for-item="tg" wx:key="*this" size="small" variant="light" t-class="goods-tag">{{tg}}</t-tag>
+          </view>
+          <view class="goods-user" wx:if="{{item.username}}">
+            <t-icon name="user" size="24rpx" color="#FFE60A" />
+            <text>{{item.username}}</text>
+            <text class="goods-credit" wx:if="{{item.creditMeta}}" style="color: {{item.creditMeta.color}}; background: {{item.creditMeta.bg}};">{{item.creditMeta.label}}</text>
+          </view>
+          <view class="goods-meta">
+            <text wx:if="{{!item.image}}" class="goods-meta-type" style="background: {{item.color}};">{{item.typeName}}</text>
+            <text>{{item.meta}}</text>
+          </view>
+          <view class="goods-price-row">
+            <view class="goods-price">{{item.priceText}}</view>
+            <view class="goods-arrow">查看 ›</view>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <view class="feed-footer">
+      <t-loading wx:if="{{loadingMore}}" theme="circular" size="32rpx" text="加载更多…" layout="vertical" />
+      <text wx:elif="{{firstLoaded && !hasMore && !loading}}" class="feed-end-text">— 没有更多了 —</text>
+    </view>
+  </view>
+
+  <!-- ========== 区域选择弹层(t-cascader) ========== -->
+  <t-cascader
+    visible="{{regionVisible}}"
+    title="选择城市"
+    options="{{regionOptions}}"
+    theme="tab"
+    filterable="{{true}}"
+    filter-placeholder="搜索城市/区域"
+    bind:change="onRegionChange"
+    bind:pick="onRegionPick"
+    bind:close="onRegionClose"
+  />
+
+  <!-- 底部导航 -->
+  <comp-tabbar current="home" />
+
+</view>

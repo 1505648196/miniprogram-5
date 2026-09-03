@@ -4,12 +4,15 @@
 
   <!-- 模块 1:黄色 Header:Logo | t-search | t-button 发布 -->
   <view class="header">
-    <view class="header-logo">包子一哥</view>
+    <!-- <view class="header-logo">包子一哥</view> -->
     <t-search
       class="hdr-search"
       shape="round"
-      placeholder="招聘，求职，转让，设备"
+      placeholder="搜索 招聘，求职，转让，设备"
       clearable="{{true}}"
+      value="{{searchKw}}"
+      bind:submit="onHomeSearch"
+      bind:change="onHomeSearchChange"
     />
     <!-- <t-button
       class="hdr-publish"
@@ -42,7 +45,7 @@
     </t-grid>
 
     <!-- 模块 4:Banner 双卡(AI顾问 / 免费发布) -->
-    <view class="banners">
+    <!-- <view class="banners">
       <view class="banner banner-ai" data-id="ai" bindtap="onEntry">
         <view class="banner-emoji">🤖</view>
         <view class="banner-info">
@@ -57,7 +60,7 @@
           <view style="font-size: 18rpx;" class="banner-sub">转让 / 招聘 / 求职 / 设备</view>
         </view>
       </view>
-    </view>
+    </view> -->
 
   </view>
 
@@ -69,6 +72,7 @@
     sticky-props="{{stickyProps}}"
     show-bottom-line="{{true}}"
     split="{{false}}"
+    swipeable="{{true}}"
     bind:change="onTopTab"
     bind:scroll="onTabsScroll"
     t-class-content="tabs-hide-content"
@@ -78,7 +82,8 @@
 
   <!-- 模块 6:帖子双列信息流 -->
   <!-- loading 时展示双列卡片骨架屏(t-skeleton)；否则按 空态/列表 渲染 -->
-  <view class="feed">
+  <!-- bindtouchstart/touchend：帖子流上左右滑切换顶部 Tab（不影响上下滚动） -->
+  <view class="feed" bindtouchstart="onFeedTouchStart" bindtouchend="onFeedTouchEnd">
     <t-skeleton
       wx:if="{{loading}}"
       class="feed-skeleton"
@@ -170,7 +175,9 @@
     placeholder="{{true}}"
     split="{{false}}"
   >
-    <t-tab-bar-item wx:for="{{tabbar}}" wx:key="id" value="{{item.id}}" icon="{{item.icon}}">{{item.label}}</t-tab-bar-item>
+    <t-tab-bar-item wx:for="{{tabbar}}" wx:key="id" value="{{item.id}}"
+      icon="{{item.id === 'me' ? (isVip ? 'user-vip-filled' : 'user') : item.icon}}"
+      badge-props="{{ item.id === 'message' ? { count: unread } : null }}">{{item.label}}</t-tab-bar-item>
   </t-tab-bar>
 
   <!-- 模块 8:发布类型选择弹层(TDesign t-popup + t-grid) -->
@@ -193,24 +200,4 @@
     </view>
   </t-popup>
 
-  <!-- 模块 9:手机号授权弹层(发布前引导授权；button open-type=getPhoneNumber) -->
-  <t-popup
-    visible="{{phoneAuthVisible}}"
-    placement="bottom"
-    bind:visible-change="onPhoneAuthClose"
-  >
-    <view class="auth-sheet">
-      <view class="auth-emoji">📱</view>
-      <view class="auth-title">授权手机号</view>
-      <view class="auth-desc">发布信息需绑定手机号，方便买家/商家联系你。你的手机号仅用于平台撮合，不会对外泄露。</view>
-      <!-- 微信原生授权按钮：open-type 必须用原生 button，才能拿到 code -->
-      <button
-        class="auth-btn"
-        open-type="getPhoneNumber"
-        bindgetphonenumber="onGetPhoneNumber"
-        loading="{{authing}}"
-      >授权并继续</button>
-      <view class="auth-cancel" bindtap="onPhoneAuthClose" data-close="1">暂不授权</view>
-    </view>
-  </t-popup>
 </view>

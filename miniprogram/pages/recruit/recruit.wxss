@@ -8,27 +8,41 @@
 
 /* ============ 黄色 Header ============ */
 .header {
-  height: 88rpx;
+  height: 96rpx;
   background: #FFE60A;
   display: flex;
   align-items: center;
-  padding: 0 16rpx 0 24rpx;
-  gap: 16rpx;
+  padding: 0 32rpx;
+  gap: 20rpx;
 }
 
 .header-logo {
-  font-size: 34rpx;
-  font-weight: 700;
+  font-size: 36rpx;
+  font-weight: 800;
   color: #1A1A1A;
-  letter-spacing: 1rpx;
+  letter-spacing: 2rpx;
   flex-shrink: 0;
-  width: 128rpx;
+  width: 144rpx;
   white-space: nowrap;
 }
 
 .hdr-search {
   flex: 1;
   min-width: 0;
+  /* 黄色胶囊搜索框：黄底 + 黑字黑图标 + 黑色边框（从 Header 黄色中区分出来） */
+  --td-search-bg-color: #FFE60A;
+  --td-search-height: 72rpx;
+  --td-search-padding: 12rpx 28rpx;
+  --td-search-font: 28rpx;
+  --td-search-icon-size: 36rpx;
+  --td-search-placeholder-color: #1A1A1A;
+  --td-search-text-color: #1A1A1A;
+  --td-search-icon-color: #1A1A1A;
+  --td-search-clear-icon-color: #1A1A1A;
+  --td-search-action-color: #1A1A1A;
+  border: 3rpx solid #1A1A1A;
+  border-radius: 36rpx;
+  overflow: hidden;
 }
 
 .hdr-publish {

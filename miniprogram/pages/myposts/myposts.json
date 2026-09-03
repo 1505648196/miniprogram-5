@@ -1,0 +1,13 @@
+{
+  "navigationBarTitleText": "我的发布",
+  "usingComponents": {
+    "t-button": "/miniprogram_npm/tdesign-miniprogram/button/button",
+    "t-tag": "/miniprogram_npm/tdesign-miniprogram/tag/tag",
+    "t-icon": "/miniprogram_npm/tdesign-miniprogram/icon/icon",
+    "t-dialog": "/miniprogram_npm/tdesign-miniprogram/dialog/dialog",
+    "t-empty": "/miniprogram_npm/tdesign-miniprogram/empty/empty",
+    "t-loading": "/miniprogram_npm/tdesign-miniprogram/loading/loading",
+    "t-skeleton": "/miniprogram_npm/tdesign-miniprogram/skeleton/skeleton",
+    "t-toast": "/miniprogram_npm/tdesign-miniprogram/toast/toast"
+  }
+}

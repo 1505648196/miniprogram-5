@@ -1,0 +1,137 @@
+<!-- pages/carpool/carpool.wxml -->
+<!-- 包子行业信息平台 · 顺风车频道页（极简）—— TDesign(tdesign-miniprogram) -->
+<wxs src="./contain.wxs" module="tc" />
+<view class="page">
+
+  <!-- 模块 1:黄色 Header（与 demo 首页一致：Logo + 圆角搜索，无发布按钮） -->
+  <view class="header">
+    <view class="header-logo">包子一哥</view>
+    <t-search
+      class="hdr-search"
+      shape="round"
+      placeholder="搜 出发地/目的地/城市…"
+      clearable="{{true}}"
+      bind:change="onSearch"
+    />
+  </view>
+
+  <!-- 模块 2:信息类别（车找人/人找车）双选卡片 -->
+  <view class="type-check">
+    <t-checkbox-group
+      class="type-check-list"
+      value="{{selectedTypes}}"
+      bind:change="onTypeChange"
+    >
+      <view
+        wx:for="{{typeCards}}" wx:key="value"
+        class="type-check-item {{tc.contain(selectedTypes, item.value) ? 'is-on' : ''}}"
+      >
+        <t-icon
+          wx:if="{{tc.contain(selectedTypes, item.value)}}"
+          name="check"
+          t-class="type-check-check"
+          ariaHidden="{{true}}"
+        />
+        <t-checkbox value="{{item.value}}" icon="none" borderless>
+          <view class="type-check-label">
+            <view class="type-check-name">{{item.label}}</view>
+            <view class="type-check-desc">{{item.desc}}</view>
+          </view>
+        </t-checkbox>
+      </view>
+    </t-checkbox-group>
+  </view>
+
+  <!-- 模块 3:顺风车信息双列瀑布流 -->
+  <view class="feed">
+    <t-skeleton
+      wx:if="{{loading}}"
+      class="feed-skeleton"
+      theme="paragraph"
+      animation="flashed"
+      row-col="{{skeletonRows}}"
+    />
+    <view class="goods-empty" wx:elif="{{!goodsLeft.length && !goodsRight.length}}">
+      <t-empty icon="search" description="{{emptyText}}" />
+    </view>
+
+    <view class="goods" wx:else>
+      <view class="goods-col">
+        <view class="goods-card"
+              wx:for="{{goodsLeft}}" wx:key="id"
+              data-id="{{item.id}}" bindtap="onTap">
+          <!-- 顶部：类型徽章 + 时间 -->
+          <view class="cp-head">
+            <text class="cp-type" style="background:{{item.color}};">{{item.typeName}}</text>
+            <text class="cp-ago">{{item.meta}}</text>
+          </view>
+          <!-- 路线：出发地 → 目的地 -->
+          <view class="cp-route">
+            <text class="cp-from">{{item.from}}</text>
+            <text class="cp-arrow">→</text>
+            <text class="cp-to">{{item.to}}</text>
+          </view>
+          <!-- 出发 / 最晚出发 -->
+          <view class="cp-times" wx:if="{{item.timeText || item.deadlineText}}">
+            <text class="cp-time" wx:if="{{item.timeText}}">{{item.timeText}}</text>
+            <text class="cp-time" wx:if="{{item.deadlineText}}">{{item.deadlineText}}</text>
+          </view>
+          <!-- 可乘人数 + 图片(可选) -->
+          <view class="cp-seats-row" wx:if="{{item.seatsText || item.image}}">
+            <text class="cp-seats" wx:if="{{item.seatsText}}" style="color:{{item.color}};">{{item.seatsText}}</text>
+            <image class="cp-img" wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" />
+          </view>
+          <!-- 描述标题 -->
+          <view class="cp-title">{{item.title}}</view>
+          <!-- 发布用户 + 信用 -->
+          <view class="goods-user" wx:if="{{item.username}}">
+            <t-icon name="user" size="24rpx" color="#FFE60A" />
+            <text>{{item.username}}</text>
+            <text class="goods-credit" wx:if="{{item.creditMeta}}" style="color: {{item.creditMeta.color}}; background: {{item.creditMeta.bg}};">{{item.creditMeta.label}}</text>
+          </view>
+          <view class="cp-arrow-link">查看 ›</view>
+        </view>
+      </view>
+
+      <view class="goods-col">
+        <view class="goods-card"
+              wx:for="{{goodsRight}}" wx:key="id"
+              data-id="{{item.id}}" bindtap="onTap">
+          <view class="cp-head">
+            <text class="cp-type" style="background:{{item.color}};">{{item.typeName}}</text>
+            <text class="cp-ago">{{item.meta}}</text>
+          </view>
+          <view class="cp-route">
+            <text class="cp-from">{{item.from}}</text>
+            <text class="cp-arrow">→</text>
+            <text class="cp-to">{{item.to}}</text>
+          </view>
+          <view class="cp-times" wx:if="{{item.timeText || item.deadlineText}}">
+            <text class="cp-time" wx:if="{{item.timeText}}">{{item.timeText}}</text>
+            <text class="cp-time" wx:if="{{item.deadlineText}}">{{item.deadlineText}}</text>
+          </view>
+          <view class="cp-seats-row" wx:if="{{item.seatsText || item.image}}">
+            <text class="cp-seats" wx:if="{{item.seatsText}}" style="color:{{item.color}};">{{item.seatsText}}</text>
+            <image class="cp-img" wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" />
+          </view>
+          <view class="cp-title">{{item.title}}</view>
+          <view class="goods-user" wx:if="{{item.username}}">
+            <t-icon name="user" size="24rpx" color="#FFE60A" />
+            <text>{{item.username}}</text>
+            <text class="goods-credit" wx:if="{{item.creditMeta}}" style="color: {{item.creditMeta.color}}; background: {{item.creditMeta.bg}};">{{item.creditMeta.label}}</text>
+          </view>
+          <view class="cp-arrow-link">查看 ›</view>
+        </view>
+      </view>
+    </view>
+
+    <view class="feed-footer">
+      <t-loading wx:if="{{loadingMore}}" theme="circular" size="32rpx" text="加载更多…" layout="vertical" />
+      <text wx:elif="{{firstLoaded && !hasMore && !loading}}" class="feed-end-text">— 没有更多了 —</text>
+    </view>
+  </view>
+
+  <!-- 底部导航 -->
+  <comp-tabbar current="home" />
+
+</view>

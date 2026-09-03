@@ -1,0 +1,198 @@
+/* pages/nearby/nearby.wxss */
+/* 包子行业信息平台 · 附近页 —— TDesign CSS 变量覆盖 */
+
+.page {
+  min-height: 100vh;
+  padding-bottom: 64rpx;
+}
+
+/* ============ 顶部定位条 ============ */
+.loc-bar {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  padding: 16rpx 24rpx;
+  background: #FFF7E6;
+  font-size: 24rpx;
+}
+.loc-city {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #FF7A45;
+}
+.loc-tip {
+  color: #666666;
+  flex: 1;
+}
+.loc-btn {
+  flex-shrink: 0;
+  color: #1A1A1A;
+  background: #FFE60A;
+  padding: 6rpx 20rpx;
+  border-radius: 999rpx;
+}
+/* 吸顶态：加深背景 + 底部阴影，避免下方内容透出/层次不清 */
+.loc-bar.is-sticky {
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.06);
+  background: #FFF1DB;
+}
+
+/* ============ 同城帖子流 ============ */
+.feed {
+  background: #FFFFFF;
+  padding: 0 16rpx;
+}
+.goods {
+  display: flex;
+  gap: 8rpx;
+  padding: 16rpx 0;
+}
+.goods-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+  min-width: 0;
+}
+.goods-card {
+  background: #FFFFFF;
+  border-radius: 20rpx;
+  overflow: hidden;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.06);
+}
+.goods-meta-type {
+  flex-shrink: 0;
+  color: #FFFFFF;
+  font-size: 20rpx;
+  line-height: 1;
+  padding: 4rpx 12rpx;
+  border-radius: 999rpx;
+  max-width: 40%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.goods-img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+.goods-pic {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.goods-type {
+  position: absolute;
+  top: 12rpx;
+  left: 12rpx;
+  color: #FFFFFF;
+  font-size: 20rpx;
+  padding: 4rpx 14rpx;
+  border-radius: 999rpx;
+  line-height: 1.4;
+  max-width: 70%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.goods-title {
+  font-size: 26rpx;
+  color: #1A1A1A;
+  line-height: 1.4;
+  padding: 16rpx 16rpx 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.goods-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8rpx;
+  padding: 12rpx 16rpx 0;
+}
+.goods-meta {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  font-size: 22rpx;
+  color: #999999;
+  padding: 8rpx 16rpx 0;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.goods-user {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  font-size: 22rpx;
+  color: #666666;
+  padding: 8rpx 16rpx 0;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.goods-credit {
+  flex-shrink: 0;
+  font-size: 20rpx;
+  line-height: 1;
+  padding: 4rpx 10rpx;
+  border-radius: 999rpx;
+}
+.goods-price-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8rpx 16rpx 16rpx;
+  gap: 8rpx;
+}
+.goods-price {
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #FF7A45;
+  line-height: 1.2;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.goods-arrow {
+  font-size: 20rpx;
+  color: #999999;
+  flex-shrink: 0;
+}
+.goods-empty {
+  padding: 80rpx 0;
+  display: flex;
+  justify-content: center;
+}
+.feed-skeleton {
+  padding: 32rpx 0 16rpx;
+}
+.feed-footer {
+  padding: 16rpx 0 40rpx;
+  display: flex;
+  justify-content: center;
+}
+.feed-end-text {
+  font-size: 22rpx;
+  color: #cccccc;
+}
+
+/* ============ 定位失败面板 ============ */
+.fail-panel {
+  padding: 80rpx 40rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24rpx;
+}
+.fail-retry {
+  color: #1A1A1A;
+  background: #FFE60A;
+  padding: 12rpx 48rpx;
+  border-radius: 999rpx;
+  font-size: 28rpx;
+}

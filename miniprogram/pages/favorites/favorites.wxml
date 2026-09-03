@@ -1,0 +1,61 @@
+<!-- pages/favorites/favorites.wxml -->
+<!-- 我的收藏 -->
+<view class="page">
+
+  <!-- 加载骨架 -->
+  <t-skeleton wx:if="{{loading}}" class="list-skeleton" theme="paragraph"
+    animation="flashed" row-col="{{skeletonRows}}" />
+
+  <!-- 空态 -->
+  <view class="empty-wrap" wx:elif="{{firstLoaded && !list.length}}">
+    <t-empty icon="heart" description="还没有收藏的信息" />
+  </view>
+
+  <!-- 双列卡 -->
+  <view class="goods" wx:else>
+    <view class="goods-col">
+      <view class="goods-card" wx:for="{{left}}" wx:key="id">
+        <view class="card-body" data-id="{{item.id}}" bindtap="onTap">
+          <view class="goods-img" wx:if="{{item.image}}" style="background: {{item.light}};">
+            <image class="goods-pic" src="{{item.image}}" mode="widthFix" />
+            <view class="goods-type" style="background: {{item.color}};">{{item.typeName}}</view>
+          </view>
+          <view class="goods-title">{{item.title}}</view>
+          <view class="goods-meta">
+            <text wx:if="{{!item.image}}" class="goods-meta-type" style="background: {{item.color}};">{{item.typeName}}</text>
+            <text>{{item.meta}}</text>
+          </view>
+          <view class="goods-price">{{item.priceText}}</view>
+        </view>
+        <view class="fav-cancel" data-id="{{item.id}}" catchtap="onCancel">
+          <t-icon name="heart" size="22rpx" color="#FF7A45" /><text>取消收藏</text>
+        </view>
+      </view>
+    </view>
+    <view class="goods-col">
+      <view class="goods-card" wx:for="{{right}}" wx:key="id">
+        <view class="card-body" data-id="{{item.id}}" bindtap="onTap">
+          <view class="goods-img" wx:if="{{item.image}}" style="background: {{item.light}};">
+            <image class="goods-pic" src="{{item.image}}" mode="widthFix" />
+            <view class="goods-type" style="background: {{item.color}};">{{item.typeName}}</view>
+          </view>
+          <view class="goods-title">{{item.title}}</view>
+          <view class="goods-meta">
+            <text wx:if="{{!item.image}}" class="goods-meta-type" style="background: {{item.color}};">{{item.typeName}}</text>
+            <text>{{item.meta}}</text>
+          </view>
+          <view class="goods-price">{{item.priceText}}</view>
+        </view>
+        <view class="fav-cancel" data-id="{{item.id}}" catchtap="onCancel">
+          <t-icon name="heart" size="22rpx" color="#FF7A45" /><text>取消收藏</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 触底 -->
+  <view class="fav-footer">
+    <t-loading wx:if="{{loadingMore}}" theme="circular" size="32rpx" text="加载更多…" layout="vertical" />
+    <text wx:elif="{{firstLoaded && !hasMore && list.length}}" class="fav-end">— 没有更多了 —</text>
+  </view>
+</view>

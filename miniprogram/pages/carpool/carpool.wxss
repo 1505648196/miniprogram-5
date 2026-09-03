@@ -1,0 +1,266 @@
+/* pages/carpool/carpool.wxss */
+/* 包子行业信息平台 · 顺风车频道页 —— TDesign CSS 变量覆盖，不改组件源码 */
+
+.page {
+  min-height: 100vh;
+  padding-bottom: 64rpx;
+}
+
+/* ============ 黄色 Header（与 demo 首页一致） ============ */
+.header {
+  height: 96rpx;
+  background: #FFE60A;
+  display: flex;
+  align-items: center;
+  padding: 0 32rpx;
+  gap: 20rpx;
+}
+.header-logo {
+  font-size: 36rpx;
+  font-weight: 800;
+  color: #1A1A1A;
+  letter-spacing: 2rpx;
+  flex-shrink: 0;
+  width: 144rpx;
+  white-space: nowrap;
+}
+.hdr-search {
+  flex: 1;
+  min-width: 0;
+  /* 黄色胶囊搜索框：黄底 + 黑字黑图标 + 黑色边框（从 Header 黄色中区分出来） */
+  --td-search-bg-color: #FFE60A;
+  --td-search-height: 72rpx;
+  --td-search-padding: 12rpx 28rpx;
+  --td-search-font: 28rpx;
+  --td-search-icon-size: 36rpx;
+  --td-search-placeholder-color: #1A1A1A;
+  --td-search-text-color: #1A1A1A;
+  --td-search-icon-color: #1A1A1A;
+  --td-search-clear-icon-color: #1A1A1A;
+  --td-search-action-color: #1A1A1A;
+  border: 3rpx solid #1A1A1A;
+  border-radius: 36rpx;
+  overflow: hidden;
+}
+.hdr-publish {
+  flex-shrink: 0;
+  --td-button-bg-color: #1A1A1A;
+  --td-button-border-color: #1A1A1A;
+  --td-button-font: 24rpx;
+}
+
+/* ===== 信息类别：车找人/人找车 横向卡片多选(t-checkbox-group) ===== */
+.type-check {
+  display: flex;
+  align-items: center;
+  padding: 14rpx 24rpx 6rpx;
+  margin-top: 12rpx;
+  background: #fff;
+  --td-checkbox-bg-color: transparent;
+  --td-checkbox-vertical-padding: 8rpx;
+}
+.type-check-list {
+  flex: 1;
+  display: flex;
+  min-width: 0;
+}
+.type-check-item {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  margin-right: 16rpx;
+  border: 2rpx solid #ECECEC;
+  border-radius: 16rpx;
+  background: #FAFAFA;
+  box-sizing: border-box;
+  transition: all 0.2s;
+  overflow: hidden;
+  text-align: center;
+}
+.type-check-item:last-child {
+  margin-right: 0;
+}
+.type-check-item.is-on {
+  border-color: #FF7A45;
+  background: #FFF1E8;
+}
+.type-check-check {
+  position: absolute;
+  top: 6rpx;
+  right: 10rpx;
+  color: #FF7A45;
+  font-size: 28rpx;
+  z-index: 1;
+  pointer-events: none;
+}
+.type-check-label {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+.type-check-name {
+  display: block;
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #1A1A1A;
+  line-height: 48rpx;
+  min-height: 48rpx;
+  text-align: center;
+}
+.type-check-item.is-on .type-check-name {
+  color: #FF7A45;
+}
+.type-check-desc {
+  display: block;
+  font-size: 22rpx;
+  color: #999999;
+  line-height: 44rpx;
+  min-height: 44rpx;
+  margin-top: 4rpx;
+  text-align: center;
+}
+
+/* ============ 顺风车卡片 ============ */
+.feed {
+  background: #FFFFFF;
+  padding: 0 16rpx;
+}
+.goods {
+  display: flex;
+  gap: 8rpx;
+  padding: 6rpx 0 16rpx;
+}
+.goods-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+  min-width: 0;
+}
+.goods-card {
+  background: #FFFFFF;
+  border-radius: 20rpx;
+  overflow: hidden;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.06);
+  padding: 16rpx;
+  display: flex;
+  flex-direction: column;
+}
+.cp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8rpx;
+}
+.cp-type {
+  flex-shrink: 0;
+  color: #FFFFFF;
+  font-size: 20rpx;
+  padding: 4rpx 14rpx;
+  border-radius: 999rpx;
+  line-height: 1.4;
+}
+.cp-ago {
+  font-size: 20rpx;
+  color: #999999;
+  flex-shrink: 0;
+}
+.cp-route {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  margin-top: 14rpx;
+  flex-wrap: wrap;
+}
+.cp-from,
+.cp-to {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #1A1A1A;
+}
+.cp-arrow {
+  color: #FF7A45;
+  font-size: 26rpx;
+  flex-shrink: 0;
+}
+.cp-times {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+  margin-top: 10rpx;
+}
+.cp-time {
+  font-size: 22rpx;
+  color: #666666;
+}
+.cp-seats-row {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  margin-top: 10rpx;
+}
+.cp-seats {
+  flex-shrink: 0;
+  font-size: 22rpx;
+  font-weight: 700;
+  background: rgba(0, 0, 0, 0.04);
+  padding: 2rpx 12rpx;
+  border-radius: 999rpx;
+}
+.cp-img {
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 12rpx;
+  flex-shrink: 0;
+}
+.cp-title {
+  font-size: 24rpx;
+  color: #666666;
+  line-height: 1.5;
+  margin-top: 10rpx;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.goods-user {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  font-size: 22rpx;
+  color: #666666;
+  padding-top: 10rpx;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.goods-credit {
+  flex-shrink: 0;
+  font-size: 20rpx;
+  line-height: 1;
+  padding: 4rpx 10rpx;
+  border-radius: 999rpx;
+}
+.cp-arrow-link {
+  margin-top: 10rpx;
+  text-align: right;
+  font-size: 20rpx;
+  color: #999999;
+}
+
+.goods-empty {
+  padding: 80rpx 0;
+  display: flex;
+  justify-content: center;
+}
+.feed-skeleton {
+  padding: 32rpx 0 16rpx;
+}
+.feed-footer {
+  padding: 16rpx 0 40rpx;
+  display: flex;
+  justify-content: center;
+}
+.feed-end-text {
+  font-size: 22rpx;
+  color: #cccccc;
+}

@@ -49,8 +49,24 @@ Page({
     d: null,
     // 是否本人帖子(暂无"编辑/删除"入口，保留字段备用)
     isMine: false,
+    // 当前帖子是否已被我收藏
+    isFav: false,
+    faving: false,
     contactText: '',   // 供复制/拨打的可复制联系方式文本
     canContact: false,
+    // 详情加载骨架屏：模拟 徽章+标题 → 封面图 → 关键信息行 → 描述 的垂直布局（纯 TDesign row-col）
+    skeletonRows: [
+      [{ width: '24%', height: '40rpx', type: 'rect' }],
+      [{ width: '92%', height: '48rpx', type: 'text' }],
+      [{ width: '100%', height: '300rpx', type: 'rect' }],
+      [{ width: '100%', height: '40rpx', type: 'text' }],
+      [{ width: '100%', height: '40rpx', type: 'text' }],
+      [{ width: '100%', height: '40rpx', type: 'text' }],
+      [{ width: '100%', height: '40rpx', type: 'text' }],
+      [{ width: '100%', height: '60rpx', type: 'text' }],
+      [{ width: '94%', height: '28rpx', type: 'text' }],
+      [{ width: '88%', height: '28rpx', type: 'text' }],
+    ],
   },
 
   onLoad(options) {
@@ -105,13 +121,25 @@ Page({
       });
   },
 
-  // 把原始帖子对象换算成详情展示对象(招聘/求职语义对齐列表 decorate)
+  // 把原始帖子对象换算成详情展示对象
+  // 兼容七种 data_type：招工 recruit / 求职 jobseek / 转让 transfer / 求店 want_shop / 设备出售 equip_sell / 设备求购 equip_buy / 顺风车 carpool_car|carpool_person
   decorateItem(p) {
     const isJobseek = p.data_type === 'jobseek';
+    const isTransfer = p.data_type === 'transfer';
+    const isWantShop = p.data_type === 'want_shop';
+    const isShop = isTransfer || isWantShop; // 转让/求店(共用 price 主价格)
+    const isEquipSell = p.data_type === 'equip_sell';
+    const isEquipBuy = p.data_type === 'equip_buy';
+    const isEquip = isEquipSell || isEquipBuy; // 二手设备(共用 price/cond)
+    const isCarpoolCar = p.data_type === 'carpool_car';
+    const isCarpoolPerson = p.data_type === 'carpool_person';
+    const isCarpool = isCarpoolCar || isCarpoolPerson; // 顺风车(无价格)
+    const isOther = p.data_type === 'other'; // 其他(通用信息流，无薪资/专项)
     const rawRaw = String(p.raw_text || '').trim();      // 未脱敏原文（内部用于识别电话）
     const contactRaw = p.contact ? String(p.contact).trim() : ''; // 未脱敏联系文本
     const addressRaw = p.address ? String(p.address).trim() : ''; // 未脱敏地址
-    const noteRaw = isJobseek ? String(p.salary_note || '').trim() : ''; // 未脱敏备注
+    // 备注来源随类型：求职用 salary_note；其它无独立备注
+    const noteRaw = isJobseek ? String(p.salary_note || '').trim() : '';
     const maskedField = p.phone_masked ? String(p.phone_masked).trim() : ''; // 已是脱敏号(138****5678)
 
     // —— 电话脱敏 ——
@@ -131,39 +159,135 @@ Page({
     const noteMasked = privacy.maskText(noteRaw);
 
     const regionText = [p.province, p.city, p.district].filter(Boolean).join('') || '未知地区';
-    const typeName = isJobseek ? '求职' : '招工';
-    const typeColor = isJobseek ? '#9254DE' : '#597EF7';   // 类型主色(文字)
-    const typeBg = isJobseek ? '#F3E8FB' : '#EAF0FF';      // 类型浅色(底色，让标签更醒目)
+    // 类型视觉：招工蓝 / 求职紫 / 转让橙 / 求店青 / 出售橙 / 求购绿 / 车找人蓝 / 人找车绿 / 其他灰（与各频道页一致）
+    const typeMeta = isJobseek
+      ? { name: '求职', color: '#9254DE', bg: '#F3E8FB' }
+      : isTransfer
+        ? { name: '转让', color: '#FF7A45', bg: '#FFF1E8' }
+        : isWantShop
+          ? { name: '求店', color: '#36CFC9', bg: '#E6FFFB' }
+          : isEquipSell
+            ? { name: '设备出售', color: '#FA8C16', bg: '#FFF7E6' }
+            : isEquipBuy
+              ? { name: '设备求购', color: '#73D13D', bg: '#F6FFED' }
+              : isCarpoolCar
+                ? { name: '车找人', color: '#597EF7', bg: '#EAF0FF' }
+                : isCarpoolPerson
+                  ? { name: '人找车', color: '#73D13D', bg: '#F6FFED' }
+                  : isOther
+                    ? { name: '其他', color: '#8C8C8C', bg: '#F0F0F0' }
+                    : { name: '招工', color: '#597EF7', bg: '#EAF0FF' };
+    const typeName = typeMeta.name;
+    const typeColor = typeMeta.color;
+    const typeBg = typeMeta.bg;
 
-    // 角色名
-    const role = p.role || (isJobseek ? '师傅' : '招师傅');
+    // 角色名（岗位/店铺类型；二手设备/顺风车/其他无 role，用空）
+    const role = p.role || (isJobseek ? '师傅' : isShop ? '店铺' : isEquip || isCarpool || isOther ? '' : '招师傅');
 
-    // 薪资
-    let salaryText;
+    // 金额格式化：≥1万 显示"x万/xx.x万"，否则显示数字
+    const fmtWan = (n) => {
+      const num = Number(n) || 0;
+      if (num <= 0) return '';
+      if (num >= 10000) {
+        const w = num / 10000;
+        const rounded = Math.round(w * 10) / 10;
+        return (Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1)) + '万';
+      }
+      return String(num);
+    };
+
+    // 成数(0-10) → 中文
+    const condLabel = (c) => {
+      const n = Number(c) || 0;
+      if (n >= 10) return '全新';
+      if (n >= 9) return '九成新';
+      if (n >= 8) return '八成新';
+      if (n >= 7) return '七成新';
+      if (n >= 6) return '六成新';
+      if (n >= 5) return '五成新';
+      if (n >= 4) return '四成新';
+      if (n >= 3) return '三成新';
+      if (n >= 2) return '二成新';
+      if (n >= 1) return '一成新';
+      return '需维修/较旧';
+    };
+
+    // —— 主价格文本（按类型语义） ——
+    let salaryText = '';       // 招聘给价 / 求职期望
+    let shopPriceText = '';    // 转让费 / 预算
+    let equipPriceText = '';   // 设备售价 / 求购预算
+    let otherPriceText = '';   // 其他(有明示价才显示，否则空)
     if (isJobseek) {
       const exp = Number(p.salary_expect) > 0 ? Number(p.salary_expect) : Number(p.salary) || 0;
       salaryText = exp > 0 ? `${exp} 元/月（期望）` : '面议';
+    } else if (isTransfer) {
+      shopPriceText = Number(p.price) > 0 ? `${fmtWan(p.price)} 元` : '面议';
+    } else if (isWantShop) {
+      shopPriceText = Number(p.price) > 0 ? `${fmtWan(p.price)} 元` : '面议';
+    } else if (isEquip) {
+      equipPriceText = Number(p.price) > 0 ? `${fmtWan(p.price)} 元` : '面议';
+    } else if (isOther) {
+      otherPriceText = Number(p.price) > 0 ? `${fmtWan(p.price)} 元` : '';
     } else {
       salaryText = Number(p.salary) > 0 ? `${Number(p.salary)} 元/月` : '面议';
     }
+    // 二手设备几成新（出售=当前成色 / 求购=期望成色）
+    const equipCondText = isEquip && Number(p.cond) > 0 ? condLabel(p.cond) : '';
     const salaryNote = noteMasked;
 
-    // 求职专属详情
+    // 求职专属
     const availability = isJobseek ? (p.availability || '') : '';     // 到岗方式
     const serviceArea = isJobseek ? (p.service_area || '') : '';      // 可服务地区
     const wants = isJobseek && Array.isArray(p.want_terms) ? p.want_terms : []; // 诉求
     // 招聘工作条件 / 通用 tags
-    const conds = !isJobseek && Array.isArray(p.tags) ? p.tags : [];
+    const conds = !isJobseek && !isShop && Array.isArray(p.tags) ? p.tags : [];
+
+    // —— 转让/求店 专属展示 ——
+    // 转让：月租/面积/日营业额/带设备/转让条件
+    const monthlyRentText = isTransfer && Number(p.monthly_rent) > 0 ? `${Number(p.monthly_rent)} 元/月` : '';
+    const areaText = isTransfer && Number(p.area_sqm) > 0 ? `${Number(p.area_sqm)} ㎡` : '';
+    const dailyRevText = isTransfer && Number(p.daily_revenue) > 0 ? `${Number(p.daily_revenue)} 元/天` : '';
+    const equipText = isTransfer && p.has_equipment ? String(p.has_equipment) : ''; // 带设备：全带/部分/不带
+    const shopConds = isTransfer && Array.isArray(p.terms) && p.terms.length ? p.terms : []; // 转让条件
+    // 求店：租金上限/面积下限/求店诉求
+    const rentMaxText = isWantShop && Number(p.rent_max) > 0 ? `${Number(p.rent_max)} 元/月` : '';
+    const areaMinText = isWantShop && Number(p.area_min) > 0 ? `${Number(p.area_min)} ㎡起` : '';
+    const wantShopTerms = isWantShop && Array.isArray(p.want_terms) && p.want_terms.length ? p.want_terms : []; // 求店诉求
+
+    // —— 顺风车 专属展示（出发地/目的地/出发时间/最晚/可乘人数，无价格） ——
+    const carFrom = isCarpool ? String(p.from_place || '').trim() : '';
+    const carTo = isCarpool ? String(p.to_place || '').trim() : '';
+    const carDepart = isCarpool ? String(p.depart_time || '').trim() : '';
+    const carDeadline = isCarpool ? String(p.depart_deadline || '').trim() : '';
+    const carSeats = isCarpool && Number(p.seats) > 0 ? Number(p.seats) : 0;
+    const carSeatsLabel = carSeats > 0 ? (isCarpoolCar ? `剩余 ${carSeats} 座` : `${carSeats} 人`) : '';
 
     // 原文标题(首行)+全文（已脱敏）
     const lines = rawMasked.split('\n').filter((s) => s.trim().length);
-    const title = lines[0] || `${regionText}${isJobseek ? (role + '求职') : '招' + role}`;
+    const titleFallback = isJobseek ? (role + '求职')
+      : isTransfer ? (role + '转让')
+      : isWantShop ? (role + '求租')
+      : isEquip ? typeName
+      : isCarpool ? ((carFrom || '') + '到' + (carTo || '') + (typeName))
+      : isOther ? typeName
+      : ('招' + role);
+    const title = lines[0] || `${regionText}${titleFallback}`;
     const body = lines.slice(1).join('\n').trim() || rawMasked;
 
     return {
       id: p._id,
       data_type: p.data_type || '',
       isJobseek,
+      isTransfer,
+      isWantShop,
+      isShop,
+      isEquipSell,
+      isEquipBuy,
+      isEquip,
+      isCarpoolCar,
+      isCarpoolPerson,
+      isCarpool,
+      isOther,
       typeName,
       typeColor,
       typeBg,
@@ -177,6 +301,31 @@ Page({
       // 标签（详情展示用全量）
       wants,
       conds,
+      // 转让/求店 专属
+      shopPriceText,
+      priceKeyLabel: isTransfer ? '转让费' : '预算',
+      monthlyRentText,
+      areaText,
+      dailyRevText,
+      equipText,
+      shopConds,
+      rentMaxText,
+      areaMinText,
+      wantShopTerms,
+      // 二手设备 专属
+      equipPriceText,
+      equipPriceKeyLabel: isEquipSell ? '售价' : '求购预算',
+      equipCondText,
+      equipCondKeyLabel: isEquipSell ? '新旧程度' : '期望成色',
+      // 顺风车 专属
+      carFrom,
+      carTo,
+      carDepart,
+      carDeadline,
+      carSeats,
+      carSeatsLabel,
+      // 其他 专属
+      otherPriceText,
       // 发布者
       username: p.username || '',
       creditMeta: CREDIT_META[Number(p.credit)] || null,
@@ -208,6 +357,47 @@ Page({
     this.setData({ d, loading: false, loadError: '' });
     // 缓存未命中(走了兜底查库)时，顺手把原始对象写回缓存，供下次重复看零请求
     this.backfillCache(rawItem);
+    // 判断当前帖子是否已被我收藏
+    this.checkFav(rawItem._id);
+  },
+
+  // 查询当前帖子是否已收藏
+  checkFav(id) {
+    if (!id) return;
+    wx.cloud
+      .callFunction({ name: 'favorite', data: { action: 'check', post_ids: [id] }, config: { timeout: 10000 } })
+      .then((res) => {
+        const r = res.result || {};
+        const favMap = r.favMap || {};
+        this.setData({ isFav: !!favMap[id] });
+      })
+      .catch(() => {});
+  },
+
+  // 收藏 / 取消收藏
+  onToggleFav() {
+    if (this.data.faving) return;
+    const id = this._id;
+    if (!id) return;
+    this.setData({ faving: true });
+    wx.cloud
+      .callFunction({ name: 'favorite', data: { action: 'toggle', post_id: id }, config: { timeout: 10000 } })
+      .then((res) => {
+        const r = res.result || {};
+        this.setData({ faving: false });
+        if (r.success) {
+          const isFav = !!r.is_fav;
+          this.setData({ isFav });
+          wx.showToast({ title: isFav ? '已收藏' : '已取消收藏', icon: 'none' });
+        } else {
+          wx.showToast({ title: r.message || '操作失败', icon: 'none' });
+        }
+      })
+      .catch((err) => {
+        this.setData({ faving: false });
+        console.error('[detail] 收藏失败:', err && err.errMsg);
+        wx.showToast({ title: '操作失败，请重试', icon: 'none' });
+      });
   },
 
   // 把(兜底查库拿到的)原始对象写回 detail_pool(key=_id)，格式与列表页缓存一致

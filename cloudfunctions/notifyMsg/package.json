@@ -1,0 +1,14 @@
+{
+  "name": "notifyMsg",
+  "version": "1.0.0",
+  "description": "站内通知/平台消息：列表/已读/发送",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

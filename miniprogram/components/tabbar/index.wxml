@@ -1,0 +1,17 @@
+<!-- 公共底部 TabBar：按 current 高亮，点击用 reLaunch 切换对应根页 -->
+<t-tab-bar
+  class="app-tabbar"
+  value="{{current}}"
+  bindchange="onTabChange"
+  theme="normal"
+  fixed="{{true}}"
+  placeholder="{{true}}"
+  split="{{false}}"
+>
+  <t-tab-bar-item
+    wx:for="{{list}}" wx:key="id"
+    value="{{item.id}}"
+    icon="{{item.id === 'me' ? (isVip ? 'user-vip-filled' : 'user') : item.icon}}"
+    badge-props="{{ item.id === 'message' ? { count: unread } : null }}"
+  >{{item.label}}</t-tab-bar-item>
+</t-tab-bar>

@@ -1,0 +1,6 @@
+.app-tabbar {
+  --td-tab-bar-height: 96rpx;
+  --td-tab-bar-color: #666666;
+  --td-tab-bar-active-color: #FF7A45;
+  --td-tab-bar-font: 20rpx;
+}

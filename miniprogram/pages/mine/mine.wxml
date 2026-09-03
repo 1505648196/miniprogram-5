@@ -1,0 +1,193 @@
+<!-- pages/mine/mine.wxml -->
+<!-- 我的（仿闲鱼风格） -->
+<view class="page">
+
+  <!-- 用户信息头部：黄色品牌头 -->
+  <view class="uhead">
+    <view class="uhead-left">
+      <t-avatar class="uhead-avatar" size="large" shape="circle" image="{{avatar}}">{{avatarText}}</t-avatar>
+      <view class="uhead-info">
+        <view class="uhead-name-row">
+          <text class="uhead-name">{{nickname}}</text>
+          <t-icon wx:if="{{isVip}}" name="user-vip-filled" size="40rpx" color="#D4AF37" />
+          <t-icon name="chevron-right" size="28rpx" color="#1A1A1A" />
+        </view>
+        <t-tag class="uhead-credit" theme="default" variant="light" size="small">{{creditTag}}</t-tag>
+      </view>
+    </view>
+    <view class="uhead-right">
+      <view class="uhead-right-btn" data-what="help" bindtap="onHeaderRightTap">
+        <t-icon name="service" size="36rpx" color="#1A1A1A" />
+        <text class="uhead-right-text">帮助与客服</text>
+      </view>
+      <view class="uhead-right-btn" data-what="settings" bindtap="onHeaderRightTap">
+        <t-icon name="setting" size="36rpx" color="#1A1A1A" />
+        <text class="uhead-right-text">设置</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 会员横幅（开通/续费） -->
+  <view class="vip-banner" bindtap="goVip">
+    <view class="vip-banner-left">
+      <text class="vip-banner-icon">👑</text>
+      <view class="vip-banner-text">
+        <view class="vip-banner-title">
+          {{ isVip ? '包子一哥 · 会员生效中' : '开通包子一哥会员' }}
+        </view>
+        <view class="vip-banner-sub">
+          {{ isVip ? ('有效期至 ' + vipExpire) : '发布更显眼 · 曝光更多 · 专属标识' }}
+        </view>
+      </view>
+    </view>
+    <view class="vip-banner-right">
+      <text class="vip-banner-btn">{{ isVip ? '续费' : '立即开通' }}</text>
+    </view>
+  </view>
+
+  <!-- 4 列统计 -->
+  <view class="stats">
+      <view class="stat" wx:for="{{statList}}" wx:key="key"
+            data-key="{{item.key}}" bindtap="onStatTap">
+        <view class="stat-num">{{item.key==='fav' ? favCount : (item.key==='history' ? historyCount : item.num)}}</view>
+        <view class="stat-label">{{item.label}}</view>
+      </view>
+    </view>
+
+  <!-- 我的交易卡片 -->
+  <view class="card trade">
+    <view class="card-row">
+      <!-- <view class="trade-left" bindtap="onTradeTap">
+        <text class="trade-title">我的交易</text>
+        <text class="trade-sub">{{tradeSummary}}</text>
+      </view> -->
+      <view class="trade-right" bindtap="onTradeBadgeTap">
+        <!-- <view class="trade-badge">{{tradeBadge}}</view> -->
+        <!-- <t-icon name="chevron-right" size="24rpx" color="#999999" /> -->
+      </view>
+    </view>
+
+    <view class="order-row">
+      <view class="order" wx:for="{{orderList}}" wx:key="key"
+            data-key="{{item.key}}" bindtap="onOrderTap">
+        <view class="order-icon">
+          <t-icon name="upload" wx:if="{{item.key==='sell'}}" size="48rpx" color="#FF7A45" />
+          <t-icon name="home" wx:elif="{{item.key==='space'}}" size="48rpx" color="#9254DE" />
+          <t-icon name="shop" wx:elif="{{item.key==='sold'}}" size="48rpx" color="#36CFC9" />
+          <t-icon name="cart" wx:else size="48rpx" color="#FA8C16" />
+        </view>
+        <text class="order-label">{{item.label}}</text>
+        <text class="order-count">{{item.count}}</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 公告 -->
+  <view class="notice" bindtap="onNoticeTap">
+    <text class="notice-tag">公告</text>
+    <text class="notice-text">{{notice}}</text>
+    <t-icon name="chevron-right" size="24rpx" color="#999999" />
+  </view>
+
+  <!-- 闲鱼回收 -->
+  <!-- <view class="card recycle">
+    <view class="recycle-head">
+      <text class="recycle-name">闲鱼回收</text>
+      <text class="recycle-sub">省心极速卖得高</text>
+    </view>
+    <view class="recycle-row">
+      <view class="recycle-card">
+        <text class="recycle-tag">热门</text>
+        <text class="recycle-name2">vivo X200 Pro</text>
+        <text class="recycle-sub2">预估赚 <text class="recycle-coin">¥3313</text></text>
+      </view>
+      <view class="recycle-card">
+        <t-icon name="image" size="120rpx" color="#FFD9B3" />
+      </view>
+      <view class="recycle-card more">
+        <text class="recycle-more">更多</text>
+      </view>
+    </view>
+  </view> -->
+
+  <!-- 工具 5 宫格（超强擦亮 / 托管无忧卖 / 闲鱼小法庭 / 借钱 / 闲鱼小约） -->
+  <!-- <view class="card recycle-grid">
+    <view class="recycle-grid-row">
+      <view class="recycle-grid-cell" wx:for="{{recycleGrid}}" wx:key="key"
+            data-key="{{item.key}}" bindtap="onRecycleTap">
+        <view class="recycle-grid-icon">
+          <t-icon name="brush" wx:if="{{item.key==='clean'}}" size="48rpx" color="#FFD666" />
+          <t-icon name="user" wx:elif="{{item.key==='host'}}" size="48rpx" color="#597EF7" />
+          <t-icon name="verified" wx:elif="{{item.key==='law'}}" size="48rpx" color="#9254DE" />
+          <t-icon name="wallet" wx:elif="{{item.key==='loan'}}" size="48rpx" color="#36CFC9" />
+          <t-icon name="edit-1" wx:else size="48rpx" color="#FF7A45" />
+        </view>
+        <text class="recycle-grid-label">{{item.label}}</text>
+      </view>
+    </view>
+  </view> -->
+
+  <!-- 关于 / 清除缓存 -->
+  <t-cell-group theme="card" title="通用">
+    <t-cell title="清除浏览缓存" description="清除本地浏览历史缓存" left-icon="delete" arrow hover bind:click="onClearCacheTap" />
+    <t-cell title="关于我们" left-icon="info-circle" arrow hover bind:click="onAboutTap" />
+  </t-cell-group>
+
+  <!-- 底部真实 TabBar（同 demo；mine 独立页，点击用 reLaunch 切换） -->
+  <t-tab-bar
+    class="mine-tabbar"
+    value="{{activeBar}}"
+    bindchange="onTabBar"
+    theme="normal"
+    fixed="{{true}}"
+    placeholder="{{true}}"
+    split="{{false}}"
+  >
+    <t-tab-bar-item wx:for="{{tabbar}}" wx:key="id" value="{{item.id}}"
+      icon="{{item.id === 'me' ? (isVip ? 'user-vip-filled' : 'user') : item.icon}}"
+      badge-props="{{ item.id === 'message' ? { count: unread } : null }}">{{item.label}}</t-tab-bar-item>
+  </t-tab-bar>
+
+  <!-- 清除缓存确认 -->
+  <t-dialog
+    visible="{{clearDialogVisible}}"
+    title="清除缓存"
+    content="将清除本地浏览历史缓存（不会删除你发布的信息），确定继续？"
+    confirm-btn="{{ { content: '确定清除', theme: 'danger' } }}"
+    cancel-btn="取消"
+    bind:confirm="onClearConfirm"
+    bind:cancel="onClearDialogClose"
+    bind:close="onClearDialogClose"
+  />
+
+  <!-- 关于 -->
+  <t-dialog
+    visible="{{aboutDialogVisible}}"
+    title="关于包子一哥"
+    content="包子行业信息平台 · 招聘求职 / 店铺转让 / 二手设备 / 顺风车 / 其他，免费发布、就近对接。"
+    confirm-btn="知道了"
+    bind:confirm="onAboutDialogClose"
+    bind:close="onAboutDialogClose"
+  />
+
+  <!-- 发布类型选择弹层（同 demo 首页，点底部"发布"触发） -->
+  <t-popup
+    visible="{{publishSheetVisible}}"
+    placement="bottom"
+    bind:visible-change="onPublishSheetClose"
+  >
+    <view class="pub-sheet">
+      <view class="pub-sheet-title">选择发布类型</view>
+      <t-grid class="pub-grid" column="{{4}}" hover>
+        <t-grid-item
+          wx:for="{{publishTypes}}" wx:key="id"
+          data-item="{{item}}" bind:click="onPickPublishType"
+        >
+          <view class="pub-icon" style="background: {{item.light}};">{{item.emoji}}</view>
+          <view class="pub-name">{{item.name}}</view>
+        </t-grid-item>
+      </t-grid>
+    </view>
+  </t-popup>
+
+</view>

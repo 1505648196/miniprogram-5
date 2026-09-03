@@ -1,0 +1,14 @@
+{
+  "name": "memberService",
+  "version": "1.0.0",
+  "description": "会员开通/状态（模拟支付阶段）",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

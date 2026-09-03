@@ -1,0 +1,82 @@
+<!-- pages/search/search.wxml -->
+<!-- 全局模糊搜索页 -->
+<view class="page">
+  <!-- 搜索框 -->
+  <view class="sbar">
+    <t-search
+      value="{{keyword}}"
+      shape="round"
+      placeholder="搜 岗位/师傅/店铺/设备/城市…"
+      focus="{{autoFocus}}"
+      clearable="{{true}}"
+      bind:change="onSearchChange"
+      bind:submit="onSearchSubmit"
+      bind:clear="onSearchClear"
+      t-class="s-input"
+    />
+  </view>
+
+  <!-- 结果区 -->
+  <t-skeleton
+    wx:if="{{searching}}"
+    class="feed-skeleton"
+    theme="paragraph"
+    animation="flashed"
+    row-col="{{skeletonRows}}"
+  />
+
+  <view class="goods-empty" wx:elif="{{firstLoaded && showEmpty}}">
+    {{keyword ? '没有找到相关结果' : '输入关键词搜索全部板块'}}
+  </view>
+
+  <view class="goods" wx:elif="{{!searching && goodsLeft.length}}">
+    <view class="goods-col">
+      <view class="goods-card" wx:for="{{goodsLeft}}" wx:key="id"
+            data-id="{{item.id}}" bindtap="onTap">
+        <view class="goods-img" wx:if="{{item.image}}" style="background: {{item.light}};">
+          <image class="goods-pic" src="{{item.image}}" mode="widthFix" />
+          <view class="goods-type" style="background: {{item.color}};">{{item.typeName}}</view>
+        </view>
+        <view class="goods-title">{{item.title}}</view>
+        <view class="goods-tags" wx:if="{{item.tags.length}}">
+          <t-tag wx:for="{{item.tags}}" wx:for-item="tg" wx:key="*this" size="small" variant="light" t-class="goods-tag">{{tg}}</t-tag>
+        </view>
+        <view class="goods-meta">
+          <text wx:if="{{!item.image}}" class="goods-meta-type" style="background: {{item.color}};">{{item.typeName}}</text>
+          <text>{{item.meta}}</text>
+        </view>
+        <view class="goods-price-row">
+          <view class="goods-price">{{item.priceText}}</view>
+          <view class="goods-arrow">查看 ›</view>
+        </view>
+      </view>
+    </view>
+    <view class="goods-col">
+      <view class="goods-card" wx:for="{{goodsRight}}" wx:key="id"
+            data-id="{{item.id}}" bindtap="onTap">
+        <view class="goods-img" wx:if="{{item.image}}" style="background: {{item.light}};">
+          <image class="goods-pic" src="{{item.image}}" mode="widthFix" />
+          <view class="goods-type" style="background: {{item.color}};">{{item.typeName}}</view>
+        </view>
+        <view class="goods-title">{{item.title}}</view>
+        <view class="goods-tags" wx:if="{{item.tags.length}}">
+          <t-tag wx:for="{{item.tags}}" wx:for-item="tg" wx:key="*this" size="small" variant="light" t-class="goods-tag">{{tg}}</t-tag>
+        </view>
+        <view class="goods-meta">
+          <text wx:if="{{!item.image}}" class="goods-meta-type" style="background: {{item.color}};">{{item.typeName}}</text>
+          <text>{{item.meta}}</text>
+        </view>
+        <view class="goods-price-row">
+          <view class="goods-price">{{item.priceText}}</view>
+          <view class="goods-arrow">查看 ›</view>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 触底加载 / 到底 -->
+  <view class="feed-footer">
+    <t-loading wx:if="{{loadingMore}}" theme="circular" size="32rpx" text="加载更多…" layout="vertical" />
+    <text wx:elif="{{firstLoaded && !hasMore && !searching && goodsLeft.length}}" class="feed-end-text">— 没有更多了 —</text>
+  </view>
+</view>

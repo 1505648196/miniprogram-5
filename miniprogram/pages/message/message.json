@@ -1,0 +1,12 @@
+{
+  "navigationBarTitleText": "消息",
+  "usingComponents": {
+    "t-icon": "/miniprogram_npm/tdesign-miniprogram/icon/icon",
+    "t-empty": "/miniprogram_npm/tdesign-miniprogram/empty/empty",
+    "t-loading": "/miniprogram_npm/tdesign-miniprogram/loading/loading",
+    "t-skeleton": "/miniprogram_npm/tdesign-miniprogram/skeleton/skeleton",
+    "t-button": "/miniprogram_npm/tdesign-miniprogram/button/button",
+    "t-toast": "/miniprogram_npm/tdesign-miniprogram/toast/toast",
+    "comp-tabbar": "/components/tabbar/index"
+  }
+}

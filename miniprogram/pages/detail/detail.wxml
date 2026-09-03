@@ -16,21 +16,118 @@
   <!-- 有图时展示图片 -->
   <image wx:if="{{d.image}}" class="cover" src="{{d.image}}" mode="widthFix" />
 
-  <!-- 关键信息 -->
+  <!-- 关键信息（按 data_type 分支：招工/求职 薪资、转让 转让费、求店 预算、顺风车 行程） -->
   <view class="card">
-    <view class="card-row">
-      <text class="card-key">薪资</text>
-      <text class="card-val salary">{{d.salaryText}}</text>
-    </view>
-    <view wx:if="{{d.salaryNote}}" class="card-row">
-      <text class="card-key">薪资说明</text>
-      <text class="card-val">{{d.salaryNote}}</text>
-    </view>
-    <view class="card-row">
-      <text class="card-key">师傅类型</text>
-      <text class="card-val">{{d.role}}</text>
-    </view>
-    <view class="card-row">
+    <!-- 招工/求职：薪资 + 师傅类型 -->
+    <block wx:if="{{!d.isShop && !d.isEquip && !d.isCarpool && !d.isOther}}">
+      <view class="card-row">
+        <text class="card-key">薪资</text>
+        <text class="card-val salary">{{d.salaryText}}</text>
+      </view>
+      <view wx:if="{{d.salaryNote}}" class="card-row">
+        <text class="card-key">薪资说明</text>
+        <text class="card-val">{{d.salaryNote}}</text>
+      </view>
+      <view class="card-row">
+        <text class="card-key">师傅类型</text>
+        <text class="card-val">{{d.role}}</text>
+      </view>
+    </block>
+
+    <!-- 二手设备：出售=售价 / 求购=求购预算 + 新旧程度 -->
+    <block wx:if="{{d.isEquip}}">
+      <view class="card-row">
+        <text class="card-key">{{d.equipPriceKeyLabel}}</text>
+        <text class="card-val salary">{{d.equipPriceText}}</text>
+      </view>
+      <view wx:if="{{d.equipCondText}}" class="card-row">
+        <text class="card-key">{{d.equipCondKeyLabel}}</text>
+        <text class="card-val">{{d.equipCondText}}</text>
+      </view>
+    </block>
+
+    <!-- 其他：有明示价格才显示"价格"，无则只展示描述/地区 -->
+    <block wx:if="{{d.isOther && d.otherPriceText}}">
+      <view class="card-row">
+        <text class="card-key">价格</text>
+        <text class="card-val salary">{{d.otherPriceText}}</text>
+      </view>
+    </block>
+
+    <!-- 顺风车：出发地 → 目的地 + 时间 + 可乘人数 -->
+    <block wx:if="{{d.isCarpool}}">
+      <view class="card-row">
+        <text class="card-key">出发地</text>
+        <text class="card-val">{{d.carFrom}}</text>
+      </view>
+      <view class="card-row">
+        <text class="card-key">目的地</text>
+        <text class="card-val">{{d.carTo}}</text>
+      </view>
+      <view wx:if="{{d.carDepart}}" class="card-row">
+        <text class="card-key">出发时间</text>
+        <text class="card-val">{{d.carDepart}}</text>
+      </view>
+      <view wx:if="{{d.carDeadline}}" class="card-row">
+        <text class="card-key">最晚出发</text>
+        <text class="card-val">{{d.carDeadline}}</text>
+      </view>
+      <view wx:if="{{d.carSeatsLabel}}" class="card-row">
+        <text class="card-key">可乘人数</text>
+        <text class="card-val">{{d.carSeatsLabel}}</text>
+      </view>
+    </block>
+
+    <!-- 店铺转让 transfer：转让费 + 月租/面积/日营业额/带设备 -->
+    <block wx:if="{{d.isTransfer}}">
+      <view class="card-row">
+        <text class="card-key">转让费</text>
+        <text class="card-val salary">{{d.shopPriceText}}</text>
+      </view>
+      <view wx:if="{{d.monthlyRentText}}" class="card-row">
+        <text class="card-key">月租</text>
+        <text class="card-val">{{d.monthlyRentText}}</text>
+      </view>
+      <view wx:if="{{d.areaText}}" class="card-row">
+        <text class="card-key">面积</text>
+        <text class="card-val">{{d.areaText}}</text>
+      </view>
+      <view wx:if="{{d.dailyRevText}}" class="card-row">
+        <text class="card-key">日营业额</text>
+        <text class="card-val">{{d.dailyRevText}}</text>
+      </view>
+      <view wx:if="{{d.equipText}}" class="card-row">
+        <text class="card-key">带设备</text>
+        <text class="card-val">{{d.equipText}}</text>
+      </view>
+    </block>
+
+    <!-- 求店 want_shop：预算 + 租金上限/面积下限 -->
+    <block wx:if="{{d.isWantShop}}">
+      <view class="card-row">
+        <text class="card-key">预算</text>
+        <text class="card-val salary">{{d.shopPriceText}}</text>
+      </view>
+      <view wx:if="{{d.rentMaxText}}" class="card-row">
+        <text class="card-key">租金上限</text>
+        <text class="card-val">{{d.rentMaxText}}</text>
+      </view>
+      <view wx:if="{{d.areaMinText}}" class="card-row">
+        <text class="card-key">面积下限</text>
+        <text class="card-val">{{d.areaMinText}}</text>
+      </view>
+    </block>
+
+    <!-- 店铺类型（转让/求店共用） -->
+    <block wx:if="{{d.isShop}}">
+      <view class="card-row">
+        <text class="card-key">店铺类型</text>
+        <text class="card-val">{{d.role}}</text>
+      </view>
+    </block>
+
+    <!-- 所在地区（顺风车无单一地区，用出发/目的路线展示，故此处隐藏） -->
+    <view class="card-row" wx:if="{{!d.isCarpool}}">
       <text class="card-key">所在地区</text>
       <text class="card-val">{{d.regionText}}</text>
     </view>
@@ -53,11 +150,11 @@
       <text class="card-key">可服务地区</text>
       <text class="card-val">{{d.serviceArea}}</text>
     </view>
-    <!-- 求职诉求 / 招聘条件 标签 -->
-    <view wx:if="{{(d.isJobseek && d.wants.length) || (!d.isJobseek && d.conds.length)}}" class="card-row tags-row">
-      <text class="card-key">{{d.isJobseek ? '求职诉求' : '工作条件'}}</text>
+    <!-- 标签：转让条件 / 求店诉求 / 求职诉求 / 招聘条件 -->
+    <view wx:if="{{d.shopConds.length || d.wantShopTerms.length || d.wants.length || d.conds.length}}" class="card-row tags-row">
+      <text class="card-key">{{d.isTransfer ? '转让条件' : d.isWantShop ? '求店诉求' : d.isJobseek ? '求职诉求' : '工作条件'}}</text>
       <view class="tags">
-        <t-tag wx:for="{{d.isJobseek ? d.wants : d.conds}}" wx:key="*this" size="small" variant="light">{{item}}</t-tag>
+        <t-tag wx:for="{{d.isTransfer ? d.shopConds : d.isWantShop ? d.wantShopTerms : d.isJobseek ? d.wants : d.conds}}" wx:key="*this" size="small" variant="light">{{item}}</t-tag>
       </view>
     </view>
   </view>
@@ -85,18 +182,35 @@
    
   </view>
 
-  <!-- 底部联系方式操作区：点"查看联系方式" -->
+  <!-- 底部操作区：收藏 + 查看联系方式 -->
   <view class="footer-bar">
     <view class="contact-hint">温馨提示：联系时请核实对方身份</view>
-    <t-button
-      class="contact-btn"
-      theme="primary"
-      block="{{true}}"
-      bind:tap="onViewContact"
-    >查看联系方式</t-button>
+    <view class="footer-actions">
+      <t-button
+        class="fav-btn {{isFav ? 'on' : ''}}"
+        theme="{{isFav ? 'primary' : 'default'}}"
+        variant="{{isFav ? 'dark' : 'outline'}}"
+        size="large"
+        bind:tap="onToggleFav"
+      >
+        <view class="fav-content">
+          <t-icon name="{{ isFav ? 'heart-filled' : 'heart' }}" size="34rpx" color="{{ isFav ? '#FFD700' : '#999999' }}" />
+          <text class="fav-text">{{ isFav ? '已收藏' : '收藏' }}</text>
+        </view>
+      </t-button>
+      <t-button
+        class="contact-btn"
+        theme="primary"
+        size="large"
+        bind:tap="onViewContact"
+      >查看联系方式</t-button>
+    </view>
   </view>
 </view>
 
-<!-- 加载中 / 空态 -->
-<t-loading wx:elif="{{loading}}" theme="circular" text="加载中…" layout="vertical" class="state" />
+<!-- 加载中：骨架屏（模拟详情布局，避免白屏延迟感） -->
+<view class="state-skeleton" wx:elif="{{loading}}">
+  <t-skeleton theme="paragraph" animation="flashed" row-col="{{skeletonRows}}" />
+</view>
+<!-- 空态 / 出错 -->
 <t-empty wx:else description="{{loadError || '帖子不存在'}}" class="state" />

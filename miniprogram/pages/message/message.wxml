@@ -1,0 +1,49 @@
+<!-- pages/message/message.wxml -->
+<!-- 站内通知（平台消息） -->
+<view class="page">
+
+  <!-- 加载骨架 -->
+  <t-skeleton wx:if="{{loading}}" class="list-skeleton" theme="paragraph"
+    animation="flashed" row-col="{{skeletonRows}}" />
+
+  <!-- 空态 -->
+  <view class="empty-wrap" wx:elif="{{!list.length}}">
+    <t-empty icon="notification" description="暂无消息" />
+  </view>
+
+  <!-- 列表 -->
+  <view class="msg-list" wx:else>
+    <view class="msg-item {{ item.isRead ? '' : 'unread' }}"
+          wx:for="{{list}}" wx:key="id"
+          data-id="{{item.id}}" data-post="{{item.post_id}}" bindtap="onTap">
+      <!-- 左侧类型图标 -->
+      <view class="msg-icon" style="background: {{item.bg}};">
+        <t-icon name="{{item.icon}}" size="44rpx" color="{{item.color}}" />
+      </view>
+      <!-- 右侧内容 -->
+      <view class="msg-body">
+        <view class="msg-head">
+          <text class="msg-title">{{item.title}}</text>
+          <!-- 未读红点 -->
+          <view class="msg-dot" wx:if="{{!item.isRead}}"></view>
+        </view>
+        <view class="msg-content" wx:if="{{item.content}}">{{item.content}}</view>
+        <view class="msg-foot">
+          <text class="msg-type">{{item.typeName}}</text>
+          <text class="msg-time">{{item.timeText}}</text>
+          <t-icon wx:if="{{item.hasPost}}" name="chevron-right" size="24rpx" color="#C0C4CC" />
+        </view>
+      </view>
+    </view>
+
+    <!-- 触底 -->
+    <view class="msg-footer">
+      <t-loading wx:if="{{loadingMore}}" theme="circular" size="32rpx" text="加载更多…" layout="vertical" />
+      <text wx:elif="{{!hasMore}}" class="msg-end">— 没有更多了 —</text>
+    </view>
+  </view>
+
+  <!-- 底部导航 -->
+  <comp-tabbar current="message" />
+
+</view>

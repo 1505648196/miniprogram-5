@@ -1,0 +1,13 @@
+{
+  "navigationBarTitleText": "其他",
+  "enablePullDownRefresh": true,
+  "usingComponents": {
+    "t-search": "/miniprogram_npm/tdesign-miniprogram/search/search",
+    "t-tag": "/miniprogram_npm/tdesign-miniprogram/tag/tag",
+    "t-empty": "/miniprogram_npm/tdesign-miniprogram/empty/empty",
+    "t-loading": "/miniprogram_npm/tdesign-miniprogram/loading/loading",
+    "t-icon": "/miniprogram_npm/tdesign-miniprogram/icon/icon",
+    "t-skeleton": "/miniprogram_npm/tdesign-miniprogram/skeleton/skeleton",
+    "comp-tabbar": "/components/tabbar/index"
+  }
+}

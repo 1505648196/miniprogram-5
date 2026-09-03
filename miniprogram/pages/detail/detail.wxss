@@ -10,6 +10,12 @@
   padding: 160rpx 0;
 }
 
+/* 详情加载骨架屏容器：上留白 + 左右留白，贴近真实卡片观感 */
+.state-skeleton {
+  padding: 24rpx 24rpx 40rpx;
+  background: #F6F6F6;
+}
+
 /* ============ 顶部信息卡 ============ */
 .head {
   background: #FFFFFF;
@@ -191,4 +197,37 @@
   --td-button-primary-active-bg-color: #F5D800;
   --td-button-primary-active-border-color: #F5D800;
   --td-button-font-size: 30rpx;
+}
+
+/* 底部两个操作按钮：收藏 + 查看联系方式 */
+.footer-actions {
+  display: flex;
+  align-items: stretch;
+  gap: 16rpx;
+}
+.fav-btn {
+  flex: 0 0 200rpx;
+  --td-button-font-size: 30rpx;
+}
+/* 已收藏态 → 亮金填充 */
+.fav-btn.on {
+  --td-button-primary-bg-color: #FFE9A8;
+  --td-button-primary-border-color: #FFD700;
+  --td-button-primary-color: #C58B00;
+  --td-button-primary-active-bg-color: #FFDF80;
+  --td-button-primary-active-border-color: #FFD700;
+  --td-button-primary-active-color: #A97400;
+}
+/* 按钮内收藏内容（图标+文字横排） */
+.fav-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+}
+.fav-text {
+  font-size: 30rpx;
+}
+.footer-actions .contact-btn {
+  flex: 1;
 }

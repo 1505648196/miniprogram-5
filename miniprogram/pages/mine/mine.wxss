@@ -1,0 +1,446 @@
+/* pages/mine/mine.wxss —— 我的（仿闲鱼风格） */
+.page {
+  min-height: 100vh;
+  background: #F6F6F6;
+  padding-bottom: 32rpx;
+  box-sizing: border-box;
+}
+
+/* ===== 用户信息头：黄色 ===== */
+.uhead {
+  background: #FFE60A;
+  padding: 24rpx 24rpx 88rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.uhead-left {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  flex: 1;
+  min-width: 0;
+}
+.uhead-avatar {
+  --td-avatar-bg-color: #1A1A1A;
+  --td-avatar-text-medium-font-size: 40rpx;
+  --td-avatar-content-color: #FFE60A;
+  flex-shrink: 0;
+}
+.uhead-info { flex: 1; min-width: 0; }
+.uhead-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+}
+.uhead-name {
+  font-size: 36rpx;
+  font-weight: 700;
+  color: #1A1A1A;
+  max-width: 280rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.uhead-v {
+  background: #FFD666;
+  color: #1A1A1A;
+  font-size: 18rpx;
+  font-weight: 700;
+  padding: 0 8rpx;
+  border-radius: 8rpx;
+  line-height: 28rpx;
+}
+.uhead-credit {
+  margin-top: 12rpx !important;
+  --td-tag-default-light-color: rgba(255, 255, 255, 0.45);
+  --td-tag-font: 22rpx;
+  --td-tag-small-padding: 4rpx 14rpx;
+}
+.uhead-right {
+  display: flex;
+  gap: 16rpx;
+}
+.uhead-right-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4rpx;
+  min-width: 88rpx;
+}
+.uhead-right-text {
+  font-size: 20rpx;
+  color: #1A1A1A;
+}
+
+/* ===== 会员横幅（开通/续费）===== */
+.vip-banner {
+  margin: -56rpx 24rpx 0;
+  padding: 24rpx;
+  background: linear-gradient(135deg, #FFE60A 0%, #FFC53D 100%);
+  border-radius: 20rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.08);
+  border: 2rpx solid #FFD666;
+}
+.vip-banner-left {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  flex: 1;
+  min-width: 0;
+}
+.vip-banner-icon {
+  font-size: 56rpx;
+  line-height: 1;
+}
+.vip-banner-text {
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+  min-width: 0;
+}
+.vip-banner-title {
+  font-size: 30rpx;
+  font-weight: 800;
+  color: #1A1A1A;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vip-banner-sub {
+  font-size: 22rpx;
+  color: rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vip-banner-right {
+  flex-shrink: 0;
+}
+.vip-banner-btn {
+  background: #1A1A1A;
+  color: #FFE60A;
+  font-size: 24rpx;
+  font-weight: 700;
+  padding: 10rpx 26rpx;
+  border-radius: 999rpx;
+}
+
+/* ===== 4 列统计 ===== */
+.stats {
+  margin: 24rpx 24rpx 0;
+  background: #FFFFFF;
+  border-radius: 20rpx;
+  padding: 24rpx 0;
+  display: flex;
+}
+.stat {
+  flex: 1;
+  text-align: center;
+}
+.stat-num {
+  font-size: 36rpx;
+  font-weight: 700;
+  color: #1A1A1A;
+  line-height: 1.2;
+}
+.stat-label {
+  margin-top: 8rpx;
+  font-size: 22rpx;
+  color: #666666;
+}
+
+/* ===== 通用卡片 ===== */
+.card {
+  margin: 24rpx 24rpx 0;
+  background: #FFFFFF;
+  border-radius: 20rpx;
+  padding: 24rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
+}
+
+/* ===== 我的交易 ===== */
+.trade .card-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24rpx;
+}
+.trade-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+.trade-title {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #1A1A1A;
+}
+.trade-sub {
+  font-size: 22rpx;
+  color: #999999;
+}
+.trade-right {
+  display: flex;
+  align-items: center;
+  gap: 4rpx;
+}
+.trade-badge {
+  background: linear-gradient(90deg, #FF7A45 0%, #FFD666 100%);
+  color: #FFFFFF;
+  font-size: 22rpx;
+  font-weight: 700;
+  padding: 6rpx 18rpx;
+  border-radius: 999rpx;
+}
+.order-row {
+  display: flex;
+  justify-content: space-between;
+}
+.order {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8rpx;
+}
+.order-icon {
+  width: 96rpx;
+  height: 96rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #F7F7F7;
+  border-radius: 999rpx;
+}
+.order-label {
+  font-size: 24rpx;
+  color: #1A1A1A;
+}
+.order-count {
+  font-size: 22rpx;
+  color: #999999;
+}
+
+/* ===== 工具宫格（鱼小铺） ===== */
+.tools-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20rpx;
+}
+.tools-name {
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #4A6BF5;
+}
+.tools-link {
+  display: flex;
+  align-items: center;
+  gap: 4rpx;
+}
+.tools-link-text {
+  font-size: 24rpx;
+  color: #999999;
+}
+.tools-grid {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 0 -8rpx;
+}
+.tools-cell {
+  width: 25%;
+  padding: 16rpx 8rpx;
+}
+.tools-cell-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 4rpx;
+}
+.tools-cell-title {
+  font-size: 24rpx;
+  color: #1A1A1A;
+}
+.tools-cell-count {
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #1A1A1A;
+}
+.tools-cell-hint {
+  font-size: 18rpx;
+  color: #999999;
+}
+.tools-cell-link {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8rpx;
+}
+
+/* ===== 公告 ===== */
+.notice {
+  margin: 24rpx 24rpx 0;
+  background: #FFFFFF;
+  border-radius: 20rpx;
+  padding: 24rpx;
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+.notice-tag {
+  background: linear-gradient(135deg, #FFD666 0%, #E8B600 100%);
+  color: #5C3F00;
+  font-size: 20rpx;
+  font-weight: 700;
+  padding: 4rpx 12rpx;
+  border-radius: 6rpx;
+  flex-shrink: 0;
+}
+.notice-text {
+  flex: 1;
+  font-size: 24rpx;
+  color: #1A1A1A;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ===== 闲鱼回收（招回/卖等横滑卡） ===== */
+.recycle-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12rpx;
+  margin-bottom: 16rpx;
+}
+.recycle-name {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #1A1A1A;
+}
+.recycle-sub {
+  font-size: 22rpx;
+  color: #FF7A45;
+}
+.recycle-row {
+  display: flex;
+  gap: 12rpx;
+}
+.recycle-card {
+  flex: 1;
+  background: #FFF1E8;
+  border-radius: 16rpx;
+  padding: 16rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 200rpx;
+  position: relative;
+}
+.recycle-tag {
+  background: #FF7A45;
+  color: #FFFFFF;
+  font-size: 18rpx;
+  font-weight: 700;
+  padding: 2rpx 10rpx;
+  border-radius: 6rpx;
+  align-self: flex-start;
+}
+.recycle-name2 {
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  color: #1A1A1A;
+  font-weight: 600;
+}
+.recycle-sub2 {
+  margin-top: 8rpx;
+  font-size: 20rpx;
+  color: #999999;
+}
+.recycle-coin {
+  color: #FF7A45;
+  font-weight: 700;
+  font-size: 26rpx;
+}
+.recycle-card.more {
+  background: #FAFAFA;
+  color: #999999;
+  font-size: 22rpx;
+}
+.recycle-more { font-size: 28rpx; }
+
+/* ===== 工具 5 宫格 ===== */
+.recycle-grid-row {
+  display: flex;
+  justify-content: space-between;
+}
+.recycle-grid-cell {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12rpx;
+}
+.recycle-grid-icon {
+  width: 96rpx;
+  height: 96rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #FAFAFA;
+  border-radius: 999rpx;
+}
+.recycle-grid-label {
+  font-size: 22rpx;
+  color: #1A1A1A;
+}
+
+/* ===== 底部真实 TabBar（同 demo 风格） ===== */
+.mine-tabbar {
+  --td-tab-bar-height: 96rpx;
+  --td-tab-bar-color: #666666;
+  --td-tab-bar-active-color: #FF7A45;
+  --td-tab-bar-font: 20rpx;
+}
+
+/* ===== 间距 ===== */
+.page .t-cell-group {
+  margin: 24rpx 24rpx 0;
+}
+
+/* ===== 发布类型弹层（同 demo） ===== */
+.pub-sheet {
+  background: #FFFFFF;
+  border-radius: 24rpx 24rpx 0 0;
+  padding: 32rpx 16rpx calc(32rpx + env(safe-area-inset-bottom));
+}
+.pub-sheet-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #1A1A1A;
+  text-align: center;
+  margin-bottom: 24rpx;
+}
+.pub-grid {
+  --td-grid-item-padding: 20rpx 0;
+}
+.pub-icon {
+  width: 84rpx;
+  height: 84rpx;
+  border-radius: 20rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 42rpx;
+  box-shadow: 0 4rpx 10rpx rgba(0, 0, 0, 0.06);
+}
+.pub-name {
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  color: #1A1A1A;
+}

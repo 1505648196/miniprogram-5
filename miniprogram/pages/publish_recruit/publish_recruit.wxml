@@ -1,0 +1,94 @@
+<!-- pages/publish_recruit/publish_recruit.wxml -->
+<!-- 包子行业信息平台 · 发布招工 —— TDesign(tdesign-miniprogram) -->
+<view class="page">
+
+  <!-- 师傅类型：t-grid 单选 -->
+  <view class="sec">
+    <view class="sec-title">1. 招什么师傅</view>
+    <t-grid class="sub-grid" column="{{4}}" hover>
+      <t-grid-item
+        wx:for="{{subOptions}}" wx:key="roleId"
+        data-idx="{{index}}" bind:click="onSubTap"
+      >
+        <view class="sub-item {{subIdx === index ? 'is-on' : ''}}">{{item.name}}</view>
+      </t-grid-item>
+    </t-grid>
+  </view>
+
+  <!-- 基本信息 -->
+  <view class="sec">
+    <view class="sec-title">2. 基本待遇与地点</view>
+    <t-cell-group theme="card">
+      <t-input label="薪资" placeholder="如 8000（元/月），留空=面议" type="number"
+        value="{{form.salary}}" data-field="salary" bind:change="onInput" />
+      <t-cell title="所在地区" arrow hover bind:click="openRegion">
+        <text slot="note" class="{{regionPick ? 'cell-val' : 'cell-ph'}}">{{regionPick || '请选择省市区'}}</text>
+      </t-cell>
+      <t-input label="详细地址" placeholder="街道/门店/楼栋（可空）"
+        value="{{form.address}}" data-field="address" bind:change="onInput" />
+    </t-cell-group>
+  </view>
+
+  <!-- 联系方式 -->
+  <view class="sec">
+    <view class="sec-title">3. 联系方式</view>
+    <t-cell-group theme="card">
+      <t-input label="手机号" placeholder="11 位手机号" type="number" maxlength="11"
+        value="{{form.phone}}" data-field="phone" bind:change="onInput" />
+      <t-input label="联系人" placeholder="如 王老板（可空）"
+        value="{{form.contact}}" data-field="contact" bind:change="onInput" />
+      <!-- 发布昵称已隐藏：改为后端自动填充/云端默认，不再让用户填 -->
+    </t-cell-group>
+  </view>
+
+  <!-- 描述 -->
+  <view class="sec">
+    <view class="sec-title">4. 具体描述</view>
+    <view class="desc-box">
+      <t-textarea
+        value="{{form.desc}}" data-field="desc" bind:change="onInput"
+        placeholder="如：招大师傅，包吃住，月休4天，每天工作8小时，会做小笼包优先…"
+        maxlength="500"
+      />
+    </view>
+  </view>
+
+  <!-- 图片(选填)：单张封面图，上传到云存储（放表单最下面、提交前） -->
+  <view class="sec">
+    <view class="sec-title">5. 图片（选填，最多 1 张）</view>
+    <t-upload
+      files="{{imageFiles}}"
+      max="{{1}}"
+      media-type="{{['image']}}"
+      add-content="{{'slot'}}"
+      grid-config="{{uploadGrid}}"
+      bind:success="onUploadSuccess"
+      bind:remove="onUploadRemove"
+      t-class="upload-box"
+    >
+      <view slot="add-content" class="upload-add">＋<text class="upload-add-txt">添加图片</text></view>
+    </t-upload>
+    <view class="upload-tip">建议上传店铺环境 / 产品实拍，提升招聘效果</view>
+  </view>
+
+  <!-- 提交 -->
+  <view class="submit-bar">
+    <t-button theme="primary" block="{{true}}" loading="{{submitting}}" bind:tap="onSubmit">
+      确认发布
+    </t-button>
+    <view class="submit-tip">发布需经内容安全审核，违规信息将被拦截</view>
+  </view>
+
+  <!-- 省市区选择弹层 -->
+  <t-cascader
+    visible="{{regionVisible}}"
+    title="选择省市区"
+    options="{{regionOptions}}"
+    theme="tab"
+    filterable="{{true}}"
+    filter-placeholder="搜索"
+    bind:change="onRegionChange"
+    bind:close="onRegionClose"
+  />
+
+</view>

@@ -1,0 +1,112 @@
+<!-- pages/publish/publish.wxml -->
+<!-- 通用发布表单：按 cfg(分类) 条件渲染不同区块（不做固定序号，避免隐藏区块导致编号跳号） -->
+<view class="page">
+
+  <!-- 岗位/店铺类型：有 roleOptions 才显示 -->
+  <view class="sec" wx:if="{{cfg.roleOptions.length}}">
+    <view class="sec-title">选择{{cfg.roleLabel}}</view>
+    <t-grid class="sub-grid" column="{{4}}" hover>
+      <t-grid-item
+        wx:for="{{roleOptions}}" wx:key="roleId"
+        data-idx="{{index}}" bind:click="onRoleTap"
+      >
+        <view class="sub-item {{roleIdx === index ? 'is-on' : ''}}">{{item.name}}</view>
+      </t-grid-item>
+    </t-grid>
+  </view>
+
+  <!-- 地区 + 主价格 + 该分类可选数字/文本字段（other 无价格，只显示地区） -->
+  <view class="sec">
+    <view class="sec-title">{{cfg.noPrice ? '地区信息' : '地区与价格'}}</view>
+    <t-cell-group theme="card">
+      <t-cell title="所在地区" arrow hover bind:click="openRegion">
+        <text slot="note" class="{{regionPick ? 'cell-val' : 'cell-ph'}}">{{regionPick || '请选择省市区'}}</text>
+      </t-cell>
+      <t-input wx:if="{{!cfg.noPrice}}" label="{{cfg.priceLabel}}" placeholder="{{cfg.priceHint}}"
+        type="number" value="{{form.price}}" data-field="price" data-num="1" bind:change="onInput" />
+      <block wx:for="{{cfg.optional}}" wx:for-item="o" wx:key="key">
+        <t-input label="{{o.label}}" placeholder="{{o.ph}}"
+          value="{{form[o.key]}}" data-field="{{o.key}}" data-num="{{o.num || ''}}" bind:change="onInput" />
+      </block>
+    </t-cell-group>
+  </view>
+
+  <!-- 设备成色：condLabel 存在才显示 -->
+  <view class="sec" wx:if="{{cfg.condLabel}}">
+    <view class="sec-title">{{cfg.condLabel}}</view>
+    <t-grid class="cond-grid" column="{{4}}" hover>
+      <t-grid-item wx:for="{{condOptions}}" wx:key="value"
+        data-idx="{{index}}" bind:click="onCondTap">
+        <view class="sub-item {{condIdx === index ? 'is-on' : ''}}">{{item.label}}</view>
+      </t-grid-item>
+    </t-grid>
+  </view>
+
+  <!-- 求职到岗方式 -->
+  <view class="sec" wx:if="{{cfg.avail}}">
+    <view class="sec-title">可到岗方式</view>
+    <t-grid class="cond-grid" column="{{4}}" hover>
+      <t-grid-item wx:for="{{availOptions}}" wx:key="*this"
+        data-idx="{{index}}" bind:click="onAvailTap">
+        <view class="sub-item {{availIdx === index ? 'is-on' : ''}}">{{item}}</view>
+      </t-grid-item>
+    </t-grid>
+  </view>
+
+  <!-- 诉求/条件（termKey 存在才显示） -->
+  <view class="sec" wx:if="{{cfg.termKey}}">
+    <view class="sec-title">{{cfg.termLabel}}</view>
+    <view class="term-input">
+      <t-input placeholder="{{cfg.termPh}}"
+        value="{{form[cfg.termKey]}}" data-field="{{cfg.termKey}}" bind:change="onInput" />
+    </view>
+  </view>
+
+  <!-- 联系方式 -->
+  <view class="sec">
+    <view class="sec-title">联系方式</view>
+    <t-cell-group theme="card">
+      <t-input label="手机号" placeholder="11 位手机号" type="number" maxlength="11"
+        value="{{form.phone}}" data-field="phone" bind:change="onInput" />
+      <t-input label="联系人" placeholder="如 王老板（可空）"
+        value="{{form.contact}}" data-field="contact" bind:change="onInput" />
+      <t-input label="详细地址" placeholder="街道/门店/楼栋（可空）"
+        value="{{form.address}}" data-field="address" bind:change="onInput" />
+    </t-cell-group>
+  </view>
+
+  <!-- 描述 -->
+  <view class="sec">
+    <view class="sec-title">具体描述</view>
+    <view class="desc-box">
+      <t-textarea value="{{form.desc}}" data-field="desc" bind:change="onInput"
+        placeholder="请尽量详细描述，便于快速对接"
+        maxlength="500" />
+    </view>
+  </view>
+
+  <!-- 图片(选填) -->
+  <view class="sec">
+    <view class="sec-title">图片（选填，最多 1 张）</view>
+    <t-upload files="{{imageFiles}}" max="{{1}}" media-type="{{['image']}}"
+      add-content="{{'slot'}}" grid-config="{{uploadGrid}}"
+      bind:success="onUploadSuccess" bind:remove="onUploadRemove" t-class="upload-box">
+      <view slot="add-content" class="upload-add">＋<text class="upload-add-txt">添加图片</text></view>
+    </t-upload>
+    <view class="upload-tip">有实拍/图片能显著提升信息可信度</view>
+  </view>
+
+  <!-- 提交 -->
+  <view class="submit-bar">
+    <t-button theme="primary" block="{{true}}" loading="{{submitting}}" bind:tap="onSubmit">
+      确认发布
+    </t-button>
+    <view class="submit-tip">发布需经内容安全审核，违规信息将被拦截</view>
+  </view>
+
+  <!-- 省市区选择弹层 -->
+  <t-cascader visible="{{regionVisible}}" title="选择省市区" options="{{regionOptions}}"
+    theme="tab" filterable="{{true}}" filter-placeholder="搜索"
+    bind:change="onRegionChange" bind:close="onRegionClose" />
+
+</view>

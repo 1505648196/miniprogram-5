@@ -1,0 +1,12 @@
+// 供 checkbox-group 卡片判断某 value 是否在勾选数组内
+function contain(arr, v) {
+  if (!arr) return false;
+  for (var i = 0; i < arr.length; i += 1) {
+    if (arr[i] === v) return true;
+  }
+  return false;
+}
+
+module.exports = {
+  contain: contain
+};

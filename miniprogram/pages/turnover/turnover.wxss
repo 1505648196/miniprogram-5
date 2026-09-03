@@ -1,0 +1,497 @@
+/* pages/turnover/turnover.wxss */
+/* 包子行业信息平台 · 转让求店频道页 —— TDesign CSS 变量覆盖，不改组件源码 */
+
+.page {
+  min-height: 100vh;
+  padding-bottom: 64rpx;
+}
+
+/* ============ 黄色 Header（与 demo 首页一致） ============ */
+.header {
+  height: 96rpx;
+  background: #FFE60A;
+  display: flex;
+  align-items: center;
+  padding: 0 32rpx;
+  gap: 20rpx;
+}
+
+.header-logo {
+  font-size: 36rpx;
+  font-weight: 800;
+  color: #1A1A1A;
+  letter-spacing: 2rpx;
+  flex-shrink: 0;
+  width: 144rpx;
+  white-space: nowrap;
+}
+
+.hdr-search {
+  flex: 1;
+  min-width: 0;
+  /* 黄色胶囊搜索框：黄底 + 黑字黑图标 + 黑色边框（从 Header 黄色中区分出来） */
+  --td-search-bg-color: #FFE60A;
+  --td-search-height: 72rpx;
+  --td-search-padding: 12rpx 28rpx;
+  --td-search-font: 28rpx;
+  --td-search-icon-size: 36rpx;
+  --td-search-placeholder-color: #1A1A1A;
+  --td-search-text-color: #1A1A1A;
+  --td-search-icon-color: #1A1A1A;
+  --td-search-clear-icon-color: #1A1A1A;
+  --td-search-action-color: #1A1A1A;
+  border: 3rpx solid #1A1A1A;
+  border-radius: 36rpx;
+  overflow: hidden;
+}
+
+.hdr-publish {
+  flex-shrink: 0;
+  --td-button-bg-color: #1A1A1A;
+  --td-button-border-color: #1A1A1A;
+  --td-button-font: 24rpx;
+}
+
+/* ============ 主内容 ============ */
+.content {
+  background: #FFFFFF;
+  padding: 0 16rpx;
+  border-radius: 0 0 24rpx 24rpx;
+}
+
+/* ============ 金刚位（店铺类型 5 格） ============ */
+.kk {
+  padding: 16rpx 0 8rpx;
+  --td-grid-item-padding: 20rpx 0;
+}
+
+.kk-icon {
+  width: 84rpx;
+  height: 84rpx;
+  border-radius: 20rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 42rpx;
+  box-shadow: 0 4rpx 10rpx rgba(0, 0, 0, 0.06);
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+  border: 4rpx solid transparent;
+}
+
+.kk-icon.is-active {
+  border-color: #FFE60A;
+  box-shadow: 0 0 0 5rpx rgba(255, 230, 10, 0.6), 0 0 22rpx 6rpx rgba(255, 230, 10, 0.5);
+  transform: scale(1.12);
+  transition: all 0.2s ease;
+}
+
+.kk-name {
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  color: #1A1A1A;
+}
+
+/* ============ 顶部下拉筛选条(店铺类型 / 区域 / 价格) ============ */
+.top-dropdown {
+  background: #FFFFFF;
+  border-bottom: 1rpx solid #F0F0F0;
+  --td-dropdown-menu-bg-color: #ffffff;
+}
+
+.top-dropdown.is-sticky {
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.08);
+}
+
+.top-dropdown .t-dropdown-menu__item--active {
+  color: #1A1A1A;
+  font-weight: 700;
+  background: #FFE60A;
+}
+
+/* 筛选"有值时"菜单项常亮：nth-child(1/2/3) 定位 店铺类型/区域/价格；父类 has-* 控制 */
+.top-dropdown.has-shop .t-dropdown-menu__item:nth-child(1) .t-dropdown-menu__title,
+.top-dropdown.has-shop .t-dropdown-menu__item:nth-child(1) .t-dropdown-menu__icon,
+.top-dropdown.has-region .t-dropdown-menu__item:nth-child(2) .t-dropdown-menu__title,
+.top-dropdown.has-region .t-dropdown-menu__item:nth-child(2) .t-dropdown-menu__icon,
+.top-dropdown.has-price .t-dropdown-menu__item:nth-child(3) .t-dropdown-menu__title,
+.top-dropdown.has-price .t-dropdown-menu__item:nth-child(3) .t-dropdown-menu__icon {
+  color: #FF7A45;
+  font-weight: 700;
+}
+
+.top-dropdown .t-dropdown-item__mask {
+  background: transparent;
+}
+.top-dropdown .t-overlay {
+  background-color: transparent !important;
+  opacity: 0 !important;
+}
+
+/* ===== 信息类别：转让/求店/会员 横向卡片多选(t-checkbox-group) ===== */
+.type-check {
+  display: flex;
+  align-items: center;
+  padding: 14rpx 24rpx 6rpx;
+  margin-top: 12rpx;
+  background: #fff;
+  --td-checkbox-bg-color: transparent;
+  --td-checkbox-vertical-padding: 8rpx;
+}
+.type-check-title {
+  flex-shrink: 0;
+  font-size: 24rpx;
+  color: #999999;
+  margin-right: 16rpx;
+}
+.type-check-list {
+  flex: 1;
+  display: flex;
+  min-width: 0;
+}
+.type-check-item {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  margin-right: 16rpx;
+  border: 2rpx solid #ECECEC;
+  border-radius: 16rpx;
+  background: #FAFAFA;
+  box-sizing: border-box;
+  transition: all 0.2s;
+  overflow: hidden;
+  text-align: center;
+}
+.type-check-item:last-child {
+  margin-right: 0;
+}
+.type-check-item.is-on {
+  border-color: #FF7A45;
+  background: #FFF1E8;
+}
+.type-check-check {
+  position: absolute;
+  top: 6rpx;
+  right: 10rpx;
+  color: #FF7A45;
+  font-size: 28rpx;
+  z-index: 1;
+  pointer-events: none;
+}
+.type-check-label {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+.type-check-name {
+  display: block;
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #1A1A1A;
+  line-height: 48rpx;
+  min-height: 48rpx;
+  text-align: center;
+}
+.type-check-item.is-on .type-check-name {
+  color: #FF7A45;
+}
+.type-check-desc {
+  display: block;
+  font-size: 22rpx;
+  color: #999999;
+  line-height: 44rpx;
+  min-height: 44rpx;
+  margin-top: 4rpx;
+  text-align: center;
+}
+
+/* ===== 店铺类型下拉内容(单选列表) ===== */
+.drop-sub {
+  padding: 24rpx 0 0;
+}
+.drop-sub-title {
+  padding: 0 32rpx 16rpx;
+  font-size: 24rpx;
+  color: #999999;
+}
+.drop-sub-list {
+  display: flex;
+  flex-direction: column;
+  padding: 0 16rpx;
+  max-height: 520rpx;
+  overflow-y: auto;
+}
+.drop-sub-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx 16rpx;
+  border-bottom: 1rpx solid #F5F5F5;
+  font-size: 28rpx;
+  color: #1A1A1A;
+}
+.drop-sub-row-label {
+  flex: 1;
+}
+.drop-sub-row-tick {
+  color: #FF7A45;
+  font-size: 32rpx;
+  font-weight: 700;
+}
+.drop-sub-row.is-on {
+  background: #FFF1E8;
+  color: #FF7A45;
+  font-weight: 700;
+}
+
+/* ===== 区域下拉内容 ===== */
+.drop-region {
+  padding: 32rpx 32rpx 40rpx;
+}
+.drop-region-title {
+  font-size: 24rpx;
+  color: #999999;
+  margin-bottom: 20rpx;
+}
+.drop-region-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20rpx;
+}
+.drop-city-wrap {
+  display: inline-flex;
+}
+.drop-city-tag {
+  margin: 0;
+  --td-tag-large-height: 72rpx;
+  --td-tag-large-font-size: 30rpx;
+  --td-tag-large-padding: 32rpx;
+  --td-tag-round-border-radius: 36rpx;
+  --td-tag-default-light-color: #F5F5F5;
+  --td-tag-default-font-color: #4A4A4A;
+}
+.drop-city-tag.is-on {
+  --td-tag-default-light-color: #FFF1E8;
+  --td-tag-default-font-color: #FF7A45;
+  --td-tag-primary-color: #FF7A45;
+}
+.drop-region-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16rpx;
+  margin-top: 32rpx;
+}
+.drop-region-more {
+  flex: 0 0 auto;
+  min-width: 0;
+  --td-button-font: 28rpx;
+  --td-button-primary-bg-color: #FFE60A;
+  --td-button-primary-border-color: #FFE60A;
+  --td-button-primary-color: #1A1A1A;
+  --td-button-primary-active-bg-color: #F5D800;
+  --td-button-primary-active-border-color: #F5D800;
+}
+.drop-region-reset {
+  flex: 0 0 auto;
+  --td-button-font: 28rpx;
+  --td-button-color: #999999;
+}
+
+/* ===== 价格下拉内容 ===== */
+.drop-salary {
+  padding: 32rpx 32rpx 40rpx;
+}
+.drop-salary-row {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+.drop-salary-input {
+  flex: 1;
+  min-width: 0;
+  --td-input-bg-color: #F5F5F5;
+  --td-input-border-color: transparent;
+  --td-input-padding: 24rpx;
+}
+.drop-salary-unit {
+  font-size: 28rpx;
+  color: #1A1A1A;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.drop-salary-tip {
+  font-size: 22rpx;
+  color: #999999;
+  margin: 16rpx 0 24rpx;
+  text-align: center;
+}
+.drop-salary-actions {
+  display: flex;
+  gap: 16rpx;
+}
+.drop-salary-btn-reset,
+.drop-salary-btn-confirm {
+  flex: 1;
+  --td-button-font: 30rpx;
+  --td-button-height: 88rpx;
+}
+.drop-salary-btn-confirm {
+  --td-button-primary-bg-color: #FFE60A;
+  --td-button-primary-border-color: #FFE60A;
+  --td-button-primary-color: #1A1A1A;
+  --td-button-primary-active-bg-color: #F5D800;
+  --td-button-primary-active-border-color: #F5D800;
+}
+
+/* ============ 帖子流容器 ============ */
+.feed {
+  background: #FFFFFF;
+  padding: 0 16rpx;
+}
+
+/* ============ 帖子双列 ============ */
+.goods {
+  display: flex;
+  gap: 8rpx;
+  padding: 6rpx 0 16rpx;
+}
+.goods-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+  min-width: 0;
+}
+.goods-card {
+  background: #FFFFFF;
+  border-radius: 20rpx;
+  overflow: hidden;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.06);
+}
+.goods-meta-type {
+  flex-shrink: 0;
+  color: #FFFFFF;
+  font-size: 20rpx;
+  line-height: 1;
+  padding: 4rpx 12rpx;
+  border-radius: 999rpx;
+  max-width: 40%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.goods-img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+.goods-emoji {
+  font-size: 84rpx;
+  line-height: 1;
+}
+.goods-pic {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.goods-type {
+  position: absolute;
+  top: 12rpx;
+  left: 12rpx;
+  color: #FFFFFF;
+  font-size: 20rpx;
+  padding: 4rpx 14rpx;
+  border-radius: 999rpx;
+  line-height: 1.4;
+  max-width: 70%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.goods-title {
+  font-size: 26rpx;
+  color: #1A1A1A;
+  line-height: 1.4;
+  padding: 16rpx 16rpx 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.goods-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8rpx;
+  padding: 12rpx 16rpx 0;
+}
+.goods-meta {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  font-size: 22rpx;
+  color: #999999;
+  padding: 8rpx 16rpx 0;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.goods-user {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  font-size: 22rpx;
+  color: #666666;
+  padding: 8rpx 16rpx 0;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.goods-credit {
+  flex-shrink: 0;
+  font-size: 20rpx;
+  line-height: 1;
+  padding: 4rpx 10rpx;
+  border-radius: 999rpx;
+}
+.goods-price-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8rpx 16rpx 16rpx;
+  gap: 8rpx;
+}
+.goods-price {
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #FF7A45;
+  line-height: 1.2;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.goods-arrow {
+  font-size: 20rpx;
+  color: #999999;
+  flex-shrink: 0;
+}
+
+.goods-loading,
+.goods-empty {
+  padding: 80rpx 0;
+  display: flex;
+  justify-content: center;
+}
+.feed-skeleton {
+  padding: 32rpx 0 16rpx;
+}
+.feed-footer {
+  padding: 16rpx 0 40rpx;
+  display: flex;
+  justify-content: center;
+}
+.feed-end-text {
+  font-size: 22rpx;
+  color: #cccccc;
+}
