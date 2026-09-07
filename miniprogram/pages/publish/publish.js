@@ -51,9 +51,9 @@ const TYPES = {
     priceHint: '如 200000，留空=面议',
     mainTag: '转让',
     optional: [
-      { key: 'monthly_rent', label: '月租金（元）', ph: '如 5000（可空）', num: 1 },
-      { key: 'area_sqm', label: '面积（㎡）', ph: '如 50（可空）', num: 1 },
-      { key: 'daily_revenue', label: '日营业额（元）', ph: '如 3000（可空）', num: 1 },
+      { key: 'monthly_rent', label: '月租金（元）', ph: '如 5000', num: 1, required: 1 },
+      { key: 'area_sqm', label: '面积（㎡）', ph: '如 50', num: 1, required: 1 },
+      { key: 'daily_revenue', label: '日营业额（元）', ph: '如 3000', num: 1, required: 1 },
       { key: 'has_equipment', label: '带设备', ph: '如 全带/部分/不带（可空）' },
     ],
     termLabel: '转让条件（顿号分隔）',
@@ -155,6 +155,9 @@ Page({
     regionVisible: false,
     regionPick: '',
     region: null,
+    // 定位经纬度 + 逆地址文本（获取定位 chooseLocation 回填）
+    latitude: null,
+    longitude: null,
     image: '',
     imageFiles: [],
     uploadGrid: { column: 3, width: 200, height: 200 },
@@ -274,7 +277,18 @@ Page({
       imageFiles = [{ url: p.image, status: 'done', type: 'image', name: '封面' }];
     }
 
-    this.setData({ form, roleIdx, condIdx, availIdx, region, regionPick, image, imageFiles });
+    this.setData({
+      form,
+      roleIdx,
+      condIdx,
+      availIdx,
+      region,
+      regionPick,
+      image,
+      imageFiles,
+      latitude: p.latitude != null ? Number(p.latitude) : null,
+      longitude: p.longitude != null ? Number(p.longitude) : null,
+    });
   },
 
   // 选岗位/店铺类型
@@ -319,6 +333,30 @@ Page({
   },
   onRegionClose() { this.setData({ regionVisible: false }); },
 
+  // 获取定位：wx.chooseLocation 打开地图选点 → 回填经纬度 + 地址文本(form.address)
+  onChooseLocation() {
+    wx.chooseLocation({
+      success: (res) => {
+        if (!res || res.latitude == null) return;
+        // 拼接展示文本：优先 name；加 address 补充
+        const name = (res.name || '').trim();
+        const addr = (res.address || '').trim();
+        const text = name ? (addr && addr.indexOf(name) < 0 ? `${addr} ${name}` : addr) : addr;
+        this.setData({
+          latitude: Number(res.latitude),
+          longitude: Number(res.longitude),
+          'form.address': text,
+        });
+      },
+      fail: (err) => {
+        // 用户取消 / 未授权定位
+        const msg = (err && err.errMsg) || '';
+        if (msg.indexOf('cancel') >= 0) return;
+        wx.showToast({ title: '需授权定位才能选位置', icon: 'none' });
+      },
+    });
+  },
+
   // 图片上传
   onUploadSuccess(e) {
     const files = (e && e.detail && e.detail.files) || [];
@@ -347,7 +385,7 @@ Page({
   // 校验并提交
   onSubmit() {
     if (this.data.submitting) return;
-    const { cfg, form, region, image, roleIdx, condIdx, availIdx } = this.data;
+    const { cfg, form, region, image, latitude, longitude, roleIdx, condIdx, availIdx } = this.data;
     if (!cfg) return;
 
     // 必填：有 role 的分类必须选类型
@@ -370,6 +408,14 @@ Page({
       wx.showToast({ title: '请填写具体描述', icon: 'none' });
       return;
     }
+    // 必填数字字段校验（如转让的月租金/面积/日营业额）
+    const requiredMiss = (cfg.optional || []).find(
+      (o) => o.required && !String(form[o.key] == null ? '' : form[o.key]).replace(/\D/g, '')
+    );
+    if (requiredMiss) {
+      wx.showToast({ title: `请填写${requiredMiss.label}`, icon: 'none' });
+      return;
+    }
     // 成色类(设备)必选
     const isEquip = cfg.dataType === 'equip_sell' || cfg.dataType === 'equip_buy';
     if (isEquip && condIdx < 0) {
@@ -389,6 +435,8 @@ Page({
       district: region.district,
       district_code: region.district_code,
       address: String(form.address || '').trim(),
+      latitude: latitude != null ? Number(latitude) : null,
+      longitude: longitude != null ? Number(longitude) : null,
       desc,
       phone,
       contact: String(form.contact || '').trim(),
@@ -443,6 +491,8 @@ Page({
         district: payloadForm.district,
         district_code: payloadForm.district_code,
         address: payloadForm.address,
+        latitude: payloadForm.latitude,
+        longitude: payloadForm.longitude,
         raw_text: payloadForm.desc,
         phone: payloadForm.phone,
         contact: payloadForm.contact,

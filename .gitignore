@@ -11,3 +11,21 @@ Thumbs.db
 
 # 日志
 *.log
+
+# 环境变量 / 密钥（含 DeepSeek API Key，勿提交）
+.env
+.env.local
+*.env.local
+
+# 数据迁移脚本中间产物（含手机号等敏感数据 + 大文件，勿提交）
+tools/import-legacy-posts/output/
+cloudfunctions/importLegacy/data.js
+
+# TDesign 组件库备份副本（miniprogram_npm 的旧版备份，体积大且是依赖副本，勿提交）
+miniprogram/miniprogram_npm_bak_1.9.5/
+
+# 后台管理构建产物
+admin/baoziadmin.zip
+
+# 本地密钥/接口连通性检查的临时产物（可能含密钥片段，勿提交）
+admin/check_*.txt

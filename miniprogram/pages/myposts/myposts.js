@@ -128,9 +128,14 @@ Page({
   onEdit(e) {
     const { id, type } = e.currentTarget.dataset;
     if (!id) return;
-    // 招工走独立发布页；其余走通用发布页（都带 id 进入编辑态）
+    // 招工走独立发布页 publish_recruit；顺风车两类走独立发布页 publish_carpool；
+    // 其余走通用发布页 publish（都带 id 进入编辑态）
     if (type === 'recruit') {
       wx.navigateTo({ url: `/pages/publish_recruit/publish_recruit?id=${id}` });
+      return;
+    }
+    if (type === 'carpool_car' || type === 'carpool_person') {
+      wx.navigateTo({ url: `/pages/publish_carpool/publish_carpool?id=${id}` });
       return;
     }
     wx.navigateTo({ url: `/pages/publish/publish?type=${type}&id=${id}` });

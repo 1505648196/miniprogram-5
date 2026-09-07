@@ -1,0 +1,14 @@
+{
+  "name": "payForPhone",
+  "version": "1.0.0",
+  "description": "查看完整电话付费下单/取号",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "wx-server-sdk": "latest"
+  }
+}

@@ -21,7 +21,7 @@
     wx:if="{{searching}}"
     class="feed-skeleton"
     theme="paragraph"
-    animation="flashed"
+    animation="gradient"
     row-col="{{skeletonRows}}"
   />
 

@@ -70,8 +70,10 @@
         value="{{form.phone}}" data-field="phone" bind:change="onInput" />
       <t-input label="联系人" placeholder="如 王老板（可空）"
         value="{{form.contact}}" data-field="contact" bind:change="onInput" />
-      <t-input label="详细地址" placeholder="街道/门店/楼栋（可空）"
-        value="{{form.address}}" data-field="address" bind:change="onInput" />
+      <!-- 获取定位：选点回填经纬度 + 地址文本 -->
+      <t-cell title="获取定位" arrow hover bind:click="onChooseLocation">
+        <text slot="note" class="{{form.address ? 'loc-val' : 'loc-ph'}}">{{form.address || '点击定位门店位置'}}</text>
+      </t-cell>
     </t-cell-group>
   </view>
 

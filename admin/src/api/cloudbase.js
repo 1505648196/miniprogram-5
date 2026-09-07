@@ -18,19 +18,20 @@ const PUBLISHABLE_KEY = import.meta.env.VITE_TCB_PUBLISHABLE_KEY || "";
 import { authStore } from "../stores/auth";
 
 /**
- * 调用云函数
+ * 底层：调用指定云函数
+ * @param {string} fnName 云函数名
  * @param {string} action 操作名
  * @param {object} payload 附加参数
- * @param {object} auth 登录凭证 {user, pass}
+ * @param {object} auth 登录凭证 {user, pass}（null=免鉴权，如 notifyMsg.send）
  */
-export async function callFunction(action, payload = {}, auth = null) {
+async function postTo(fnName, action, payload = {}, auth = null) {
   const body = { action, ...payload };
   if (auth) {
     body.user = auth.user;
     body.pass = auth.pass;
   }
 
-  const url = `https://${ENV_ID}.api.tcloudbasegateway.com/v1/functions/${FN_NAME}`;
+  const url = `https://${ENV_ID}.api.tcloudbasegateway.com/v1/functions/${fnName}`;
 
   const headers = { "Content-Type": "application/json" };
   if (PUBLISHABLE_KEY) {
@@ -62,6 +63,16 @@ export async function callFunction(action, payload = {}, auth = null) {
     throw new Error(result.message || "操作失败");
   }
   return result || {};
+}
+
+/** 调用后台云函数 adminAuth（带鉴权） */
+export async function callFunction(action, payload = {}, auth = null) {
+  return postTo(FN_NAME, action, payload, auth);
+}
+
+/** 调用任意云函数（免鉴权，如 notifyMsg.send 公告/通知推送） */
+export async function callAny(fnName, action, payload = {}) {
+  return postTo(fnName, action, payload, null);
 }
 
 // ---------- 业务封装 ----------
@@ -99,4 +110,57 @@ export function deletePost(_id, auth) {
 /** 审核 */
 export function auditPost(_id, note, auth) {
   return callFunction("audit", { _id, note }, auth);
+}
+
+// ---------- 用户 / 会员（§2.4 / §2.5）----------
+
+/** 用户列表（分页 + 关键词 + 会员筛选） */
+export function listUsers(params = {}) {
+  return callFunction("users", params, authStore.getAuth());
+}
+
+/** 封禁 / 解封用户 */
+export function banUser(_id, banned) {
+  return callFunction("user_ban", { _id, banned }, authStore.getAuth());
+}
+
+/** 会员开通/取消/续期 */
+export function setMember(_id, op, plan) {
+  return callFunction("member", { _id, op, plan }, authStore.getAuth());
+}
+
+// ---------- 置顶（§2.6）----------
+
+/** 置顶列表 */
+export function listTops(params = {}) {
+  return callFunction("list_tops", params, authStore.getAuth());
+}
+
+/** 设置置顶 */
+export function setTop(post_id, data) {
+  return callFunction("top", { op: "set", post_id, ...data }, authStore.getAuth());
+}
+
+/** 取消置顶 */
+export function cancelTop(post_id) {
+  return callFunction("top", { op: "cancel", post_id }, authStore.getAuth());
+}
+
+// ---------- 公告（§2.3）：notifyMsg.send 免鉴权 ----------
+
+/** 全量公告（type=global）或定向通知（review/member） */
+export function sendNotice(type, title, content, to_openid = "", post_id = "") {
+  return callAny("notifyMsg", "send", { type, title, content, to_openid, post_id });
+}
+
+// ---------- 看板 / 日志（§3 / §2.8）----------
+
+/** 运营看板指标 */
+export function getStats() {
+  return callFunction("stats", {}, authStore.getAuth());
+}
+
+/** 操作日志 */
+export function getLogs(params = {}) {
+  return callFunction("logs", params, authStore.getAuth());
 }

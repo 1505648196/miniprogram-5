@@ -1,0 +1,9 @@
+{
+  "usingComponents": {
+    "t-skeleton": "tdesign-miniprogram/skeleton/skeleton",
+    "t-empty": "tdesign-miniprogram/empty/empty",
+    "t-button": "tdesign-miniprogram/button/button"
+  },
+  "navigationBarTitleText": "付款记录",
+  "enablePullDownRefresh": true
+}

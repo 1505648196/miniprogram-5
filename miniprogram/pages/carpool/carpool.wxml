@@ -48,7 +48,7 @@
       wx:if="{{loading}}"
       class="feed-skeleton"
       theme="paragraph"
-      animation="flashed"
+      animation="gradient"
       row-col="{{skeletonRows}}"
     />
     <view class="goods-empty" wx:elif="{{!goodsLeft.length && !goodsRight.length}}">
@@ -57,11 +57,12 @@
 
     <view class="goods" wx:else>
       <view class="goods-col">
-        <view class="goods-card"
+        <view class="goods-card {{item.isTop ? 'goods-card-top' : ''}}"
               wx:for="{{goodsLeft}}" wx:key="id"
               data-id="{{item.id}}" bindtap="onTap">
-          <!-- 顶部：类型徽章 + 时间 -->
+          <!-- 顶部：置顶徽章 + 类型徽章 + 时间 -->
           <view class="cp-head">
+            <image wx:if="{{item.isTop}}" class="goods-top-img" src="/static/badge-top.png" mode="heightFix" />
             <text class="cp-type" style="background:{{item.color}};">{{item.typeName}}</text>
             <text class="cp-ago">{{item.meta}}</text>
           </view>
@@ -94,10 +95,11 @@
       </view>
 
       <view class="goods-col">
-        <view class="goods-card"
+        <view class="goods-card {{item.isTop ? 'goods-card-top' : ''}}"
               wx:for="{{goodsRight}}" wx:key="id"
               data-id="{{item.id}}" bindtap="onTap">
           <view class="cp-head">
+            <image wx:if="{{item.isTop}}" class="goods-top-img" src="/static/badge-top.png" mode="heightFix" />
             <text class="cp-type" style="background:{{item.color}};">{{item.typeName}}</text>
             <text class="cp-ago">{{item.meta}}</text>
           </view>
@@ -133,5 +135,11 @@
 
   <!-- 底部导航 -->
   <comp-tabbar current="home" />
+
+  <!-- 发布顺风车：右下角悬浮按钮 -->
+  <view class="pub-fab" bindtap="onPublish">
+    <t-icon name="add" size="44rpx" color="#1A1A1A" ariaHidden="{{true}}" />
+    <text class="pub-fab-txt">发布</text>
+  </view>
 
 </view>

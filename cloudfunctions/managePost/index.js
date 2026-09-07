@@ -10,6 +10,7 @@ const { checkText } = require("./secCheck.js");
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
+const _ = db.command; // 数据库操作符（_.inc 等）；此前缺失导致浏览量上报静默失败
 const COLLECTION = "baozi_posts";
 
 // 表单能表达的字段白名单：编辑只允许改这些，其余字段（boss_style/source/published_at 等）原样保留
@@ -23,6 +24,8 @@ const EDITABLE = [
   "terms", "rent_max", "area_min",
   // 二手设备 专属可编辑字段
   "cond",
+  // 顺风车(carpool_car/carpool_person) 专属可编辑字段
+  "from_place", "to_place", "depart_time", "depart_deadline", "seats",
   "province", "city", "district",
   "province_code", "city_code", "district_code",
   "address", "latitude", "longitude",
@@ -34,7 +37,7 @@ const LIST_KEYS = [
   "_id", "data_type", "role", "role_id", "province", "city", "district",
   "province_code", "city_code", "district_code",
   "salary", "contact", "phone_masked", "username", "credit",
-  "raw_text", "tags", "published_at", "needs_review", "sec_status", "sec_label",
+  "raw_text", "tags", "published_at", "needs_review", "approved", "sec_status", "sec_label",
   // 求职专属字段
   "salary_expect", "salary_note", "availability", "want_terms", "service_area",
   // 转让/求店专属字段
@@ -46,6 +49,8 @@ const LIST_KEYS = [
   "from_place", "to_place", "depart_time", "depart_deadline", "seats",
   // 地址定位 / 图片 / 时间
   "address", "latitude", "longitude", "image", "created_at", "updated_at",
+  // 浏览点击量
+  "views",
 ];
 
 function ok(data = {}) { return { success: true, ...data }; }
@@ -107,9 +112,10 @@ exports.main = async (event) => {
     switch (action) {
       case "list_mine": return await actionListMine(openid);
       case "get": return await actionGet(openid, event);
-      case "detail": return await actionDetail(event);
+      case "detail": return await actionDetail(openid, event);
       case "update": return await actionUpdate(openid, event);
       case "delete": return await actionDelete(openid, event);
+      case "view": return await actionView(event);
       default: return fail("未知操作: " + action, "UNKNOWN_ACTION");
     }
   } catch (e) {
@@ -140,16 +146,20 @@ async function actionGet(openid, event) {
 // 公开详情(兜底)：任何人可查一条"已过审/非待审"帖子的详情。
 // 与 feedPosts 白名单对齐(含求职专属字段/图片/地址)，用于详情页在
 // "列表缓存未命中"(如从分享/收藏直达)时按 _id 二次查库；正常列表点进来走缓存、零额外请求。
-async function actionDetail(event) {
+// 附 isMine(是否本人帖子)，供详情页对本人展示"编辑/删除"。
+async function actionDetail(openid, event) {
   if (!event._id) return fail("缺少 _id", "MISSING_ID");
   const res = await db.collection(COLLECTION).doc(event._id).get();
   const d = res.data;
   if (!d) return fail("帖子不存在或已被删除", "NOT_FOUND");
-  if (d.needs_review === true || d.needs_review === "true") {
+  // 审核权威字段已切换为 approved（true=已通过）。老数据可能缺 approved，回退 needs_review 兜底。
+  if (d.approved === false || d.approved === "false" || d.needs_review === true || d.needs_review === "true") {
     return fail("帖子审核中或未通过", "FORBIDDEN");
   }
-  // 仅下发展示所需字段，脱敏，不泄露完整 phone / _openid
-  return ok({ item: stripPrivate(d) });
+  // 仅下发展示所需字段，脱敏，不泄露完整 phone / _openid；附是否本人
+  const item = stripPrivate(d);
+  item.isMine = !!openid && d._openid === openid;
+  return ok({ item });
 }
 
 async function actionUpdate(openid, event) {
@@ -181,6 +191,7 @@ async function actionUpdate(openid, event) {
   if (content) {
     const sec = await checkText(content, openid);
     patch.needs_review = sec.suggest === "pass" ? false : true;
+    patch.approved = !patch.needs_review; // 结果型别名：通过=true，待审=false
     patch.sec_status = sec.suggest;
     if (sec.label) patch.sec_label = sec.label;
     patch.sec_checked_at = sec.checkedAt;
@@ -206,6 +217,21 @@ async function actionDelete(openid, event) {
   if (!d) return fail("无权删除或帖子不存在", "FORBIDDEN");
   await db.collection(COLLECTION).doc(event._id).remove();
   return ok({ deleted: 1 });
+}
+
+// 浏览点击量 +1（原子自增）。任何登录用户浏览帖子详情时调用。
+// 防重复计数由前端节流（同一帖子 10 秒内不重复上报），此处不做去重。
+async function actionView(event) {
+  if (!event._id) return fail("缺少 _id", "MISSING_ID");
+  try {
+    await db.collection(COLLECTION).doc(event._id).update({
+      data: { views: _.inc(1) },
+    });
+    return ok({ viewed: 1 });
+  } catch (e) {
+    // 帖子不存在等：不视为失败，静默返回（避免浏览上报报错影响体验）
+    return ok({ viewed: 0 });
+  }
 }
 
 function stripPrivate(p) {

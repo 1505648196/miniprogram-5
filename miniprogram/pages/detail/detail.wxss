@@ -231,3 +231,23 @@
 .footer-actions .contact-btn {
   flex: 1;
 }
+
+/* ============ 本人帖子：编辑 / 删除 按钮 ============ */
+.edit-btn {
+  flex: 1;
+  --td-button-primary-bg-color: #FFE60A;
+  --td-button-primary-border-color: #FFE60A;
+  --td-button-primary-color: #1A1A1A;
+  --td-button-primary-active-bg-color: #F5D800;
+  --td-button-primary-active-border-color: #F5D800;
+  --td-button-font-size: 30rpx;
+}
+.del-btn {
+  flex: 1;
+  --td-button-font-size: 30rpx;
+  --td-button-danger-color: #E34D59;
+  --td-button-danger-border-color: #E34D59;
+  --td-button-danger-active-bg-color: #FBE4E6;
+  --td-button-danger-active-border-color: #E34D59;
+  --td-button-danger-active-color: #C43A46;
+}

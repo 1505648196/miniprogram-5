@@ -1,0 +1,111 @@
+<!-- pages/publish_carpool/publish_carpool.wxml -->
+<!-- 包子行业信息平台 · 发布顺风车 —— TDesign(tdesign-miniprogram) -->
+<view class="page">
+
+  <!-- 类别：车找人 / 人找车 单选 -->
+  <view class="sec">
+    <view class="sec-title">1. 选择类型</view>
+    <view class="cat-list">
+      <view
+        wx:for="{{categories}}" wx:key="dataType"
+        class="cat-item {{catIdx === index ? 'is-on' : ''}}"
+        data-idx="{{index}}" bindtap="onCatTap"
+      >
+        <view class="cat-emoji">{{item.emoji}}</view>
+        <view class="cat-name">{{item.name}}</view>
+        <view class="cat-desc">{{item.desc}}</view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 路线与时间 -->
+  <view class="sec">
+    <view class="sec-title">2. 路线与时间</view>
+    <t-cell-group theme="card">
+      <t-input label="出发地" placeholder="如 广州白云" maxlength="30"
+        value="{{form.from_place}}" data-field="from_place" bind:change="onInput" />
+      <t-input label="目的地" placeholder="如 深圳罗湖" maxlength="30"
+        value="{{form.to_place}}" data-field="to_place" bind:change="onInput" />
+      <t-input label="出发时间" placeholder="如 明天 8:00（可空）" maxlength="30"
+        value="{{form.depart_time}}" data-field="depart_time" bind:change="onInput" />
+      <t-input label="最晚出发" placeholder="如 明早 8:30（可空）" maxlength="30"
+        value="{{form.depart_deadline}}" data-field="depart_deadline" bind:change="onInput" />
+      <t-input label="可乘人数" placeholder="车找人=剩几座 / 人找车=几人（可空）" type="number" maxlength="2"
+        value="{{form.seats}}" data-field="seats" data-num="1" bind:change="onInput" />
+    </t-cell-group>
+  </view>
+
+  <!-- 所在城市归属 + 地址 -->
+  <view class="sec">
+    <view class="sec-title">3. 所在地区</view>
+    <t-cell-group theme="card">
+      <t-cell title="所在城市" arrow hover bind:click="openRegion">
+        <text slot="note" class="{{regionPick ? 'cell-val' : 'cell-ph'}}">{{regionPick || '请选择省市区'}}</text>
+      </t-cell>
+      <t-input label="详细地址" placeholder="集合点 / 出发地详细位置（可空）"
+        value="{{form.address}}" data-field="address" bind:change="onInput" />
+    </t-cell-group>
+  </view>
+
+  <!-- 联系方式 -->
+  <view class="sec">
+    <view class="sec-title">4. 联系方式</view>
+    <t-cell-group theme="card">
+      <t-input label="手机号" placeholder="11 位手机号" type="number" maxlength="11"
+        value="{{form.phone}}" data-field="phone" bind:change="onInput" />
+      <t-input label="联系人" placeholder="如 张师傅（可空）"
+        value="{{form.contact}}" data-field="contact" bind:change="onInput" />
+    </t-cell-group>
+  </view>
+
+  <!-- 描述 -->
+  <view class="sec">
+    <view class="sec-title">5. 具体描述</view>
+    <view class="desc-box">
+      <t-textarea
+        value="{{form.desc}}" data-field="desc" bind:change="onInput"
+        placeholder="如：车找人，广州白云→深圳罗湖，明早8点出发，还有2个空位，平摊油费高速费，可带行李…"
+        maxlength="500"
+      />
+    </view>
+  </view>
+
+  <!-- 图片(选填) -->
+  <view class="sec">
+    <view class="sec-title">6. 图片（选填，最多 1 张）</view>
+    <t-upload
+      files="{{imageFiles}}"
+      max="{{1}}"
+      media-type="{{['image']}}"
+      add-content="{{'slot'}}"
+      grid-config="{{uploadGrid}}"
+      bind:success="onUploadSuccess"
+      bind:remove="onUploadRemove"
+      t-class="upload-box"
+    >
+      <view slot="add-content" class="upload-add">＋<text class="upload-add-txt">添加图片</text></view>
+    </t-upload>
+    <view class="upload-tip">建议上传车辆 / 路线实拍，提升信息可信度</view>
+  </view>
+
+  <!-- 提交 -->
+  <view class="submit-bar">
+    <t-button theme="primary" block="{{true}}" loading="{{submitting}}" bind:tap="onSubmit">
+      {{isEdit ? '确认修改' : '确认发布'}}
+    </t-button>
+    <view class="submit-tip">发布需经内容安全审核，违规信息将被拦截</view>
+  </view>
+
+  <!-- 省市区选择弹层 -->
+  <t-cascader
+    visible="{{regionVisible}}"
+    title="选择所在城市"
+    options="{{regionOptions}}"
+    theme="tab"
+    filterable="{{true}}"
+    filter-placeholder="搜索"
+    bind:change="onRegionChange"
+    bind:close="onRegionClose"
+  />
+
+</view>

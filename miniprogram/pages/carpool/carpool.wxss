@@ -146,10 +146,21 @@
   display: flex;
   flex-direction: column;
 }
+/* 置顶卡片：金色边框高亮 */
+.goods-card-top {
+  border: 2rpx solid #FFC300;
+  box-shadow: 0 2rpx 12rpx rgba(255, 195, 0, 0.35);
+}
+/* 置顶图片徽章（在 cp-head 内与类型徽章并排对齐） */
+.goods-top-img {
+  display: block;
+  height: 50rpx;
+  width: auto;
+  flex-shrink: 0;
+}
 .cp-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8rpx;
 }
 .cp-type {
@@ -164,6 +175,7 @@
   font-size: 20rpx;
   color: #999999;
   flex-shrink: 0;
+  margin-left: auto;
 }
 .cp-route {
   display: flex;
@@ -263,4 +275,25 @@
 .feed-end-text {
   font-size: 22rpx;
   color: #cccccc;
+}
+
+/* 发布顺风车：右下角悬浮按钮 */
+.pub-fab {
+  position: fixed;
+  right: 32rpx;
+  bottom: calc(140rpx + env(safe-area-inset-bottom));
+  z-index: 50;
+  background: #FFE60A;
+  box-shadow: 0 6rpx 20rpx rgba(255, 230, 10, 0.45);
+  border-radius: 48rpx;
+  display: flex;
+  align-items: center;
+  gap: 4rpx;
+  padding: 0 28rpx;
+  height: 88rpx;
+}
+.pub-fab-txt {
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #1A1A1A;
 }

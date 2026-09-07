@@ -31,6 +31,31 @@ const router = createRouter({
       name: "create",
       component: () => import("../views/PostCreate.vue"),
     },
+    {
+      path: "/tops",
+      name: "tops",
+      component: () => import("../views/TopManage.vue"),
+    },
+    {
+      path: "/notice",
+      name: "notice",
+      component: () => import("../views/NoticeManage.vue"),
+    },
+    {
+      path: "/users",
+      name: "users",
+      component: () => import("../views/UserList.vue"),
+    },
+    {
+      path: "/stats",
+      name: "stats",
+      component: () => import("../views/Dashboard.vue"),
+    },
+    {
+      path: "/logs",
+      name: "logs",
+      component: () => import("../views/Logs.vue"),
+    },
   ],
 });
 

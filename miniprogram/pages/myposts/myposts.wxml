@@ -7,7 +7,7 @@
     wx:if="{{loading}}"
     class="list-skeleton"
     theme="paragraph"
-    animation="flashed"
+    animation="gradient"
     row-col="{{skeletonRows}}"
   />
 

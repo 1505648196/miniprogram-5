@@ -169,8 +169,10 @@ Page({
     });
   },
 
-  fetchFeed(dataType, page) {
-    const data = { dataType, page: page || 1, pageSize: this.data.pageSize || 20 };
+  // 批量模式：一次云函数调用拉多个类型(各取当前页)，等价旧「多类型并发各查一次再拼接」，
+  // 但把云函数调用从 N 次降为 1 次。types: 字符串数组；同城 city_code 由 _nearbyCode 注入。
+  fetchFeed(types, page) {
+    const data = { types, page: page || 1, pageSize: this.data.pageSize || 20 };
     if (this._nearbyCode) data.city_code = this._nearbyCode;
     return wx.cloud
       .callFunction({
@@ -184,17 +186,14 @@ Page({
         return null;
       })
       .catch((err) => {
-        console.error('[nearby] feedPosts 调用失败:', dataType, err && err.errMsg);
+        console.error('[nearby] feedPosts 调用失败:', types, err && err.errMsg);
         return null;
       });
   },
 
-  // 全板块各拉一页(带 city_code) → 按时间合并
+  // 全板块一次批量(带 city_code) → 返回 list 由云端按时间 desc 逐类取后扁平合并
   async fetchAllTypes(page) {
-    const results = await Promise.all(ALL_TYPES.map((t) => this.fetchFeed(t, page)));
-    const list = results.filter(Boolean).reduce((a, b) => a.concat(b.list || []), []);
-    const hasMore = results.some((r) => r && r.hasMore);
-    return { list, hasMore };
+    return this.fetchFeed(ALL_TYPES, page);
   },
 
   async loadFeed() {
@@ -202,7 +201,7 @@ Page({
     const res = await this.fetchAllTypes(1);
     const real = res.list || [];
     this.cacheDetails(real);
-    this._all = real.map((p) => this.decorate(p)).sort((a, b) => b.ts - a.ts);
+    this._all = real.map((p) => this.decorate(p)).sort((a, b) => (b.isTop - a.isTop) || (b.ts - a.ts));
     this.setData({ loading: false, firstLoaded: true, page: 1, hasMore: !!res.hasMore });
     this.renderList();
   },
@@ -216,7 +215,7 @@ Page({
     this.cacheDetails(real);
     this._all = this._all
       .concat(real.map((p) => this.decorate(p)))
-      .sort((a, b) => b.ts - a.ts);
+      .sort((a, b) => (b.isTop - a.isTop) || (b.ts - a.ts));
     this.setData({ page: nextPage, hasMore: !!res.hasMore, loadingMore: false });
     this.renderList();
   },
@@ -261,6 +260,7 @@ Page({
       meta: `${loc || '未知地区'} · ${fmtAgo(p.published_at)}`,
       tags,
       ts: p.published_at || 0,
+      isTop: !!p.isTop,
     };
   },
 

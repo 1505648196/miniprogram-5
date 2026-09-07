@@ -47,25 +47,6 @@ function visibleCond(openid) {
   ]);
 }
 
-// 分页遍历当前用户全部可见通知（避免 get 默认 100 上限）
-async function fetchVisible(openid, pageSize = 100) {
-  const coll = db.collection(COLLECTION);
-  const query = visibleCond(openid);
-  const countRes = await coll.where(query).count();
-  const total = countRes.total;
-  const out = [];
-  for (let skip = 0; skip < total; skip += pageSize) {
-    const res = await coll
-      .where(query)
-      .orderBy("created_at", "desc")
-      .skip(skip)
-      .limit(pageSize)
-      .get();
-    out.push(...(res.data || []));
-  }
-  return { list: out, total };
-}
-
 // 分页拉可见通知：global(to_openid 为空) 或 to_openid==自己，按 created_at 倒序
 // 每条附 isRead = openid ∈ read_by
 async function actionList(openid, event) {
@@ -96,13 +77,11 @@ async function actionList(openid, event) {
     };
   });
 
-  // 未读数 = 可见且未读（全量遍历）
-  const all = await fetchVisible(openid);
-  let unread = 0;
-  (all.list || []).forEach((m) => {
-    const readBy = Array.isArray(m.read_by) ? m.read_by : [];
-    if (readBy.indexOf(openid) < 0) unread += 1;
-  });
+  // 未读数 = 可见总数(total) − 已读条数。只用一次 count，不遍历全表。
+  // 用 _.all 判断 read_by 数组含 openid：对 read_by 字段缺失的旧数据不会误判为已读，
+  // 缺失即"未读"→ 自然落入 total−read 的差值，语义与原实现一致。
+  const readRes = await coll.where(_.and([visibleCond(openid), { read_by: _.all([openid]) }])).count();
+  const unread = Math.max(total - readRes.total, 0);
 
   return ok({ list, total, page, pageSize, unread, hasMore: page * pageSize < total });
 }
@@ -112,17 +91,25 @@ async function actionRead(openid, event) {
   const coll = db.collection(COLLECTION);
 
   if (event.all) {
-    const all = await fetchVisible(openid);
+    // 批量标记已读，替代原「逐条串行 doc.update」→ N 条未读 = N 次写库放大。
+    // 分两段批量，避免对"字段缺失"用 _.push 的潜在不确定性：
+    //   段①  read_by 字段存在(数组)且未含我 → 用 _.push 追加（字段必存在，push 安全，且不覆盖其他已读用户）
+    //   段②  read_by 字段缺失的历史脏数据 → 用整体赋值 read_by:[openid]（本无字段，直接建，不会丢他人已读）
+    // 正常消息由 actionSend 创建时恒写 read_by:[]，故段①覆盖绝大多数、段②几乎不触发。
     let marked = 0;
-    for (let i = 0; i < all.list.length; i += 1) {
-      const m = all.list[i];
-      const readBy = Array.isArray(m.read_by) ? m.read_by : [];
-      if (readBy.indexOf(openid) < 0) {
-        readBy.push(openid);
-        await coll.doc(m._id).update({ data: { read_by: readBy, updated_at: Date.now() } });
-        marked += 1;
-      }
-    }
+
+    const pushRes = await coll
+      // 段① 仅命中 read_by 字段存在 且 未含我 的数组（_.exists(true) 排除缺失字段，
+      // 避免对缺失字段执行 _.push 的潜在不确定性；缺失字段留给段②整体赋值）
+      .where(_.and([visibleCond(openid), { read_by: _.exists(true) }, { read_by: _.nin([openid]) }]))
+      .update({ data: { read_by: _.push([openid]), updated_at: Date.now() } });
+    marked += pushRes.stats ? pushRes.stats.updated : (pushRes.updated || 0);
+
+    const missingRes = await coll
+      .where(_.and([visibleCond(openid), { read_by: _.exists(false) }]))
+      .update({ data: { read_by: [openid], updated_at: Date.now() } });
+    marked += missingRes.stats ? missingRes.stats.updated : (missingRes.updated || 0);
+
     return ok({ marked });
   }
 

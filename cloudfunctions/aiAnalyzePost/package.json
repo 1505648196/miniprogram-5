@@ -1,0 +1,14 @@
+{
+  "name": "aiAnalyzePost",
+  "version": "1.0.0",
+  "description": "用 DeepSeek 从帖子摘要抽取结构化字段，只补空字段",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

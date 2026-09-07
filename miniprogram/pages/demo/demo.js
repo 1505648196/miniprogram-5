@@ -10,6 +10,7 @@ const PUBLISH_TYPES = [
   { id: 'want_shop',  name: '求店',     emoji: '🔎', image: '', bg: '#E6FFFB', color: '#36CFC9', light: '#E6FFFB' },
   { id: 'jobseek',    name: '求职',     emoji: '🙋', image: '', bg: '#F9F0FF', color: '#9254DE', light: '#F9F0FF' },
   { id: 'equip_buy',  name: '设备求购', emoji: '🧰', image: '', bg: '#F6FFED', color: '#73D13D', light: '#F6FFED' },
+  { id: 'carpool',    name: '顺风车',   emoji: '🚗', image: '', bg: '#E6FFFB', color: '#36CFC9', light: '#E6FFFB' },
   { id: 'other',      name: '其他',     emoji: '📦', image: '', bg: '#FAFAFA', color: '#8C8C8C', light: '#FAFAFA' },
 ];
 
@@ -187,13 +188,14 @@ Page({
   onLoad() {
     this._all = [];
     this._nearbyCode = '';
+    // 只拉 feed。会员状态/未读数放 onShow 拉，避免首次进入时
+    // onLoad+onShow 先后触发导致 vip/unread 各请求两遍。
     this.loadFeed();
-    this.loadVipStatus();
-    this.refreshUnread();
   },
 
   onShow() {
-    // 回到首页刷新会员状态（底部"我的"图标）+ 未读消息数（消息 tab 红点）
+    // 首次进入紧随 onLoad 触发、从其他页/切 tab 返回也触发：
+    // 在此刷新会员状态（底部"我的"图标）+ 未读消息数（消息 tab 红点）。
     this.loadVipStatus();
     this.refreshUnread();
   },
@@ -230,19 +232,21 @@ Page({
     this.loadMore();
   },
 
-  fetchFeed(dataType, page, cityCode) {
-    const data = { dataType, page: page || 1, pageSize: this.data.pageSize || 20 };
+  // 批量模式：一次云函数调用拉多个类型(各取当前页)，等价旧「多类型并发各查一次再拼接」，
+  // 但把云函数调用从 N 次降为 1 次。types: 字符串数组；page/cityCode 同单类型语义。
+  fetchBatch(types, page, cityCode) {
+    const data = { types, page: page || 1, pageSize: this.data.pageSize || 20 };
     if (cityCode) data.city_code = cityCode;
     return wx.cloud
       .callFunction({ name: 'feedPosts', data, config: { timeout: 10000 } })
       .then((res) => {
         const r = res.result || {};
         if (r.success) return { list: r.list || [], hasMore: !!r.hasMore };
-        console.error('[demo] feedPosts 返回失败:', r.error);
+        console.error('[demo] feedPosts 批量返回失败:', r.error);
         return null;
       })
       .catch((err) => {
-        console.error('[demo] feedPosts 调用失败:', dataType, err && err.errMsg);
+        console.error('[demo] feedPosts 批量调用失败:', types, err && err.errMsg);
         return null;
       });
   },
@@ -252,7 +256,7 @@ Page({
     const res = await this.fetchAllTypes(1);
     const real = res.list;
     this.cacheDetails(real);
-    this._all = real.map((p) => this.decorate(p)).sort((a, b) => b.ts - a.ts);
+    this._all = real.map((p) => this.decorate(p)).sort((a, b) => (b.isTop - a.isTop) || (b.ts - a.ts));
     this.setData({ loading: false, firstLoaded: true, page: 1, hasMore: res.hasMore });
     this.renderList();
   },
@@ -264,7 +268,7 @@ Page({
     const res = await this.fetchAllTypes(nextPage);
     const real = res.list;
     this.cacheDetails(real);
-    this._all = this._all.concat(real.map((p) => this.decorate(p))).sort((a, b) => b.ts - a.ts);
+    this._all = this._all.concat(real.map((p) => this.decorate(p))).sort((a, b) => (b.isTop - a.isTop) || (b.ts - a.ts));
     this.setData({ page: nextPage, hasMore: res.hasMore, loadingMore: false });
     this.renderList();
   },
@@ -287,10 +291,9 @@ Page({
     const TYPES = isRecruit
       ? ['recruit', 'jobseek']
       : ['transfer', 'want_shop', 'recruit', 'jobseek', 'equip_sell', 'equip_buy', 'other'];
-    const results = await Promise.all(TYPES.map((tp) => this.fetchFeed(tp, page, cityCode)));
-    const list = results.filter(Boolean).reduce((a, b) => a.concat(b.list || []), []);
-    const hasMore = results.some((r) => r && r.hasMore);
-    return { list, hasMore };
+    // 一次批量调用替代旧「多类型并发各查一次」，云端按 types 内部逐类取当前页再合并，
+    // 返回 list 结构与旧 Promise.all 拼接完全一致，hasMore 语义一致（任一类型还有即还有）。
+    return this.fetchBatch(TYPES, page, cityCode);
   },
 
   decorate(p) {
@@ -334,9 +337,10 @@ Page({
       light: meta.light,
       title,
       priceText,
-      meta: `${loc || '未知地区'} · ${fmtAgo(p.published_at)}`,
+      meta: `${loc || '未知地区'} · ${fmtAgo(p.published_at)}${Number(p.views) > 0 ? ' · ' + p.views + ' 浏览' : ''}`,
       tags,
       ts: p.published_at || 0,
+      isTop: !!p.isTop,
       faceTalk: /面议|查看详情/.test(priceText),
       rentLow: p.data_type === 'transfer' && tags.indexOf('低租金') >= 0,
     };
@@ -502,6 +506,7 @@ Page({
     this.setData({ publishSheetVisible: false });
     if (!type || !type.id) { wx.showToast({ title: '未识别到发布类型', icon: 'none' }); return; }
     if (type.id === 'recruit') { wx.navigateTo({ url: '/pages/publish_recruit/publish_recruit' }); return; }
+    if (type.id === 'carpool') { wx.navigateTo({ url: '/pages/publish_carpool/publish_carpool' }); return; }
     wx.navigateTo({ url: `/pages/publish/publish?type=${type.id}` });
   },
   sendTestSubscribe(type) {

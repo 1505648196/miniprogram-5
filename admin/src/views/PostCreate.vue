@@ -33,15 +33,43 @@ const router = useRouter();
 const message = useMessage();
 
 const saving = ref(false);
+// 字段口径：新版（见 docs/API-云函数对接文档.md §3）
 const form = ref({
   data_type: "",
-  city: "",
+  // 通用
   province: "",
+  city: "",
   district: "",
+  address: "",
+  phone: "",
+  contact: "",
+  // 角色
   role: "",
-  salary_low: null,
-  salary_high: null,
+  role_id: null,
+  // 招工 / 求职
+  salary: null,
+  salary_expect: null,
   salary_note: "",
+  availability: "",
+  service_area: "",
+  want_terms: [],
+  // 转让 / 求店 / 设备
+  price: null,
+  monthly_rent: null,
+  area_sqm: null,
+  daily_revenue: null,
+  has_equipment: false,
+  rent_max: null,
+  area_min: null,
+  cond: null,
+  terms: [],
+  // 顺风车
+  from_place: "",
+  to_place: "",
+  depart_time: "",
+  depart_deadline: "",
+  seats: null,
+  // 其他
   raw_text: "",
   source: "手工录入",
 });

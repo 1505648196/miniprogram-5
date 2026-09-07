@@ -121,7 +121,7 @@ Page({
     const r = await this.fetchFeed(extra);
     const list = (r && r.list) || [];
     const raw = list;
-    this._all = raw.map((p) => this.decorate(p)).sort((a, b) => b.ts - a.ts);
+    this._all = raw.map((p) => this.decorate(p)).sort((a, b) => (b.isTop - a.isTop) || (b.ts - a.ts));
     this.cacheDetails(raw);
     this.setData({ loading: false, firstLoaded: true, page: 1, hasMore: !!(r && r.hasMore) });
     this.renderList();
@@ -194,6 +194,7 @@ Page({
       seatsText,
       meta: `${fmtAgo(p.published_at)}`,
       ts: p.published_at || 0,
+      isTop: !!p.isTop,
       from,
       to,
       username: p.username || '',
@@ -242,8 +243,9 @@ Page({
     this.renderList();
   },
 
+  // 发布顺风车：进独立发布页(支持车找人/人找车)
   onPublish() {
-    wx.showToast({ title: '发布顺风车表单待接入', icon: 'none' });
+    wx.navigateTo({ url: '/pages/publish_carpool/publish_carpool' });
   },
 
   onTap(e) {

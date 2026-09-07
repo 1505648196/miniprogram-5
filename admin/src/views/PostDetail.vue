@@ -14,7 +14,13 @@
             <n-space align="center">
               <n-tag type="info">{{ typeLabel }}</n-tag>
               <n-tag :type="item.needs_review ? 'warning' : 'success'">
-                {{ item.needs_review ? "待审核" : "已审核" }}
+                {{ item.needs_review ? "待审核" : "已通过" }}
+              </n-tag>
+              <n-tag
+                v-if="item.sec_status && item.sec_status !== 'pass'"
+                type="error"
+              >
+                安全检测：{{ secLabel(item.sec_status) }}{{ item.sec_label ? `·${item.sec_label}` : "" }}
               </n-tag>
               <span class="summary">{{ summarize(item) }}</span>
             </n-space>
@@ -26,10 +32,22 @@
             <n-descriptions-item label="省份">{{ item.province || "-" }}</n-descriptions-item>
             <n-descriptions-item label="区县">{{ item.district || "-" }}</n-descriptions-item>
             <n-descriptions-item label="岗位/角色">{{ item.role || "-" }}</n-descriptions-item>
-            <n-descriptions-item label="薪资">{{ formatSalary(item) }}</n-descriptions-item>
+            <n-descriptions-item label="价格/薪资">{{ formatMoney(item) }}</n-descriptions-item>
             <n-descriptions-item label="电话">{{ item.phone || item.phone_masked || "-" }}</n-descriptions-item>
             <n-descriptions-item label="发布时间">{{ formatTime(item.published_at) }}</n-descriptions-item>
             <n-descriptions-item label="来源">{{ item.source || "-" }}</n-descriptions-item>
+            <n-descriptions-item label="安全检测">
+              {{ item.sec_status ? secLabel(item.sec_status) : "-" }}
+            </n-descriptions-item>
+            <n-descriptions-item label="命中标签">
+              {{ item.sec_label || "-" }}
+            </n-descriptions-item>
+            <n-descriptions-item label="人工审核">
+              {{ item.reviewed ? "已审核" : "未审核" }}
+            </n-descriptions-item>
+            <n-descriptions-item label="审核备注">
+              {{ item.review_note || "-" }}
+            </n-descriptions-item>
           </n-descriptions>
 
           <!-- 类型专属字段 -->
@@ -74,7 +92,7 @@ import { useRoute, useRouter } from "vue-router";
 import { useMessage, useDialog } from "naive-ui";
 import { getPost, auditPost, deletePost } from "../api/cloudbase";
 import { authStore } from "../stores/auth";
-import { DATA_TYPES, TYPE_FIELDS, formatSalary, formatTime, summarize } from "../utils/constants";
+import { DATA_TYPES, TYPE_FIELDS, formatMoney, formatTime, summarize } from "../utils/constants";
 
 const route = useRoute();
 const router = useRouter();
@@ -101,10 +119,24 @@ async function load() {
   }
 }
 
+/** 微信内容安全检测结果 → 中文 */
+function secLabel(status) {
+  const map = { pass: "通过", risky: "疑似违规", reject: "违规" };
+  return map[status] || status;
+}
+
 function displayField(f) {
   const v = item.value?.[f.field];
   if (v === undefined || v === null || v === "") return "-";
+  // 枚举下拉：显示中文标签
+  if (f.type === "select" && Array.isArray(f.options)) {
+    const hit = f.options.find((o) => o.value === v);
+    return hit ? hit.label : String(v);
+  }
+  // 开关
   if (f.type === "switch") return v ? "是" : "否";
+  // 字符串数组
+  if (Array.isArray(v)) return v.length ? v.join("、") : "-";
   return String(v);
 }
 

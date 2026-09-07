@@ -44,34 +44,46 @@ async function load() {
   try {
     const res = await getPost(route.params.id, authStore.getAuth());
     const item = res.item || {};
-    // 拆出可编辑字段
+    // 拆出可编辑字段（新版口径，见 docs/API-云函数对接文档.md §3）
     const editable = {
       data_type: item.data_type || "",
-      city: item.city || "",
+      // 通用
       province: item.province || "",
+      city: item.city || "",
       district: item.district || "",
-      role: item.role || "",
-      salary_low: item.salary_low ?? null,
-      salary_high: item.salary_high ?? null,
-      salary_note: item.salary_note || "",
-      rent: item.rent ?? null,
-      transfer_fee: item.transfer_fee ?? null,
-      turnover_low: item.turnover_low ?? null,
-      turnover_high: item.turnover_high ?? null,
-      area_m2: item.area_m2 ?? null,
-      is_franchise: !!item.is_franchise,
-      brand: item.brand || "",
-      budget: item.budget ?? null,
-      shop_type: item.shop_type || "",
-      equip_desc: item.equip_desc || "",
-      equip_price: item.equip_price ?? null,
-      equip_region: item.equip_region || "",
-      equip_budget: item.equip_budget ?? null,
+      address: item.address || "",
       phone: item.phone || "",
-      phone_masked: item.phone_masked || "",
+      contact: item.contact || item.username || "",
+      // 角色
+      role: item.role || "",
+      role_id: item.role_id ?? null,
+      // 招工 / 求职
+      salary: item.salary ?? null,
+      // 求职历史数据可能只存了 salary，回填到 salary_expect
+      salary_expect: item.salary_expect ?? (item.data_type === "jobseek" ? (item.salary ?? null) : null),
+      salary_note: item.salary_note || "",
+      availability: item.availability || "",
+      service_area: item.service_area || "",
+      want_terms: Array.isArray(item.want_terms) ? item.want_terms : [],
+      // 转让 / 求店 / 设备
+      price: item.price ?? null,
+      monthly_rent: item.monthly_rent ?? null,
+      area_sqm: item.area_sqm ?? null,
+      daily_revenue: item.daily_revenue ?? null,
+      has_equipment: !!item.has_equipment,
+      rent_max: item.rent_max ?? null,
+      area_min: item.area_min ?? null,
+      cond: item.cond ?? null,
+      terms: Array.isArray(item.terms) ? item.terms : [],
+      // 顺风车
+      from_place: item.from_place || "",
+      to_place: item.to_place || "",
+      depart_time: item.depart_time || "",
+      depart_deadline: item.depart_deadline || "",
+      seats: item.seats ?? null,
+      // 其他
       raw_text: item.raw_text || "",
       source: item.source || "",
-      remark: item.remark || "",
     };
     form.value = editable;
   } catch (e) {

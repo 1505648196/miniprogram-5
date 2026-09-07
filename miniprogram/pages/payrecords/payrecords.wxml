@@ -1,0 +1,45 @@
+<!-- pages/payrecords/payrecords.wxml -->
+<!-- 我的付款记录：查看付费(查看电话)的历史订单，点「查看信息」回看对应那条信息 -->
+<view class="page">
+
+  <!-- 加载骨架 -->
+  <t-skeleton
+    wx:if="{{loading}}"
+    class="list-skeleton"
+    theme="paragraph"
+    animation="gradient"
+    row-col="{{skeletonRows}}"
+  />
+
+  <!-- 空态 -->
+  <view class="empty-wrap" wx:elif="{{!list.length}}">
+    <t-empty icon="wallet" description="还没有付款记录">
+      <t-button slot="action" theme="primary" size="medium" bind:tap="goHome">去逛逛</t-button>
+    </t-empty>
+  </view>
+
+  <!-- 列表 -->
+  <view class="list" wx:else>
+    <view class="card" wx:for="{{list}}" wx:for-item="item" wx:key="post_id">
+      <view class="card-main" data-id="{{item.post_id}}" bindtap="onTap">
+        <view class="card-top">
+          <view class="card-left">
+            <text class="card-type">{{item.typeName}}</text>
+            <text class="card-region" wx:if="{{item.region}}">{{item.region}}</text>
+          </view>
+          <text class="card-fee">{{item.feeText}}</text>
+        </view>
+        <view class="card-title">{{item.title}}</view>
+        <view class="card-bottom">
+          <text class="card-time">{{item.timeText}}</text>
+          <t-button
+            theme="primary" size="small" variant="outline"
+            data-id="{{item.post_id}}"
+            catch:tap="onView"
+          >查看信息</t-button>
+        </view>
+      </view>
+    </view>
+  </view>
+
+</view>

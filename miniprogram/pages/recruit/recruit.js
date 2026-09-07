@@ -270,7 +270,7 @@ Page({
     // 只走真实数据库：云函数失败返回 null → 用空列表显示空态（不回退 mock）
     // 原始帖子对象(raw)缓存到详情池，供详情页复用；展示走 decorate。
     const raw = list;
-    this._all = raw.map((p) => this.decorate(p)).sort((a, b) => b.ts - a.ts);
+    this._all = raw.map((p) => this.decorate(p)).sort((a, b) => (b.isTop - a.isTop) || (b.ts - a.ts));
     this.cacheDetails(raw);
     this.setData({
       loading: false,
@@ -420,6 +420,7 @@ Page({
       tags,
       meta: `${loc || '未知地区'} · ${fmtAgo(p.published_at)}`,
       ts: p.published_at || 0,
+      isTop: !!p.isTop,
       faceTalk: /面议/.test(priceText),
       highPay: top >= HIGH_PAY,
       // 原始数值（用于工资筛选）

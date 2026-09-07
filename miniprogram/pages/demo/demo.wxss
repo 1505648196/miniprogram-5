@@ -86,13 +86,13 @@
 
 /* ============ 帖子流容器（模块 5 吸顶后独立全宽，帖子流在白底区内） ============ */
 .feed {
-  background: #FFFFFF;
+  /* background: #FFFFFF; */
   padding: 0 16rpx;
 }
 
 /* ============ 金刚位 8 宫格 ============ */
 .kk {
-  padding: 16rpx 0 8rpx;
+  padding: 0 0 8rpx;
   --td-grid-item-padding: 20rpx 0;
 }
 
@@ -214,6 +214,47 @@ background: #eae5e55e;
   position: relative;
 }
 
+/* 置顶卡片：闲鱼金色边框高亮 */
+.goods-card-top {
+  border: 2rpx solid #FFC300;
+  box-shadow: 0 2rpx 12rpx rgba(255, 195, 0, 0.35);
+}
+
+/* 标签条（默认：绝对定位到图片左上角） */
+.goods-badges {
+  position: absolute;
+  top: 12rpx;
+  left: 12rpx;
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+}
+
+/* 无图时：标签条改为卡片顶部的流式一行 */
+.goods-badges-top {
+  position: static;
+  padding: 12rpx 16rpx 0;
+}
+
+/* 标签条内单个标签 */
+.goods-badge {
+  display: inline-block;
+  padding: 4rpx 14rpx;
+  font-size: 20rpx;
+  line-height: 1.4;
+  color: #FFFFFF;
+  border-radius: 999rpx;
+  white-space: nowrap;
+}
+
+/* 「置顶」图片徽章：高度固定、宽度按原图比例自适应，与旁边类型标签垂直对齐 */
+.goods-badge-top-img {
+  display: block;
+  height: 50rpx;
+  width: auto;
+  flex-shrink: 0;
+}
+
 /* 无图时，地区·时间行内的业务类型高亮小标签（品牌色底 + 白字圆角） */
 .goods-meta-type {
   flex-shrink: 0;
@@ -231,6 +272,8 @@ background: #eae5e55e;
 .goods-img {
   position: relative;
   width: 100%;
+  max-height: 330rpx;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -241,10 +284,11 @@ background: #eae5e55e;
   line-height: 1;
 }
 
-/* 帖子图片：宽度撑满、高度按图片原比例自适应（widthFix），不同尺寸形成瀑布流错落 */
+/* 帖子图片：宽度撑满、高度按原比例自适应（widthFix）；超过容器 max-height 时上下对称裁剪，保留中间 */
 .goods-pic {
   width: 100%;
   display: block;
+  flex-shrink: 0;
 }
 
 .goods-type {

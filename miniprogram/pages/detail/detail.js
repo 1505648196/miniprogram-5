@@ -12,6 +12,7 @@
 //   - 正文/联系方式里识别出的脱敏号会汇总到"联系电话"单独一栏(phones)。
 
 const privacy = require('../../utils/privacy.js');
+const { callPayCommon, pickPayment } = require('../../utils/pay.js');
 
 const CREDIT_META = {
   1: { label: '信用优秀', color: '#FF7A45', bg: '#FFF1E8' },
@@ -47,13 +48,19 @@ Page({
     loadError: '',
     // 详情展示对象(decorateDetail 结果)
     d: null,
-    // 是否本人帖子(暂无"编辑/删除"入口，保留字段备用)
+    // 是否本人帖子(是则底部展示"编辑/删除")
     isMine: false,
+    // 删除确认
+    deleteDialogVisible: false,
+    deleting: false,
     // 当前帖子是否已被我收藏
     isFav: false,
     faving: false,
     contactText: '',   // 供复制/拨打的可复制联系方式文本
     canContact: false,
+    // 查看电话付费：revealedPhone=已付费后展示的完整号；paying=支付中防重复
+    revealedPhone: '',
+    paying: false,
     // 详情加载骨架屏：模拟 徽章+标题 → 封面图 → 关键信息行 → 描述 的垂直布局（纯 TDesign row-col）
     skeletonRows: [
       [{ width: '24%', height: '40rpx', type: 'rect' }],
@@ -335,6 +342,8 @@ Page({
       // 时间
       agoText: fmtAgo(p.published_at),
       publishedText: fmtDateTime(p.published_at),
+      // 浏览点击量
+      views: Number(p.views) || 0,
       // 图片(可选)
       image: p.image || '',
       // 联系电话栏：汇总的脱敏号（138****5678 形式，仅展示不泄露完整号）
@@ -354,11 +363,26 @@ Page({
       this.setData({ loading: false, loadError: '数据格式异常' });
       return;
     }
-    this.setData({ d, loading: false, loadError: '' });
+    this.setData({ d, isMine: !!rawItem.isMine, loading: false, loadError: '' });
     // 缓存未命中(走了兜底查库)时，顺手把原始对象写回缓存，供下次重复看零请求
     this.backfillCache(rawItem);
     // 判断当前帖子是否已被我收藏
     this.checkFav(rawItem._id);
+    // 浏览量 +1（前端节流：同一帖子 10 秒内不重复上报）
+    this.reportView(rawItem._id);
+  },
+
+  // 浏览量上报：进详情页 +1，10 秒内同一帖子不重复
+  reportView(id) {
+    if (!id) return;
+    const now = Date.now();
+    const last = wx.getStorageSync('last_view_ts') || {};
+    if (last[id] && now - last[id] < 10000) return; // 10 秒内不重复
+    last[id] = now;
+    wx.setStorageSync('last_view_ts', last);
+    wx.cloud
+      .callFunction({ name: 'managePost', data: { action: 'view', _id: id }, config: { timeout: 10000 } })
+      .catch(() => {});
   },
 
   // 查询当前帖子是否已收藏
@@ -417,16 +441,159 @@ Page({
     }
   },
 
-  // 底部"查看联系方式"按钮：当前占位，提示开发中，不提供复制。
-  // 后续接会员/付费逻辑时：校验通过后展示完整联系方式并开放复制/拨号。
+  // 底部"查看联系方式"按钮：付费后展示完整联系方式（与"查看电话"同一流程）
   onViewContact() {
-    wx.showToast({ title: '查看联系方式功能开发中', icon: 'none' });
+    this.payForContact();
   },
 
-  // 顶部"查看电话"按钮：当前占位，提示开发中。
-  // 后续接入付费查看完整号时：改成调用支付/会员校验接口，
-  // 校验通过后从云端拿完整 phone(目前不下发)并展示/拨号。
+  // 顶部"查看电话"按钮：付费 1 分钱查看完整手机号
   onRevealPhone() {
-    wx.showToast({ title: '查看完整电话功能开发中', icon: 'none' });
+    this.payForContact();
+  },
+
+  // 统一付费查看流程（严格按官方文档）：
+  //   1) reveal 查是否已付费 → 已付费直接展示，不重复收费
+  //   2) wx.cloud.callHTTPFunction 调 pay-common 下单（/wx-pay/wxpay_order）
+  //   3) wx.requestPayment 拉起微信支付
+  //   4) 支付成功 → markPaid 记录付费
+  //   5) reveal 取完整手机号 → 展示并拨号
+  async payForContact() {
+    const postId = this._id;
+    if (!postId) return;
+    // 已展示过完整号，直接拨号
+    if (this.data.revealedPhone) {
+      this.callPhone(this.data.revealedPhone);
+      return;
+    }
+    if (this.data.paying) return;
+    this.setData({ paying: true });
+
+    try {
+      // 1) 是否已付费
+      const check = await this.callPay('reveal', postId);
+      if (check.success && check.phone) {
+        this.showPhone(check.phone);
+        return;
+      }
+
+      // 2) 下单（无需传 payer.openid，平台自动注入 x-wx-openid）
+      const outTradeNo = `BZ${Date.now()}${Math.floor(Math.random() * 1000)}`;
+      const order = await callPayCommon('wxpay_order', {
+        description: '查看联系电话',
+        out_trade_no: outTradeNo,
+        amount: { total: 1, currency: 'CNY' }, // 单位：分（1 分钱）
+      });
+      console.log('[detail] 下单返回:', JSON.stringify(order));
+      // 仅当明确返回了非 0 的 code 才判定失败（不同结构下 code 可能缺位）
+      if (order && order.code !== undefined && order.code !== null && order.code !== 0) {
+        throw new Error(order.msg || '下单失败');
+      }
+      const p = pickPayment(order);
+      console.log('[detail] 支付参数:', JSON.stringify(p));
+      if (!p || !p.package) {
+        console.error('[detail] 未取到 package，完整返回如下:', order);
+        throw new Error('下单失败：未获取到 package');
+      }
+
+      // 3) 拉起支付
+      await new Promise((resolve, reject) => {
+        wx.requestPayment({
+          timeStamp: String(p.timeStamp || ''),
+          nonceStr: p.nonceStr || '',
+          package: p.package,
+          signType: p.signType || 'RSA',
+          paySign: p.paySign || '',
+          success: resolve,
+          fail: reject,
+        });
+      });
+
+      // 4) 支付成功 → 记录付费
+      await this.callPay('markPaid', postId, outTradeNo);
+
+      // 5) 取完整号
+      const reveal = await this.callPay('reveal', postId);
+      if (!reveal.success || !reveal.phone) {
+        throw new Error(reveal.message || '获取电话失败');
+      }
+      this.showPhone(reveal.phone);
+    } catch (err) {
+      console.error('[detail] 付费查看失败:', err && (err.errMsg || err.message));
+      this.setData({ paying: false });
+      const msg = String((err && (err.errMsg || err.message)) || '操作失败');
+      if (msg.indexOf('cancel') >= 0) {
+        wx.showToast({ title: '已取消支付', icon: 'none' });
+      } else {
+        wx.showToast({ title: msg, icon: 'none' });
+      }
+    }
+  },
+
+  // 调用 payForPhone 云函数（reveal 取号 / markPaid 记付费）
+  callPay(action, postId, outTradeNo) {
+    return wx.cloud.callFunction({
+      name: 'payForPhone',
+      data: { action, post_id: postId, out_trade_no: outTradeNo || '' },
+      config: { timeout: 10000 },
+    }).then((res) => res.result || {});
+  },
+
+  // 展示完整号并自动拨号
+  showPhone(phone) {
+    this.setData({ revealedPhone: phone, paying: false });
+    wx.showToast({ title: '已获取电话', icon: 'success' });
+    this.callPhone(phone);
+  },
+
+  // 拨打完整号
+  callPhone(phone) {
+    if (!phone) return;
+    wx.makePhoneCall({ phoneNumber: phone }).catch(() => {});
+  },
+
+  // ---------- 本人帖子：编辑 / 删除 ----------
+  // 按 data_type 路由到对应编辑页（招工→publish_recruit；顺风车→publish_carpool；其余→通用 publish?type=）
+  onEdit() {
+    const d = this.data.d;
+    const id = this._id;
+    if (!id || !d) return;
+    const type = d.data_type;
+    if (type === 'recruit') { wx.navigateTo({ url: `/pages/publish_recruit/publish_recruit?id=${id}` }); return; }
+    if (type === 'carpool_car' || type === 'carpool_person') { wx.navigateTo({ url: `/pages/publish_carpool/publish_carpool?id=${id}` }); return; }
+    wx.navigateTo({ url: `/pages/publish/publish?type=${type}&id=${id}` });
+  },
+
+  onDelete() {
+    if (!this._id) return;
+    this.setData({ deleteDialogVisible: true });
+  },
+  onDeleteDialogClose() {
+    this.setData({ deleteDialogVisible: false });
+  },
+  onDeleteConfirm() {
+    const id = this._id;
+    if (!id || this.data.deleting) return;
+    this.setData({ deleting: true });
+    wx.showLoading({ title: '删除中…', mask: true });
+    wx.cloud
+      .callFunction({ name: 'managePost', data: { action: 'delete', _id: id }, config: { timeout: 10000 } })
+      .then((res) => {
+        wx.hideLoading();
+        const r = res.result || {};
+        this.setData({ deleting: false, deleteDialogVisible: false });
+        if (r.success) {
+          wx.showToast({ title: '已删除', icon: 'success' });
+          // 返回上一页(通常是列表)，并提示刷新
+          setTimeout(() => wx.navigateBack(), 900);
+        } else {
+          wx.showToast({ title: r.message || '删除失败', icon: 'none' });
+        }
+      })
+      .catch((err) => {
+        wx.hideLoading();
+        this.setData({ deleting: false });
+        console.error('[detail] 删除失败:', err && err.errMsg);
+        wx.showToast({ title: '删除失败，请重试', icon: 'none' });
+      });
   },
 });

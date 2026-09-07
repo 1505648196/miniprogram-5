@@ -103,7 +103,7 @@ Page({
     const r = await this.fetchFeed(1);
     const list = (r && r.list) || [];
     const raw = list;
-    this._all = raw.map((p) => this.decorate(p)).sort((a, b) => b.ts - a.ts);
+    this._all = raw.map((p) => this.decorate(p)).sort((a, b) => (b.isTop - a.isTop) || (b.ts - a.ts));
     this.cacheDetails(raw);
     this.setData({ loading: false, firstLoaded: true, page: 1, hasMore: !!(r && r.hasMore) });
     this.renderList();
@@ -168,6 +168,7 @@ Page({
       tags,
       meta: `${loc || '未知地区'} · ${fmtAgo(p.published_at)}`,
       ts: p.published_at || 0,
+      isTop: !!p.isTop,
       price: Number(p.price) || 0,
       city: p.city || '',
       city_code: p.city_code || '',

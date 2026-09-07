@@ -1,6 +1,6 @@
 {
   "permissions": {
-    "openapi": ["phonenumber.getPhoneNumber"]
+    "openapi": ["phonenumber.getPhoneNumber", "security.msgSecCheck"]
   },
   "timeout": 10
 }

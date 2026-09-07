@@ -84,6 +84,24 @@ exports.main = async (event) => {
   const f = event.form || {};
   const dataType = String(f.data_type || "recruit").trim();
 
+  // ---- §2.4 封禁校验：封禁用户不允许发布 ----
+  if (openid) {
+    try {
+      const u = await db
+        .collection("baozi_users")
+        .where({ openid_wxapp: openid })
+        .limit(1)
+        .get();
+      const me = u.data && u.data[0];
+      if (me && me.status === "banned") {
+        return { success: false, error: "账号已被封禁，无法发布信息" };
+      }
+    } catch (e) {
+      // 查询失败不阻塞发布：避免因用户表异常导致正常用户无法发帖
+      console.error("[publishPost] 封禁校验失败:", e);
+    }
+  }
+
   // ---- 必填校验（通用）----
   const phone = String(f.phone || "").trim();
   if (!phone) return { success: false, error: "请填写联系电话" };
@@ -117,6 +135,7 @@ exports.main = async (event) => {
     published_at: Date.now(),
     source: "user",
     needs_review: false,
+    approved: true, // 结果型别名：approved = !needs_review（true=已通过/可展示）
     tags: cleanArr(f.tags),
   };
 
@@ -172,6 +191,16 @@ exports.main = async (event) => {
       regionBase.cond = cond > 10 ? 10 : cond;
       break;
     }
+    case "carpool_car":
+    case "carpool_person": {
+      // 顺风车：车找人/人找车，无价格。存 出发地/目的地/出发时间/最晚出发/可乘人数
+      regionBase.from_place = String(f.from_place || "").trim();
+      regionBase.to_place = String(f.to_place || "").trim();
+      regionBase.depart_time = String(f.depart_time || "").trim();
+      regionBase.depart_deadline = String(f.depart_deadline || "").trim();
+      regionBase.seats = int(f.seats, 0); // 可乘人数/剩余座位，>0 才有意义
+      break;
+    }
     case "other": {
       // 其他：无价格（不发/不存 price），仅普通文本信息
       break;
@@ -188,6 +217,7 @@ exports.main = async (event) => {
     .join("\n");
   const sec = await checkText(secText, openid);
   regionBase.needs_review = sec.suggest === "pass" ? false : true;
+  regionBase.approved = !regionBase.needs_review; // 结果型别名：通过=true，待审=false
   regionBase.sec_status = sec.suggest;
   if (sec.label) regionBase.sec_label = sec.label;
   regionBase.sec_checked_at = sec.checkedAt;

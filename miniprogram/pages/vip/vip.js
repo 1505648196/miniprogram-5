@@ -58,6 +58,8 @@ Page({
         if (r.success) {
           wx.showToast({ title: `已开通${p.name}`, icon: 'success' });
           this.setData({ isVip: true, expireText: r.expireText || '' });
+          // 开通成功 → 稍等后返回"我的"页（mine onShow 会刷新会员状态显示）
+          setTimeout(() => wx.navigateBack(), 900);
         } else {
           wx.showToast({ title: r.message || '开通失败', icon: 'none' });
         }

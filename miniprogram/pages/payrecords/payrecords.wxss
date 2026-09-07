@@ -1,0 +1,96 @@
+/* pages/payrecords/payrecords.wxss */
+
+.page {
+  min-height: 100vh;
+  padding: 24rpx;
+  box-sizing: border-box;
+  background: #f6f6f6;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+}
+
+.card {
+  background: #fff;
+  border-radius: 16rpx;
+  overflow: hidden;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
+}
+
+.card-main {
+  padding: 24rpx;
+}
+
+.card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12rpx;
+}
+
+.card-left {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  flex: 1;
+  min-width: 0;
+}
+
+.card-type {
+  font-size: 24rpx;
+  color: #597ef7;
+  background: #f0f5ff;
+  padding: 4rpx 14rpx;
+  border-radius: 6rpx;
+  flex-shrink: 0;
+}
+
+.card-region {
+  font-size: 24rpx;
+  color: #8c8c8c;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-fee {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #ff7a45;
+  flex-shrink: 0;
+  margin-left: 16rpx;
+}
+
+.card-title {
+  font-size: 30rpx;
+  color: #1a1a1a;
+  line-height: 1.45;
+  margin-bottom: 20rpx;
+  word-break: break-all;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.card-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.card-time {
+  font-size: 24rpx;
+  color: #999;
+}
+
+.empty-wrap {
+  padding-top: 160rpx;
+}
+
+.list-skeleton {
+  padding: 8rpx 0;
+}

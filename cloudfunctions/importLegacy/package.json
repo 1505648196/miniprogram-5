@@ -1,0 +1,14 @@
+{
+  "name": "importLegacy",
+  "version": "1.0.0",
+  "description": "老数据导入：读 data.js 分批写入 baozi_posts",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

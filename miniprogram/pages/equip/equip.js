@@ -208,7 +208,7 @@ Page({
     const r = await this.fetchFeed(extra);
     const list = (r && r.list) || [];
     const raw = list;
-    this._all = raw.map((p) => this.decorate(p)).sort((a, b) => b.ts - a.ts);
+    this._all = raw.map((p) => this.decorate(p)).sort((a, b) => (b.isTop - a.isTop) || (b.ts - a.ts));
     this.cacheDetails(raw);
     this.setData({ loading: false, firstLoaded: true, page: 1, hasMore: !!(r && r.hasMore) });
     this.renderList();
@@ -306,6 +306,7 @@ Page({
       condText: condLabel,
       meta: `${loc || '未知地区'} · ${fmtAgo(p.published_at)}`,
       ts: p.published_at || 0,
+      isTop: !!p.isTop,
       faceTalk: /面议/.test(priceText),
       price: Number(p.price) || 0,
       cond: Number(p.cond) || 0,

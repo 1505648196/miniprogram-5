@@ -3,6 +3,7 @@
     <n-layout-header bordered class="header">
       <div class="header-left">
         <span class="logo">🥟 包子招聘后台</span>
+        <AdminNav />
       </div>
       <div class="header-right">
         <n-button quaternary @click="goCreate">＋ 新增</n-button>
@@ -40,6 +41,44 @@
             clearable
             style="width: 150px"
           />
+          <n-select
+            v-model:value="filters.sec_status"
+            :options="secOptions"
+            placeholder="安全检测"
+            clearable
+            style="width: 150px"
+          />
+          <n-select
+            v-model:value="filters.source"
+            :options="sourceOptions"
+            placeholder="来源"
+            clearable
+            style="width: 130px"
+          />
+          <n-input-number
+            v-model:value="filters.salary_min"
+            placeholder="薪资≥"
+            clearable
+            style="width: 100px"
+          />
+          <n-input-number
+            v-model:value="filters.salary_max"
+            placeholder="薪资≤"
+            clearable
+            style="width: 100px"
+          />
+          <n-input-number
+            v-model:value="filters.price_min"
+            placeholder="价格≥"
+            clearable
+            style="width: 100px"
+          />
+          <n-input-number
+            v-model:value="filters.price_max"
+            placeholder="价格≤"
+            clearable
+            style="width: 100px"
+          />
           <n-input
             v-model:value="filters.keyword"
             placeholder="关键词搜索（原文/电话/城市/岗位）"
@@ -76,10 +115,11 @@ import { authStore } from "../stores/auth";
 import {
   DATA_TYPES,
   DATA_TYPE_OPTIONS,
-  formatSalary,
+  formatMoney,
   formatTime,
   summarize,
 } from "../utils/constants";
+import AdminNav from "../components/AdminNav.vue";
 
 const router = useRouter();
 const message = useMessage();
@@ -94,6 +134,12 @@ const filters = ref({
   city: "",
   role: "",
   needs_review: null,
+  sec_status: null,
+  source: null, // §2.7 老数据识别
+  salary_min: null,
+  salary_max: null,
+  price_min: null,
+  price_max: null,
   keyword: "",
 });
 
@@ -102,9 +148,23 @@ const typeOptionsWithAll = computed(() => [
   ...DATA_TYPE_OPTIONS,
 ]);
 
+// needs_review: true=待人工复核(前端不展示)，false=已通过/可展示
 const reviewOptions = [
   { label: "待审核", value: true },
-  { label: "已审核", value: false },
+  { label: "已通过", value: false },
+];
+
+// sec_status: 微信内容安全检测结果
+const secOptions = [
+  { label: "通过(pass)", value: "pass" },
+  { label: "疑似(risky)", value: "risky" },
+  { label: "违规(reject)", value: "reject" },
+];
+
+// §2.7 来源：user=用户发布 / import_legacy=老数据(平台代发)
+const sourceOptions = [
+  { label: "用户发布", value: "user" },
+  { label: "老数据迁移", value: "import_legacy" },
 ];
 
 const pagination = ref({
@@ -144,7 +204,19 @@ function onPageChange(page) {
 }
 
 function resetFilters() {
-  filters.value = { data_type: null, city: "", role: "", needs_review: null, keyword: "" };
+  filters.value = {
+    data_type: null,
+    city: "",
+    role: "",
+    needs_review: null,
+    sec_status: null,
+    source: null,
+    salary_min: null,
+    salary_max: null,
+    price_min: null,
+    price_max: null,
+    keyword: "",
+  };
   load(1);
 }
 
@@ -158,6 +230,11 @@ function goDetail(id) {
 
 function goEdit(id) {
   router.push(`/post/${id}/edit`);
+}
+
+// 跳置顶页并预填该帖 _id + 板块
+function goTop(row) {
+  router.push({ path: "/tops", query: { post_id: row._id, data_type: row.data_type } });
 }
 
 function handleAudit(row) {
@@ -181,7 +258,7 @@ function handleAudit(row) {
 function handleDelete(row) {
   dialog.warning({
     title: "确认删除？",
-    content: `将永久删除「${summarize(row)}」，此操作不可恢复。`,
+    content: `${row.source === "import_legacy" ? "⚠️ 该帖为老数据（无归属用户，平台代发）。\n" : ""}将永久删除「${summarize(row)}」，此操作不可恢复。`,
     positiveText: "删除",
     negativeText: "取消",
     positiveButtonProps: { type: "error" },
@@ -216,7 +293,25 @@ const columns = [
       ),
   },
   { title: "城市", key: "city", width: 90 },
-  { title: "薪资", key: "salary", width: 110, render: (row) => formatSalary(row) },
+  {
+    title: "来源",
+    key: "source",
+    width: 110,
+    render: (row) =>
+      h(
+        NTag,
+        { size: "small", type: row.source === "import_legacy" ? "warning" : "default" },
+        {
+          default: () =>
+            row.source === "import_legacy"
+              ? "老数据"
+              : row.source === "user"
+              ? "用户"
+              : "-",
+        }
+      ),
+  },
+  { title: "价格/薪资", key: "money", width: 120, render: (row) => formatMoney(row) },
   { title: "电话", key: "phone", width: 120, render: (row) => row.phone || row.phone_masked || "-" },
   {
     title: "发布时间",
@@ -232,13 +327,34 @@ const columns = [
       h(
         NTag,
         { size: "small", type: row.needs_review ? "warning" : "success" },
-        { default: () => (row.needs_review ? "待审核" : "已审核") }
+        // 口径：needs_review=false 仅表示「已通过/可展示」
+        //（可能是微信安全检测自动放行或老数据导入），不等于人工审核过
+        { default: () => (row.needs_review ? "待审核" : "已通过") }
       ),
+  },
+  {
+    title: "安全检测",
+    key: "sec_status",
+    width: 130,
+    render: (row) => {
+      const map = {
+        pass: { type: "success", label: "通过" },
+        risky: { type: "warning", label: "疑似" },
+        reject: { type: "error", label: "违规" },
+      };
+      const s = map[row.sec_status];
+      if (!s) return "-";
+      return h(
+        NTag,
+        { size: "small", type: s.type },
+        { default: () => (row.sec_label ? `${s.label}·${row.sec_label}` : s.label) }
+      );
+    },
   },
   {
     title: "操作",
     key: "actions",
-    width: 220,
+    width: 280,
     render: (row) =>
       h(NSpace, { size: 4 }, () => [
         h(NButton, { size: "small", onClick: () => goDetail(row._id) }, { default: () => "详情" }),
@@ -246,6 +362,7 @@ const columns = [
         row.needs_review
           ? h(NButton, { size: "small", type: "success", onClick: () => handleAudit(row) }, { default: () => "审核" })
           : null,
+        h(NButton, { size: "small", onClick: () => goTop(row) }, { default: () => "置顶" }),
         h(NButton, { size: "small", type: "error", onClick: () => handleDelete(row) }, { default: () => "删除" }),
       ]),
   },

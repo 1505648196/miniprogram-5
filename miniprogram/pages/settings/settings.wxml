@@ -1,0 +1,57 @@
+<!-- pages/settings/settings.wxml -->
+<!-- 设置：修改个人资料（头像 / 昵称 / 手机号） -->
+<view class="page">
+
+  <!-- 加载骨架 -->
+  <t-skeleton
+    wx:if="{{loading}}"
+    class="form-skeleton"
+    theme="paragraph"
+    animation="gradient"
+    row-col="{{skeletonRows}}"
+  />
+
+  <block wx:else>
+
+    <!-- 头像 -->
+    <view class="avatar-sec">
+      <view class="avatar-wrap" bindtap="onChooseAvatar">
+        <t-avatar size="large" shape="circle" image="{{avatar}}">{{avatarText}}</t-avatar>
+        <view class="avatar-tip">点击更换头像</view>
+      </view>
+    </view>
+
+    <!-- 资料表单 -->
+    <t-cell-group theme="card" title="个人资料">
+      <t-input
+        label="昵称"
+        placeholder="请输入昵称"
+        value="{{username}}"
+        maxlength="{{20}}"
+        bind:change="onNameInput"
+      />
+      <t-cell title="手机号" note="{{phoneMasked || '暂未绑定'}}" />
+    </t-cell-group>
+
+    <!-- 绑定手机号：复用已有 getOrCreateUser({phoneCode}) 逻辑 -->
+    <view class="bind-wrap" wx:if="{{!phoneVerified}}">
+      <t-button
+        theme="light"
+        size="large"
+        block
+        open-type="getPhoneNumber"
+        bind:getphonenumber="onGetPhone"
+      >绑定微信手机号</t-button>
+      <view class="bind-tip">绑定后可认领你历史上发布的信息</view>
+    </view>
+
+    <!-- 保存 -->
+    <view class="save-wrap">
+      <t-button theme="primary" size="large" block loading="{{saving}}" bind:tap="onSave">
+        保存
+      </t-button>
+    </view>
+
+  </block>
+
+</view>

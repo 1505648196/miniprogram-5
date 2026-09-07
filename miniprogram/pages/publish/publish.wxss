@@ -48,6 +48,9 @@
 
 .cell-val { color: #1A1A1A; }
 .cell-ph { color: #b6b6b6; }
+/* 获取定位选中后地址文本样式 */
+.loc-val { color: #1A1A1A; }
+.loc-ph { color: #FF7A45; }
 
 .term-input {
   margin-top: 8rpx;

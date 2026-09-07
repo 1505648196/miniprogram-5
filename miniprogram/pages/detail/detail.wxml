@@ -131,11 +131,12 @@
       <text class="card-key">所在地区</text>
       <text class="card-val">{{d.regionText}}</text>
     </view>
-    <!-- 联系电话：正文/联系方式里识别出的号统一脱敏后单独一栏展示；右侧"查看电话"按钮(后续接付费查看完整号) -->
+    <!-- 联系电话：正文/联系方式里识别出的号统一脱敏后单独一栏展示；右侧"查看电话"按钮(付费查看完整号) -->
     <view wx:if="{{d.hasPhone}}" class="card-row phone-row">
       <text class="card-key">联系电话</text>
-      <text class="card-val phone-val" user-select>{{d.phonesText}}</text>
-      <view class="phone-action" bind:tap="onRevealPhone">查看电话</view>
+      <text wx:if="{{revealedPhone}}" class="card-val phone-val" user-select>{{revealedPhone}}</text>
+      <text wx:else class="card-val phone-val" user-select>{{d.phonesText}}</text>
+      <view class="phone-action" bind:tap="onRevealPhone">{{revealedPhone ? '拨打' : '查看电话'}}</view>
     </view>
     <view wx:if="{{d.address}}" class="card-row">
       <text class="card-key">详细地址</text>
@@ -171,6 +172,10 @@
       <text class="card-key">发布时间</text>
       <text class="card-val">{{d.publishedText}} {{d.agoText}}</text>
     </view>
+    <view class="card-row">
+      <text class="card-key">浏览量</text>
+      <text class="card-val">{{d.views}} 次</text>
+    </view>
     <view wx:if="{{d.username}}" class="card-row">
       <text class="card-key">发布用户</text>
       <text class="card-val">{{d.username}}</text>
@@ -182,35 +187,66 @@
    
   </view>
 
-  <!-- 底部操作区：收藏 + 查看联系方式 -->
+  <!-- 底部操作区 -->
   <view class="footer-bar">
-    <view class="contact-hint">温馨提示：联系时请核实对方身份</view>
-    <view class="footer-actions">
+    <!-- 本人帖子：编辑 / 删除 -->
+    <view class="footer-actions" wx:if="{{isMine}}">
       <t-button
-        class="fav-btn {{isFav ? 'on' : ''}}"
-        theme="{{isFav ? 'primary' : 'default'}}"
-        variant="{{isFav ? 'dark' : 'outline'}}"
-        size="large"
-        bind:tap="onToggleFav"
-      >
-        <view class="fav-content">
-          <t-icon name="{{ isFav ? 'heart-filled' : 'heart' }}" size="34rpx" color="{{ isFav ? '#FFD700' : '#999999' }}" />
-          <text class="fav-text">{{ isFav ? '已收藏' : '收藏' }}</text>
-        </view>
-      </t-button>
-      <t-button
-        class="contact-btn"
+        class="edit-btn"
         theme="primary"
         size="large"
-        bind:tap="onViewContact"
-      >查看联系方式</t-button>
+        bind:tap="onEdit"
+      >编辑</t-button>
+      <t-button
+        class="del-btn"
+        theme="danger"
+        variant="outline"
+        size="large"
+        bind:tap="onDelete"
+      >删除</t-button>
     </view>
+    <!-- 非本人：收藏 + 查看联系方式 -->
+    <block wx:else>
+      <view class="contact-hint">温馨提示：联系时请核实对方身份</view>
+      <view class="footer-actions">
+        <t-button
+          class="fav-btn {{isFav ? 'on' : ''}}"
+          theme="{{isFav ? 'primary' : 'default'}}"
+          variant="{{isFav ? 'dark' : 'outline'}}"
+          size="large"
+          bind:tap="onToggleFav"
+        >
+          <view class="fav-content">
+            <t-icon name="{{ isFav ? 'heart-filled' : 'heart' }}" size="34rpx" color="{{ isFav ? '#FFD700' : '#999999' }}" />
+            <text class="fav-text">{{ isFav ? '已收藏' : '收藏' }}</text>
+          </view>
+        </t-button>
+        <t-button
+          class="contact-btn"
+          theme="primary"
+          size="large"
+          bind:tap="onViewContact"
+        >查看联系方式</t-button>
+      </view>
+    </block>
   </view>
+
+  <!-- 删除确认 -->
+  <t-dialog
+    visible="{{deleteDialogVisible}}"
+    title="删除信息"
+    content="删除后不可恢复，确定删除这条信息？"
+    confirm-btn="{{ { content: '确定删除', theme: 'danger' } }}"
+    cancel-btn="取消"
+    bind:confirm="onDeleteConfirm"
+    bind:cancel="onDeleteDialogClose"
+    bind:close="onDeleteDialogClose"
+  />
 </view>
 
 <!-- 加载中：骨架屏（模拟详情布局，避免白屏延迟感） -->
 <view class="state-skeleton" wx:elif="{{loading}}">
-  <t-skeleton theme="paragraph" animation="flashed" row-col="{{skeletonRows}}" />
+  <t-skeleton theme="paragraph" animation="gradient" row-col="{{skeletonRows}}" />
 </view>
 <!-- 空态 / 出错 -->
 <t-empty wx:else description="{{loadError || '帖子不存在'}}" class="state" />

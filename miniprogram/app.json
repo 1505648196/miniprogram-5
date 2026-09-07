@@ -8,6 +8,7 @@
     "pages/other/other",
     "pages/nearby/nearby",
     "pages/publish_recruit/publish_recruit",
+    "pages/publish_carpool/publish_carpool",
     "pages/publish/publish",
     "pages/search/search",
     "pages/mine/mine",
@@ -16,7 +17,9 @@
     "pages/favorites/favorites",
     "pages/message/message",
     "pages/vip/vip",
-    "pages/detail/detail"
+    "pages/detail/detail",
+    "pages/payrecords/payrecords",
+    "pages/settings/settings"
   ],
   "window": {
     "backgroundColor": "#F6F6F6",
@@ -32,5 +35,5 @@
       "desc": "你的位置信息将用于展示你所在城市的附近信息"
     }
   },
-  "requiredPrivateInfos": ["getLocation"]
+  "requiredPrivateInfos": ["getLocation", "chooseLocation"]
 }

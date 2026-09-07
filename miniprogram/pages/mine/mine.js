@@ -14,6 +14,7 @@ const PUBLISH_TYPES = [
   { id: 'want_shop',  name: '求店',     emoji: '🔎', bg: '#E6FFFB', color: '#36CFC9', light: '#E6FFFB' },
   { id: 'jobseek',    name: '求职',     emoji: '🙋', bg: '#F9F0FF', color: '#9254DE', light: '#F9F0FF' },
   { id: 'equip_buy',  name: '设备求购', emoji: '🧰', bg: '#F6FFED', color: '#73D13D', light: '#F6FFED' },
+  { id: 'carpool',    name: '顺风车',   emoji: '🚗', bg: '#E6FFFB', color: '#36CFC9', light: '#E6FFFB' },
   { id: 'other',      name: '其他',     emoji: '📦', bg: '#FAFAFA', color: '#8C8C8C', light: '#FAFAFA' },
 ];
 
@@ -47,7 +48,7 @@ Page({
       { key: 'sell',     label: '我发布的', count: 12 },
       { key: 'space',    label: '我的认证', count: 0  },
       { key: 'sold',     label: '付款记录', count: 115 },
-      { key: 'bought',   label: '我的信息', count: 291 },
+      { key: 'service',  label: '客服',     count: 0 },
     ],
     // 工具宫格（4 列）
     toolGrid: [
@@ -57,7 +58,7 @@ Page({
       { key: 'marketing', label: '营销工具' },
     ],
     // 公告/常见问题
-    notice: '留资卡高频答疑 | 你关心的问题都在这里啦！',
+    notice: '15号用户 已开通VIP',
     // 鱼力回收（招回/卖等）
     recycleGrid: [
       { key: 'clean',   label: '超强擦亮' },
@@ -85,13 +86,11 @@ Page({
     unread: 0,
   },
 
-  onLoad() {
-    this.loadStats();
-    this.loadUser();
-    this.loadVip();
-    this.refreshUnread();
-  },
-
+  // 说明：数据拉取统一放 onShow，不再写 onLoad。
+  // 首次进入页面时 onLoad 与 onShow 会先后触发，若两处都拉同一套数据，
+  // 会导致「首次进页即发两遍请求」的放大浪费。navigateTo 返回本页（页面不重建）
+  // 时只触发 onShow，因此数据放 onShow 既能保证首次加载、也能保证从收藏/会员等
+  // 页面返回后刷新，且首次只请求一次。
   onShow() {
     this.loadStats();
     this.loadUser();
@@ -137,8 +136,20 @@ Page({
 
   async loadStats() {
     this.setData({ loading: true });
-    const [posts, history, favs] = await Promise.all([this.countMyPosts(), this.countHistory(), this.countFavorites()]);
-    this.setData({ postsCount: posts, historyCount: history, favCount: favs, loading: false });
+    const [posts, history, favs, pays] = await Promise.all([
+      this.countMyPosts(),
+      this.countHistory(),
+      this.countFavorites(),
+      this.countPayRecords(),
+    ]);
+    this.setData({
+      postsCount: posts,
+      historyCount: history,
+      favCount: favs,
+      // 付款记录条数用真实值（付费查看电话的订单数），覆盖占位数字
+      orderList: this.data.orderList.map((o) => (o.key === 'sold' ? Object.assign({}, o, { count: pays }) : o)),
+      loading: false,
+    });
   },
 
   // 我的收藏数（调 favorite.list 取 total，pageSize=1 只查总数不拉数据）
@@ -217,7 +228,20 @@ Page({
   onOrderTap(e) {
     const { key } = e.currentTarget.dataset;
     if (key === 'sell') { this.goMyPosts(); return; }
+    // 付款记录：查看历史付费(查看电话)订单，可点进对应信息详情
+    if (key === 'sold') { wx.navigateTo({ url: '/pages/payrecords/payrecords' }); return; }
     wx.showToast({ title: '该功能待接入', icon: 'none' });
+  },
+
+  // 付款记录数量（付费查看电话的订单条数）
+  countPayRecords() {
+    return wx.cloud
+      .callFunction({ name: 'payForPhone', data: { action: 'list' }, config: { timeout: 10000 } })
+      .then((res) => {
+        const r = res.result || {};
+        return r.success && Array.isArray(r.list) ? r.list.length : 0;
+      })
+      .catch(() => 0);
   },
 
   onToolTap() {
@@ -247,7 +271,8 @@ Page({
   onHeaderRightTap(e) {
     const { what } = e.currentTarget.dataset;
     if (what === 'help') { wx.showToast({ title: '帮助与客服待接入', icon: 'none' }); return; }
-    if (what === 'settings') { wx.showToast({ title: '设置待接入', icon: 'none' }); return; }
+    // 设置：进个人资料页，可修改头像 / 昵称 / 绑定手机号
+    if (what === 'settings') { wx.navigateTo({ url: '/pages/settings/settings' }); return; }
   },
 
   // 底部真实 TabBar 点击切换（mine 是 navigateTo 进入的独立页，跨页用 reLaunch 清栈）
@@ -282,6 +307,7 @@ Page({
     this.setData({ publishSheetVisible: false });
     if (!type || !type.id) { wx.showToast({ title: '未识别到发布类型', icon: 'none' }); return; }
     if (type.id === 'recruit') { wx.navigateTo({ url: '/pages/publish_recruit/publish_recruit' }); return; }
+    if (type.id === 'carpool') { wx.navigateTo({ url: '/pages/publish_carpool/publish_carpool' }); return; }
     wx.navigateTo({ url: `/pages/publish/publish?type=${type.id}` });
   },
 

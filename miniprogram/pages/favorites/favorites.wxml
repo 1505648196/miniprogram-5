@@ -4,7 +4,7 @@
 
   <!-- 加载骨架 -->
   <t-skeleton wx:if="{{loading}}" class="list-skeleton" theme="paragraph"
-    animation="flashed" row-col="{{skeletonRows}}" />
+    animation="gradient" row-col="{{skeletonRows}}" />
 
   <!-- 空态 -->
   <view class="empty-wrap" wx:elif="{{firstLoaded && !list.length}}">

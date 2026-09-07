@@ -73,59 +73,63 @@
   color: #1A1A1A;
 }
 
-/* ===== 会员横幅（开通/续费）===== */
+/* ===== 会员横幅（开通/续费）· 大号版 ===== */
 .vip-banner {
-  margin: -56rpx 24rpx 0;
-  padding: 24rpx;
+  margin: -60rpx 24rpx 0;
+  padding: 40rpx 32rpx;
   background: linear-gradient(135deg, #FFE60A 0%, #FFC53D 100%);
-  border-radius: 20rpx;
+  border-radius: 28rpx;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.08);
+  box-shadow: 0 6rpx 22rpx rgba(0, 0, 0, 0.10);
   border: 2rpx solid #FFD666;
 }
 .vip-banner-left {
   display: flex;
   align-items: center;
-  gap: 16rpx;
+  gap: 24rpx;
   flex: 1;
   min-width: 0;
 }
 .vip-banner-icon {
-  font-size: 56rpx;
+  font-size: 100rpx;
   line-height: 1;
+  flex-shrink: 0;
 }
 .vip-banner-text {
   display: flex;
   flex-direction: column;
-  gap: 6rpx;
+  gap: 14rpx;
   min-width: 0;
 }
 .vip-banner-title {
-  font-size: 30rpx;
+  font-size: 46rpx;
   font-weight: 800;
   color: #1A1A1A;
+  line-height: 1.2;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .vip-banner-sub {
-  font-size: 22rpx;
-  color: rgba(0, 0, 0, 0.6);
+  font-size: 24rpx;
+  color: rgba(0, 0, 0, 0.65);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .vip-banner-right {
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
 }
 .vip-banner-btn {
   background: #1A1A1A;
   color: #FFE60A;
-  font-size: 24rpx;
+  font-size: 34rpx;
   font-weight: 700;
-  padding: 10rpx 26rpx;
+  padding: 20rpx 44rpx;
   border-radius: 999rpx;
 }
 
