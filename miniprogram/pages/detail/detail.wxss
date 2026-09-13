@@ -41,6 +41,30 @@
   line-height: 1.4;
 }
 
+/* ============ 顶部卡片广告（方案 C） ============ */
+.detail-ads {
+  margin-top: 16rpx;
+}
+
+.detail-ad-card {
+  background: #FFFFFF;
+  border-radius: 20rpx;
+  overflow: hidden;
+  margin-bottom: 16rpx;
+}
+
+.detail-ad-img {
+  width: 100%;
+  display: block;
+}
+
+.detail-ad-title {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #1A1A1A;
+  padding: 20rpx 24rpx;
+}
+
 .head-sub {
   display: flex;
   align-items: center;
@@ -141,6 +165,13 @@
   background: #F5D800;
   transform: scale(0.96);
 }
+/* 加载态：置灰 + 禁用点击，避免支付过程中重复触发 */
+.phone-action.is-loading {
+  color: #999999;
+  background: #F0F0F0;
+  border-color: #E0E0E0;
+  pointer-events: none;
+}
 
 .tags-row {
   align-items: flex-start;
@@ -183,6 +214,74 @@
   box-shadow: 0 -2rpx 12rpx rgba(0, 0, 0, 0.05);
 }
 
+/* 悬浮分享按钮（右下角，悬浮在底部操作区上方，图标 + 文字） */
+.share-fab {
+  position: fixed;
+  right: 24rpx;
+  bottom: 200rpx;
+  width: 104rpx;
+  height: 104rpx;
+  padding: 0;
+  margin: 0;
+  line-height: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6rpx;
+  background: linear-gradient(135deg, #FF7A45 0%, #FF9E6B 100%);
+  border-radius: 50%;
+  border: none;
+  box-shadow: 0 8rpx 24rpx rgba(255, 122, 69, 0.45);
+  z-index: 100;
+}
+.share-fab::after {
+  border: none;
+}
+.share-fab--hover {
+  background: linear-gradient(135deg, #F56A35 0%, #FF8A50 100%);
+}
+.share-fab-text {
+  font-size: 22rpx;
+  color: #FFFFFF;
+  font-weight: 600;
+  line-height: 1;
+}
+
+/* 悬浮转发按钮（仅管理员可见，位于分享按钮上方，紫蓝渐变区分） */
+.wxforward-fab {
+  position: fixed;
+  right: 24rpx;
+  bottom: 320rpx;
+  width: 104rpx;
+  height: 104rpx;
+  padding: 0;
+  margin: 0;
+  line-height: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6rpx;
+  background: linear-gradient(135deg, #5B21B6 0%, #2563EB 100%);
+  border-radius: 50%;
+  border: none;
+  box-shadow: 0 8rpx 24rpx rgba(91, 33, 182, 0.45);
+  z-index: 100;
+}
+.wxforward-fab::after {
+  border: none;
+}
+.wxforward-fab--hover {
+  background: linear-gradient(135deg, #4C1D95 0%, #1D4ED8 100%);
+}
+.wxforward-fab-text {
+  font-size: 22rpx;
+  color: #FFFFFF;
+  font-weight: 600;
+  line-height: 1;
+}
+
 .contact-hint {
   font-size: 20rpx;
   color: #b6b6b6;
@@ -217,6 +316,102 @@
   --td-button-primary-active-bg-color: #FFDF80;
   --td-button-primary-active-border-color: #FFD700;
   --td-button-primary-active-color: #A97400;
+}
+
+/* ---------------- 转发到朋友圈：编辑弹窗 ---------------- */
+.fwd-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 1000;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.fwd-panel {
+  width: 100%;
+  max-height: 84vh;
+  box-sizing: border-box;
+  background: #FFFFFF;
+  border-radius: 28rpx 28rpx 0 0;
+  padding: 36rpx 32rpx;
+  padding-bottom: calc(32rpx + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+}
+.fwd-head {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+  margin-bottom: 24rpx;
+}
+.fwd-title {
+  font-size: 34rpx;
+  font-weight: 700;
+  color: #1A1A1A;
+}
+.fwd-tip {
+  font-size: 24rpx;
+  color: #999999;
+  line-height: 1.5;
+}
+.fwd-text {
+  width: 100%;
+  min-height: 320rpx;
+  max-height: 52vh;
+  box-sizing: border-box;
+  padding: 24rpx;
+  background: #F7F7F8;
+  border-radius: 16rpx;
+  font-size: 28rpx;
+  line-height: 1.6;
+  color: #1A1A1A;
+}
+.fwd-count {
+  align-self: flex-end;
+  margin-top: 8rpx;
+  font-size: 22rpx;
+  color: #BBBBBB;
+}
+.fwd-error {
+  margin-top: 12rpx;
+  padding: 16rpx 20rpx;
+  background: #FFF1F0;
+  border-radius: 12rpx;
+  font-size: 24rpx;
+  color: #D4380D;
+  line-height: 1.5;
+}
+.fwd-btns {
+  display: flex;
+  gap: 20rpx;
+  margin-top: 28rpx;
+}
+.fwd-btn {
+  flex: 1;
+  height: 88rpx;
+  line-height: 88rpx;
+  text-align: center;
+  border-radius: 16rpx;
+  font-size: 30rpx;
+  font-weight: 600;
+}
+.fwd-btn--hover {
+  opacity: 0.85;
+}
+.fwd-btn--cancel {
+  background: #F2F2F3;
+  color: #666666;
+}
+.fwd-btn--ok {
+  background: linear-gradient(135deg, #5B21B6 0%, #2563EB 100%);
+  color: #FFFFFF;
+}
+.fwd-btn--ok.is-busy {
+  opacity: 0.6;
 }
 /* 按钮内收藏内容（图标+文字横排） */
 .fav-content {

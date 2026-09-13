@@ -15,6 +15,9 @@
     />
   </view>
 
+  <!-- 广告区块：搜索栏下方第一栏（轮播图 + 双卡 + 全局弹窗） -->
+  <ad-block page="carpool" />
+
   <!-- 模块 2:信息类别（车找人/人找车）双选卡片 -->
   <view class="type-check">
     <t-checkbox-group
@@ -134,7 +137,7 @@
   </view>
 
   <!-- 底部导航 -->
-  <comp-tabbar current="home" />
+  <comp-tabbar current="" />
 
   <!-- 发布顺风车：右下角悬浮按钮 -->
   <view class="pub-fab" bindtap="onPublish">

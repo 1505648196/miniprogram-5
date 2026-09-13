@@ -97,11 +97,28 @@ function fmtMoney(n) {
 // 全板块类型（附近=同城全看）
 const ALL_TYPES = ['transfer', 'want_shop', 'recruit', 'jobseek', 'equip_sell', 'equip_buy', 'carpool_car', 'carpool_person', 'other'];
 
+// 业务标签筛选（与首页/频道页的业务板块一致，含「全部」）
+const FILTER_TABS = [
+  { id: '',            name: '全部' },
+  { id: 'recruit',     name: '招工' },
+  { id: 'jobseek',     name: '求职' },
+  { id: 'transfer',    name: '转让' },
+  { id: 'want_shop',   name: '求店' },
+  { id: 'equip_sell',  name: '设备出售' },
+  { id: 'equip_buy',   name: '设备求购' },
+  { id: 'carpool_car', name: '车找人' },
+  { id: 'carpool_person', name: '人找车' },
+  { id: 'other',       name: '其他' },
+];
+
 Page({
   data: {
     cityName: '定位中…',   // 当前定位城市展示文本
     located: false,        // 是否已定位成功
     locating: true,        // 是否定位中
+    filterTabs: FILTER_TABS, // 业务标签筛选
+    activeFilter: '',      // 当前选中业务标签 id（''=全部）
+    stickyProps: { zIndex: 99, offsetTop: 0 }, // t-tabs 吸顶配置
     failText: '',          // 定位失败提示
     locSticky: false,      // 定位条是否吸顶（吸顶加阴影，避免下方内容透出）
     goodsLeft: [],
@@ -192,8 +209,20 @@ Page({
   },
 
   // 全板块一次批量(带 city_code) → 返回 list 由云端按时间 desc 逐类取后扁平合并
+  // activeFilter 非空时只拉选中业务类型；空=全部
   async fetchAllTypes(page) {
-    return this.fetchFeed(ALL_TYPES, page);
+    const active = this.data.activeFilter;
+    const types = active ? [active] : ALL_TYPES;
+    return this.fetchFeed(types, page);
+  },
+
+  // 业务标签筛选：t-tabs change 事件（value 即选中的业务类型 id，''=全部）
+  onFilterChange(e) {
+    const id = e.detail.value === undefined ? e.detail : e.detail.value;
+    if (id === this.data.activeFilter) return;
+    this.setData({ activeFilter: id, page: 1, hasMore: false });
+    this._all = [];
+    this.loadFeed();
   },
 
   async loadFeed() {

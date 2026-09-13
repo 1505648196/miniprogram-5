@@ -1,0 +1,9 @@
+{
+  "name": "groupService",
+  "version": "1.0.0",
+  "description": "包友群：群列表 / 群详情（加群二维码）",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

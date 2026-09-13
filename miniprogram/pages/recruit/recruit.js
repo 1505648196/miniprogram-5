@@ -101,13 +101,6 @@ Page({
     emptyText: '暂无招聘/求职信息', // 空态文案（随信息类别变化）
 
 
-    // ---------- 运营位：默认空数组 → 整块不渲染 ----------
-    ads: [],      // 轮播图  [{ value: 'https://...', path: '/pages/...' }]
-    banners: [],  // 双卡位  [{ id, emoji, title, sub, bgFrom, bgTo, path }]
-    stats: [],    // 数字卡  [{ id, value, label }]
-    // 轮播指示器配置（放在 data 里，避免 Mustache 内写对象字面量的兼容风险）
-    swiperNav: { type: 'dots' },
-
     // ---------- 师傅类型（顶部下拉，与金刚位 activeSub 联动） ----------
     // '__all__' 表示"全部"，选中后清空 activeSub 不筛选；具体 id 走 findCat 筛选
     subOptions: [{ label: '全部师傅', value: '__all__' }].concat(
@@ -188,11 +181,10 @@ Page({
       // 无缓存/异常直接忽略，详情走兜底查库
     }
     this.loadFeed();
-    this.loadAdSlots();
   },
 
   onPullDownRefresh() {
-    Promise.all([this.loadFeed(), this.loadAdSlots()]).then(() => {
+    this.loadFeed().then(() => {
       wx.stopPullDownRefresh();
     });
   },
@@ -345,22 +337,6 @@ Page({
   // 师傅类型(activeSub→role_id)、区域(regionCode)、薪资(salary) 全部传 feedPosts 后端过滤
   reloadWithFilters() {
     this.loadFeed(this.buildFilter());
-  },
-
-  // ---------- 运营位（广告 / Banner / 数字卡） ----------
-  // 现在没有数据源，三个数组都返回空 → 页面上这三块完全不渲染。
-  // TODO: 接入数据库后改成拉取运营位集合，例如：
-  //   const res = await wx.cloud.callFunction({ name: 'adSlots', data: { page: 'recruit' } });
-  //   return res.result || { ads: [], banners: [], stats: [] };
-  // 只有拉到的数组非空，对应区块才会出现。
-  loadAdSlots() {
-    return Promise.resolve({ ads: [], banners: [], stats: [] }).then((d) => {
-      this.setData({
-        ads: d.ads || [],
-        banners: d.banners || [],
-        stats: d.stats || [],
-      });
-    });
   },
 
   // ---------- 展示 ----------
@@ -684,16 +660,6 @@ Page({
   onSearch(e) {
     this.setData({ keyword: e.detail.value || '' });
     this.renderList();
-  },
-
-  onAdTap(e) {
-    const ad = this.data.ads[e.detail.index];
-    if (ad && ad.path) wx.navigateTo({ url: ad.path });
-  },
-
-  onBannerTap(e) {
-    const item = e.currentTarget.dataset.item;
-    if (item && item.path) wx.navigateTo({ url: item.path });
   },
 
   onPublish() {

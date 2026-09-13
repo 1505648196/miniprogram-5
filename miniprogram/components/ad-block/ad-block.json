@@ -1,0 +1,8 @@
+{
+  "component": true,
+  "usingComponents": {
+    "t-swiper": "/miniprogram_npm/tdesign-miniprogram/swiper/swiper",
+    "t-popup": "/miniprogram_npm/tdesign-miniprogram/popup/popup",
+    "t-icon": "/miniprogram_npm/tdesign-miniprogram/icon/icon"
+  }
+}

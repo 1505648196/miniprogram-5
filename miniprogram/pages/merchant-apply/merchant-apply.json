@@ -1,0 +1,17 @@
+{
+  "navigationBarTitleText": "商家入驻",
+  "enablePullDownRefresh": false,
+  "usingComponents": {
+    "t-button": "/miniprogram_npm/tdesign-miniprogram/button/button",
+    "t-icon": "/miniprogram_npm/tdesign-miniprogram/icon/icon",
+    "t-cell": "/miniprogram_npm/tdesign-miniprogram/cell/cell",
+    "t-cell-group": "/miniprogram_npm/tdesign-miniprogram/cell-group/cell-group",
+    "t-input": "/miniprogram_npm/tdesign-miniprogram/input/input",
+    "t-textarea": "/miniprogram_npm/tdesign-miniprogram/textarea/textarea",
+    "t-checkbox": "/miniprogram_npm/tdesign-miniprogram/checkbox/checkbox",
+    "t-popup": "/miniprogram_npm/tdesign-miniprogram/popup/popup",
+    "t-toast": "/miniprogram_npm/tdesign-miniprogram/toast/toast",
+    "t-image": "/miniprogram_npm/tdesign-miniprogram/image/image",
+    "t-upload": "/miniprogram_npm/tdesign-miniprogram/upload/upload"
+  }
+}

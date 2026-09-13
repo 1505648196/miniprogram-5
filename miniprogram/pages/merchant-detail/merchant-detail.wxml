@@ -1,0 +1,69 @@
+<!-- pages/merchant-detail/merchant-detail.wxml -->
+<view class="page">
+  <!-- 加载中骨架 -->
+  <view wx:if="{{loading}}" class="skeleton-wrap">
+    <t-skeleton theme="paragraph" animation="gradient" row-col="{{skeletonRows}}" />
+  </view>
+
+  <block wx:elif="{{merchant}}">
+    <!-- 头像 + 名称 + 分类 -->
+    <view class="head">
+      <image class="head-avatar" src="{{merchant.avatar || '/static/home-default.png'}}" mode="aspectFill" />
+      <view class="head-info">
+        <view class="head-name">{{merchant.name}}</view>
+        <view class="head-row">
+          <t-tag size="small" variant="light">{{merchant.category}}</t-tag>
+          <text wx:if="{{merchant.business_hours}}" class="head-hours">🕘 {{merchant.business_hours}}</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 店铺相册轮播（有图才显示，第一张为主图） -->
+    <view wx:if="{{merchant.photos && merchant.photos.length}}" class="gallery">
+      <swiper class="gallery-swiper" indicator-dots autoplay circular>
+        <swiper-item wx:for="{{merchant.photos}}" wx:key="*this">
+          <image class="gallery-img" src="{{item}}" mode="aspectFill" />
+        </swiper-item>
+      </swiper>
+    </view>
+
+    <!-- 店铺介绍 -->
+    <view class="card" wx:if="{{merchant.intro}}">
+      <view class="card-title">店铺介绍</view>
+      <text class="card-text">{{merchant.intro}}</text>
+    </view>
+
+    <!-- 基本信息 -->
+    <view class="card">
+      <view class="card-title">基本信息</view>
+      <view class="info-row" wx:if="{{merchant.address}}">
+        <t-icon name="location" size="32rpx" color="#999999" />
+        <text class="info-text">{{merchant.address}}</text>
+      </view>
+      <view class="info-row" wx:if="{{merchant.business_hours}}">
+        <t-icon name="time" size="32rpx" color="#999999" />
+        <text class="info-text">营业时间 {{merchant.business_hours}}</text>
+      </view>
+    </view>
+
+    <!-- 联系我们 -->
+    <view class="card">
+      <view class="card-title">联系我们</view>
+      <view class="contact-actions">
+        <t-button theme="primary" size="large" block bindtap="onCall">
+          <t-icon name="call" size="36rpx" />
+          拨打电话
+        </t-button>
+        <t-button
+          wx:if="{{merchant.wechat_qr}}"
+          theme="default" variant="outline" size="large" block bindtap="onShowWechat"
+        >查看微信</t-button>
+      </view>
+    </view>
+  </block>
+
+  <!-- 空态/错误 -->
+  <view wx:else class="empty">
+    <text>{{loadError || '商家不存在'}}</text>
+  </view>
+</view>

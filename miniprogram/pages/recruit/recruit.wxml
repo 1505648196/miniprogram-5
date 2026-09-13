@@ -2,6 +2,7 @@
 <!-- 包子行业信息平台 · 招聘求职频道页 —— TDesign(tdesign-miniprogram) -->
 <!-- 运营位（轮播 / Banner / 数字卡）在数组为空时整块不渲染，不留占位 -->
 <wxs src="./contain.wxs" module="tc" />
+
 <view class="page">
 
   <!-- 模块 1:黄色 Header（与 demo 首页一致：Logo + 圆角搜索，无发布按钮） -->
@@ -16,6 +17,9 @@
       bind:change="onSearch"
     />
   </view>
+
+  <!-- 广告区块：搜索栏下方第一栏（轮播图 + 双卡 + 全局弹窗） -->
+  <ad-block page="recruit" />
 
   <view class="content">
 
@@ -47,43 +51,6 @@
         <view class="kk-name">{{item.name}}</view>
       </t-grid-item>
     </t-grid>
-
-    <!-- 模块 4:广告轮播位(ads 为空时整块不渲染) -->
-    <view class="ads" wx:if="{{ads.length}}">
-      <t-swiper
-        class="ads-swiper"
-        list="{{ads}}"
-        height="{{200}}"
-        autoplay="{{true}}"
-        interval="{{5000}}"
-        navigation="{{swiperNav}}"
-        bind:click="onAdTap"
-      />
-    </view>
-
-    <!-- 模块 5:Banner 运营卡位(banners 为空时整块不渲染) -->
-    <view class="banners" wx:if="{{banners.length}}">
-      <view
-        class="banner"
-        wx:for="{{banners}}" wx:key="id"
-        style="background: linear-gradient(135deg, {{item.bgFrom}} 0%, {{item.bgTo}} 100%);"
-        data-item="{{item}}" bindtap="onBannerTap"
-      >
-        <view class="banner-emoji">{{item.emoji}}</view>
-        <view class="banner-info">
-          <view class="banner-title">{{item.title}}</view>
-          <view class="banner-sub">{{item.sub}}</view>
-        </view>
-      </view>
-    </view>
-
-    <!-- 模块 6:服务保障数字卡位(stats 为空时整块不渲染) -->
-    <view class="stats" wx:if="{{stats.length}}">
-      <view class="stat" wx:for="{{stats}}" wx:key="id">
-        <view class="stat-value">{{item.value}}</view>
-        <view class="stat-label">{{item.label}}</view>
-      </view>
-    </view>
 
   </view>
 
@@ -322,6 +289,6 @@
   />
 
   <!-- 底部导航 -->
-  <comp-tabbar current="home" />
+  <comp-tabbar current="" />
 
 </view>

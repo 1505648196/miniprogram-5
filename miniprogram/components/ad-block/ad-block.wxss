@@ -1,0 +1,103 @@
+/* components/ad-block/ad-block.wxss */
+
+/* 轮播图 */
+.ads {
+  padding: 16rpx 0 0;
+}
+.ads-swiper {
+  border-radius: 20rpx;
+  overflow: hidden;
+}
+
+/* 双卡 */
+.banners {
+  display: flex;
+  gap: 16rpx;
+  padding: 16rpx 0 0;
+}
+.banner {
+  flex: 1;
+  min-width: 0;
+  height: 108rpx;
+  border-radius: 16rpx;
+  display: flex;
+  align-items: center;
+  padding: 0 16rpx;
+  gap: 12rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
+}
+.banner-emoji {
+  font-size: 48rpx;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.banner-emoji-img {
+  width: 56rpx;
+  height: 56rpx;
+}
+.banner-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+  min-width: 0;
+}
+.banner-title {
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #1a1a1a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.banner-sub {
+  font-size: 22rpx;
+  color: #666666;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 全局弹窗 */
+.ad-popup-inner {
+  position: relative;
+  width: 600rpx;
+  max-width: 80vw;
+  background: #ffffff;
+  border-radius: 24rpx;
+  overflow: hidden;
+}
+.ad-popup-img {
+  width: 100%;
+  display: block;
+}
+.ad-popup-text {
+  padding: 80rpx 48rpx;
+  text-align: center;
+}
+.ad-popup-title {
+  font-size: 40rpx;
+  font-weight: 600;
+  color: #1a1a1a;
+  line-height: 1.4;
+}
+.ad-popup-sub {
+  margin-top: 16rpx;
+  font-size: 28rpx;
+  color: #8c8c8c;
+  line-height: 1.4;
+}
+.ad-popup-close {
+  position: absolute;
+  right: 20rpx;
+  top: 20rpx;
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2rpx solid rgba(255, 255, 255, 0.5);
+  z-index: 2;
+}

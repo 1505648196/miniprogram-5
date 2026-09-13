@@ -14,6 +14,9 @@
     />
   </view>
 
+  <!-- 广告区块（轮播图 + 双卡 + 全局弹窗，方案 C 数据驱动，空则整块不渲染） -->
+  <ad-block page="other" />
+
   <!-- 模块 2:其他信息双列瀑布流 -->
   <view class="feed">
     <t-skeleton
@@ -103,6 +106,6 @@
   </view>
 
   <!-- 底部导航 -->
-  <comp-tabbar current="home" />
+  <comp-tabbar current="" />
 
 </view>

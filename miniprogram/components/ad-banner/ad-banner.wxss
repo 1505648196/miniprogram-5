@@ -1,0 +1,47 @@
+/* components/ad-banner/ad-banner.wxss */
+.ad-banner {
+  padding: 16rpx 24rpx;
+  background: #ffffff;
+}
+
+.ad-banner-item {
+  border-radius: 16rpx;
+  overflow: hidden;
+}
+
+.ad-banner-img {
+  width: 100%;
+  display: block;
+}
+
+.ad-banner-card {
+  display: flex;
+  align-items: center;
+  padding: 24rpx 28rpx;
+  border-radius: 16rpx;
+}
+
+.ad-banner-emoji {
+  font-size: 56rpx;
+  margin-right: 20rpx;
+  line-height: 1;
+}
+
+.ad-banner-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.ad-banner-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #1a1a1a;
+  line-height: 1.3;
+}
+
+.ad-banner-sub {
+  font-size: 24rpx;
+  color: #8c8c8c;
+  margin-top: 6rpx;
+  line-height: 1.3;
+}

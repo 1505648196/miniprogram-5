@@ -1,0 +1,14 @@
+{
+  "name": "predictUserRole",
+  "version": "1.0.0",
+  "description": "用 DeepSeek 分析用户历史发布信息，预测六大业务概率，写入 baozi_users.role_prediction",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

@@ -25,6 +25,7 @@
     "t-skeleton": "/miniprogram_npm/tdesign-miniprogram/skeleton/skeleton",
     "t-checkbox": "/miniprogram_npm/tdesign-miniprogram/checkbox/checkbox",
     "t-checkbox-group": "/miniprogram_npm/tdesign-miniprogram/checkbox-group/checkbox-group",
-    "comp-tabbar": "/components/tabbar/index"
+    "comp-tabbar": "/components/tabbar/index",
+    "ad-block": "/components/ad-block/ad-block"
   }
 }

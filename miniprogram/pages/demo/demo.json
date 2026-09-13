@@ -14,6 +14,11 @@
     "t-popup": "/miniprogram_npm/tdesign-miniprogram/popup/popup",
     "t-skeleton": "/miniprogram_npm/tdesign-miniprogram/skeleton/skeleton",
     "t-loading": "/miniprogram_npm/tdesign-miniprogram/loading/loading",
-    "t-icon": "/miniprogram_npm/tdesign-miniprogram/icon/icon"
+    "t-icon": "/miniprogram_npm/tdesign-miniprogram/icon/icon",
+    "t-image": "/miniprogram_npm/tdesign-miniprogram/image/image",
+    "t-swiper": "/miniprogram_npm/tdesign-miniprogram/swiper/swiper",
+    "t-action-sheet": "/miniprogram_npm/tdesign-miniprogram/action-sheet/action-sheet",
+    "t-row": "/miniprogram_npm/tdesign-miniprogram/row/row",
+    "t-col": "/miniprogram_npm/tdesign-miniprogram/col/col"
   }
 }

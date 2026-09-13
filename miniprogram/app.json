@@ -19,7 +19,13 @@
     "pages/vip/vip",
     "pages/detail/detail",
     "pages/payrecords/payrecords",
-    "pages/settings/settings"
+    "pages/settings/settings",
+    "pages/merchant-apply/merchant-apply",
+    "pages/merchant-detail/merchant-detail",
+    "pages/group/group",
+    "pages/chat/chat",
+    "pages/news/news",
+    "pages/news-detail/news-detail"
   ],
   "window": {
     "backgroundColor": "#F6F6F6",
@@ -30,6 +36,12 @@
   },
   "sitemapLocation": "sitemap.json",
   "lazyCodeLoading": "requiredComponents",
+  "plugins": {
+    "WechatSI": {
+      "version": "0.3.6",
+      "provider": "wx069ba97219f66d99"
+    }
+  },
   "permission": {
     "scope.userLocation": {
       "desc": "你的位置信息将用于展示你所在城市的附近信息"

@@ -8,6 +8,7 @@
     "t-loading": "/miniprogram_npm/tdesign-miniprogram/loading/loading",
     "t-icon": "/miniprogram_npm/tdesign-miniprogram/icon/icon",
     "t-skeleton": "/miniprogram_npm/tdesign-miniprogram/skeleton/skeleton",
-    "comp-tabbar": "/components/tabbar/index"
+    "comp-tabbar": "/components/tabbar/index",
+    "ad-block": "/components/ad-block/ad-block"
   }
 }

@@ -1,0 +1,259 @@
+<!-- pages/merchant-apply/merchant-apply.wxml -->
+<!-- 商家入驻页：默认显示「商家列表」，顶部一个「立即入驻」按钮，点击后切到表单模式 -->
+<view class="page">
+
+  <!-- 顶部 banner：蓝底商家入驻 + 副标题 + 搜索 + 3 宫格（与截图一致） -->
+  <view class="hero">
+    <view class="hero-badge">点击查看详情</view>
+    <view class="hero-title">商家入驻</view>
+    <view class="hero-sub">打造商家网络名片</view>
+    <view class="hero-sub2">为你带来更多利益</view>
+
+    <view class="hero-search">
+      <text class="hero-search-tag">店铺</text>
+      <input class="hero-search-input" placeholder="搜店铺" value="{{keyword}}" bindinput="onSearchInput" />
+      <t-icon name="search" size="32rpx" color="#1A1A1A" />
+    </view>
+
+    <view class="hero-gg">
+      <view
+        class="hero-gg-item {{activeCategory === item.name ? 'is-on' : ''}}"
+        wx:for="{{heroKinds}}" wx:key="id" data-item="{{item}}" bindtap="onHeroKind"
+      >
+        <view class="hero-gg-emoji">{{item.emoji}}</view>
+        <view class="hero-gg-name">{{item.name}}</view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 立即入驻按钮：固定在 hero 下方，列表/表单两个模式都显示 -->
+  <view class="apply-cta-wrap">
+    <t-button
+      class="apply-cta"
+      theme="primary"
+      size="large"
+      block
+      bindtap="onOpenApplyForm"
+    >立即入驻</t-button>
+  </view>
+
+  <!-- 入驻表单弹窗（点击「立即入驻」后弹出） -->
+  <t-popup
+    visible="{{formVisible}}"
+    placement="bottom"
+    bind:visible-change="onFormVisibleChange"
+    close-btn="{{true}}"
+  >
+    <view class="form-popup">
+      <view class="form-title">商家入驻申请</view>
+
+      <t-cell-group theme="card">
+
+      <t-cell title="店铺名称" required>
+        <input slot="note" class="cell-input" placeholder="请输入店铺名称" maxlength="40" value="{{form.name}}" bindinput="onNameInput" />
+      </t-cell>
+
+      <t-cell title="商品分类" required arrow bindtap="onPickCategory">
+        <view slot="note" class="cell-pick">{{form.category || '选择分类'}}</view>
+      </t-cell>
+
+      <t-cell title="详细地址" required bindtap="onPickLocation">
+        <view slot="note" class="cell-pick">
+          <text class="{{form.address ? '' : 'cell-placeholder'}}">{{form.address || '点击右侧地图按钮进行地址定位'}}</text>
+        </view>
+        <view slot="right-icon" class="cell-loc-icon">
+          <text>📍</text>
+          <text>定位</text>
+        </view>
+      </t-cell>
+
+      <t-cell title="营业时间" required>
+        <input slot="note" class="cell-input" placeholder="如：9:00-24:00" value="{{form.business_hours}}" bindinput="onHoursInput" />
+      </t-cell>
+
+      <t-cell title="联系电话" required>
+        <input slot="note" class="cell-input" type="number" placeholder="请输入联系电话" maxlength="11" value="{{form.phone}}" bindinput="onPhoneInput" />
+      </t-cell>
+
+    </t-cell-group>
+
+    <!-- 店铺介绍 -->
+    <view class="form-section">
+      <view class="form-section-title">店铺介绍</view>
+      <textarea
+        class="form-textarea"
+        placeholder="请输入店铺介绍（200 字以内）"
+        maxlength="200"
+        value="{{form.intro}}"
+        bindinput="onIntroInput"
+      />
+    </view>
+
+    <!-- 店铺头像 -->
+    <view class="form-section">
+      <view class="form-section-title">店铺头像<text class="form-section-tip">（200×200px）</text></view>
+      <view class="upload-row">
+        <view class="upload-add" bindtap="onPickAvatar" wx:if="{{!form.avatar}}">
+          <t-icon name="image" size="64rpx" color="#999999" />
+        </view>
+        <image
+          wx:else
+          class="upload-pic upload-avatar"
+          src="{{form.avatar}}"
+          mode="aspectFill"
+          bindtap="onPickAvatar"
+        />
+      </view>
+    </view>
+
+    <!-- 店铺相册（最多 50 张，前 3 张生成幻灯片，建议 720×345） -->
+    <view class="form-section">
+      <view class="form-section-title">店铺相册<text class="form-section-tip">（最多 50 张）</text></view>
+      <view class="form-section-tip form-section-tip-line">前 3 张会生成幻灯片，建议尺寸：720×345px</view>
+      <view class="upload-row upload-row-wrap">
+        <view class="upload-add" wx:for="{{form.photos}}" wx:key="*this" wx:for-item="ph">
+          <image class="upload-pic" src="{{ph}}" mode="aspectFill" data-item="{{ph}}" bindtap="onPreviewPhoto" />
+          <view class="upload-remove" data-index="{{index}}" catchtap="onRemovePhoto">×</view>
+        </view>
+        <view class="upload-add" wx:if="{{form.photos.length < 50}}" bindtap="onPickPhotos">
+          <t-icon name="image" size="64rpx" color="#999999" />
+        </view>
+      </view>
+    </view>
+
+    <!-- 商家微信（上传微信二维码） -->
+    <view class="form-section">
+      <view class="form-section-title">商家微信<text class="form-section-tip">（上传商家微信二维码）</text></view>
+      <view class="upload-row">
+        <view class="upload-add" bindtap="onPickWechat" wx:if="{{!form.wechat_qr}}">
+          <t-icon name="image" size="64rpx" color="#999999" />
+        </view>
+        <image
+          wx:else
+          class="upload-pic upload-avatar"
+          src="{{form.wechat_qr}}"
+          mode="aspectFill"
+          bindtap="onPickWechat"
+        />
+      </view>
+    </view>
+
+    <!-- 营业执照 -->
+    <view class="form-section">
+      <view class="form-section-title">营业执照<text class="form-section-tip">（上传商家营业执照）</text></view>
+      <view class="upload-row">
+        <view class="upload-add" bindtap="onPickLicense" wx:if="{{!form.license_img}}">
+          <t-icon name="image" size="64rpx" color="#999999" />
+        </view>
+        <image
+          wx:else
+          class="upload-pic upload-avatar"
+          src="{{form.license_img}}"
+          mode="aspectFill"
+          bindtap="onPickLicense"
+        />
+      </view>
+    </view>
+
+    <!-- 邀请码 + 套餐选择 -->
+    <view class="form-section">
+      <t-cell title="邀请码">
+        <input slot="note" class="cell-input" placeholder="无邀请码可不填写" value="{{form.invite_code}}" bindinput="onInviteInput" />
+      </t-cell>
+
+      <view class="plan-card" bindtap="onPickPlan">
+        <view class="plan-card-main">
+          <view class="plan-card-name">高级版</view>
+          <view class="plan-card-price"><text class="plan-card-yuan">¥</text>2999</view>
+          <view class="plan-card-period">1年</view>
+        </view>
+        <view class="plan-card-tag">入驻商家</view>
+      </view>
+
+      <view class="form-tip">使用激活码入驻</view>
+    </view>
+
+    <!-- 同意条款 -->
+    <view class="agree" bindtap="onToggleAgree">
+      <view class="agree-box {{agreed ? 'is-on' : ''}}">{{agreed ? '✓' : ''}}</view>
+      <text class="agree-text">我同意条款，保证信息合法合规</text>
+    </view>
+
+    <view class="submit-btn-wrap">
+      <t-button theme="primary" size="large" block bindtap="onSubmit" loading="{{submitting}}">提交入驻申请</t-button>
+    </view>
+
+    </view>
+  </t-popup>
+
+  <!-- 商家列表（默认显示） -->
+  <view class="list">
+    <view class="list-head">已入驻商家</view>
+
+    <!-- 3 Tab：推荐 / 新入 / 附近 -->
+    <view class="merchant-tabs">
+      <view
+        class="merchant-tab {{activeTab === 'recommend' ? 'is-on' : ''}}"
+        data-key="recommend" bindtap="onTabTap"
+      >推荐</view>
+      <view
+        class="merchant-tab {{activeTab === 'newest' ? 'is-on' : ''}}"
+        data-key="newest" bindtap="onTabTap"
+      >新入</view>
+      <view
+        class="merchant-tab {{activeTab === 'nearby' ? 'is-on' : ''}}"
+        data-key="nearby" bindtap="onTabTap"
+      >附近</view>
+    </view>
+
+    <!-- 加载中：骨架屏 -->
+    <view wx:if="{{listLoading}}">
+      <view class="list-card" wx:for="{{[1, 2, 3]}}" wx:key="*this">
+        <view class="list-thumb list-thumb-skel"></view>
+        <view class="list-info">
+          <view class="list-name list-name-skel"></view>
+          <view class="list-meta list-meta-skel"></view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 空态 -->
+    <view class="list-empty" wx:elif="{{!list.length}}">还没有商家入驻</view>
+
+    <!-- 有数据：列表 -->
+    <view wx:else>
+      <view class="list-card" wx:for="{{list}}" wx:key="_id" data-id="{{item._id}}" bindtap="onMerchantTap">
+        <image class="list-thumb" src="{{item.avatar || '/static/home-default.png'}}" mode="aspectFill" />
+        <view class="list-info">
+          <view class="list-row1">
+            <text class="list-name">{{item.name}}</text>
+            <text class="list-cat">{{item.category}}</text>
+          </view>
+          <view class="list-row2" wx:if="{{item.business_hours}}">🕘 {{item.business_hours}}</view>
+          <view class="list-row2" wx:if="{{item.address}}">📍 {{item.address}}</view>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 分类选择弹层 -->
+  <t-popup visible="{{catVisible}}" placement="bottom" bind:visible-change="onCatVisibleChange">
+    <view class="picker">
+      <view class="picker-head">
+        <text class="picker-cancel" bindtap="onCatClose">取消</text>
+        <text class="picker-title">分类选择</text>
+        <text class="picker-confirm" bindtap="onCatConfirm">确定</text>
+      </view>
+      <view class="picker-grid">
+        <view
+          wx:for="{{categories}}" wx:key="*this"
+          class="picker-grid-item {{form.category === item ? 'is-on' : ''}}"
+          data-item="{{item}}" bindtap="onCatPick"
+        >{{item}}</view>
+      </view>
+    </view>
+  </t-popup>
+
+  <t-toast id="t-toast" />
+
+</view>

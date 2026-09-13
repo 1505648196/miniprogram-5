@@ -1,0 +1,40 @@
+<!-- pages/news/news.wxml -->
+<!-- 包子行业信息平台 · 快讯列表页 -->
+<view class="page">
+  <!-- 加载中 -->
+  <view class="state" wx:if="{{loading}}">
+    <t-loading theme="dots" size="60rpx" text="加载中…" />
+  </view>
+
+  <!-- 空态 -->
+  <view class="state" wx:elif="{{!list.length}}">
+    <t-empty icon="info-circle" description="暂无快讯，敬请期待" />
+  </view>
+
+  <!-- 列表 -->
+  <view class="news-list" wx:else>
+    <view
+      class="news-card"
+      wx:for="{{list}}" wx:key="_id"
+      hover-class="news-card--hover"
+      data-id="{{item._id}}" bind:tap="onNewsTap"
+    >
+      <image wx:if="{{item.image}}" class="news-img" src="{{item.image}}" mode="aspectFill" />
+      <view class="news-card-main">
+        <view class="news-title">{{item.title}}</view>
+        <view class="news-summary">{{item.summary}}</view>
+        <view class="news-meta">
+          <t-tag size="small" variant="light" theme="warning">{{item.category}}</t-tag>
+          <text wx:if="{{item.source_name}}" class="news-source">{{item.source_name}}</text>
+          <text class="news-time">{{item.timeText}}</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 加载更多 -->
+    <view class="load-more">
+      <t-loading wx:if="{{loadingMore}}" theme="dots" size="40rpx" text="加载中…" />
+      <text wx:else class="load-more-text">{{hasMore ? '上拉加载更多' : '没有更多了'}}</text>
+    </view>
+  </view>
+</view>

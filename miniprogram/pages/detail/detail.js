@@ -13,6 +13,7 @@
 
 const privacy = require('../../utils/privacy.js');
 const { callPayCommon, pickPayment } = require('../../utils/pay.js');
+const { loadAds, openAdLink } = require('../../utils/ad.js');
 
 const CREDIT_META = {
   1: { label: '信用优秀', color: '#FF7A45', bg: '#FFF1E8' },
@@ -50,6 +51,13 @@ Page({
     d: null,
     // 是否本人帖子(是则底部展示"编辑/删除")
     isMine: false,
+      // 是否管理员（决定「转发」按钮是否显示）—— 调 adminAuth.check_admin 判定
+      isAdmin: false,
+      // 转发到朋友圈：编辑弹窗（管理员点「转发」先预览/改文案，确认后才下单）
+      forwardDialogVisible: false,
+      forwardText: '',
+      forwarding: false,
+      forwardError: '',
     // 删除确认
     deleteDialogVisible: false,
     deleting: false,
@@ -58,9 +66,16 @@ Page({
     faving: false,
     contactText: '',   // 供复制/拨打的可复制联系方式文本
     canContact: false,
-    // 查看电话付费：revealedPhone=已付费后展示的完整号；paying=支付中防重复
-    revealedPhone: '',
+    // 电话权限：
+    //   canCall = 已具备拨打权限（会员免费 或 已付费）
+    //   isVip   = 当前是否会员（决定按钮文案与是否免付费）
+    // ⚠️ 完整号码只存 this._phone（页面实例），**不 setData 渲染到界面**，
+    //    避免被复制/截图/爬虫抓取，降低隐私泄露与骚扰风险。
+    canCall: false,
+    isVip: false,
     paying: false,
+    // 详情页顶部卡片广告（方案 C：ad_slots 里 page=detail, position=top_card）
+    detailAds: [],
     // 详情加载骨架屏：模拟 徽章+标题 → 封面图 → 关键信息行 → 描述 的垂直布局（纯 TDesign row-col）
     skeletonRows: [
       [{ width: '24%', height: '40rpx', type: 'rect' }],
@@ -76,13 +91,29 @@ Page({
     ],
   },
 
+  // 分享给好友：标题用帖子标题，路径带上 id 让好友直达详情页
+  onShareAppMessage() {
+    const d = this.data.d;
+    const id = this._id || '';
+    const title = d && d.title ? d.title : '包子行业信息';
+    return {
+      title,
+      path: id ? `/pages/detail/detail?id=${id}` : '/pages/demo/demo',
+    };
+  },
+
   onLoad(options) {
     const id = (options && options.id) || '';
     if (!id) {
       this.setData({ loading: false, loadError: '缺少帖子标识' });
+      wx.hideLoading();
       return;
     }
     this._id = id;
+    // 判断当前用户是否管理员（决定「转发」按钮是否显示；免口令，只返回布尔值）
+    this.checkAdmin();
+    // 拉取详情页顶部卡片广告（方案 C，与帖子内容并行，互不阻塞）
+    this.loadDetailAds();
     // 1) 先看列表缓存是否命中(零云调用)
     const hit = this.fromCache(id);
     if (hit) {
@@ -91,6 +122,233 @@ Page({
     }
     // 2) 缓存未命中 → 兜底查库
     this.fetchRemote(id);
+  },
+
+  // 详情页顶部卡片广告：page=detail, position=top_card
+  async loadDetailAds() {
+    const groups = await loadAds('detail', ['top_card']);
+    const list = (groups.top_card || []).map((a) => {
+      // 兼容两种图片来源：单图 image 字段 / 轮播多图 images 数组（取第一张）
+      let img = a.image || '';
+      if (!img && Array.isArray(a.images) && a.images.length) {
+        img = a.images[0] || '';
+      }
+      return {
+        id: a._id,
+        image: img,
+        title: a.title || '',
+        link: a.link || '',
+        linkType: a.linkType || 'none',
+        target: a.target || '',
+      };
+    });
+    this.setData({ detailAds: list });
+  },
+
+  // 点击顶部卡片广告
+  onDetailAdTap(e) {
+    const item = e.currentTarget.dataset.item;
+    openAdLink(item);
+  },
+
+  // 判断当前登录用户是否管理员（决定「转发」按钮显隐）
+  // 用云函数服务端 OPENID 比对白名单，普通用户无法伪造；只拿布尔值，不泄露数据
+  checkAdmin() {
+    wx.cloud
+      .callFunction({ name: 'adminAuth', data: { action: 'check_admin' }, config: { timeout: 10000 } })
+      .then((res) => {
+        const r = (res && res.result) || {};
+        const isAdmin = !!r.isAdmin;
+        if (isAdmin !== this.data.isAdmin) this.setData({ isAdmin });
+        // 管理员：详情页直接显示完整手机号（不用付费/会员），并解锁直接拨打
+        if (isAdmin) this.revealPhoneForAdmin();
+      })
+      .catch(() => {
+        // 失败按非管理员处理，不显示按钮，不影响其他功能
+      });
+  },
+
+  // 管理员专属：把详情里的脱敏号换成完整号，并把按钮切成可拨打
+  // （云函数 adminAuth 的 post_phone 动作，服务端读 baozi_posts.phone，带管理员鉴权）
+  async revealPhoneForAdmin() {
+    if (!this._id) return;
+    const real = await this.fetchRealPhone();
+    if (!real) return;
+    // 详情数据可能还没到位（缓存未命中时要等云函数返回），最多等 3 秒
+    for (let i = 0; i < 30 && !this.data.d; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    if (!this.data.d) return;
+    this.setData({ 'd.phonesText': real, 'd.hasPhone': true, canCall: true });
+  },
+
+  // ------------------------- 转发到朋友圈（管理员专属） -------------------------
+  //
+  // 链路：点「转发」→ 弹窗预览/编辑文案 → 确认 → 调云函数 wxTask(action='create')
+  //      写任务入库 → 云函数经 relay 推送唤醒本机 Worker → 本机微信发布朋友圈。
+  //
+  // 注意：下单成功 ≠ 已发出。真正发布依赖电脑上常驻的 WXLauncher
+  //      （已注入 + 桥 :8080 + Worker）。本机没开时任务会排队，上线后自动补发。
+
+  // 把详情数据拼成朋友圈文案（与后台 buildMomentText 保持同一套口径）
+  buildForwardText(d) {
+    if (!d) return '';
+    const lines = [];
+
+    // 首行：【类型】地区 角色
+    const head = [`【${d.typeName || ''}】`, d.regionText || '', d.role && d.role !== '-' ? d.role : '']
+      .filter(Boolean)
+      .join(' ');
+    if (head) lines.push(head);
+
+    // 标题（详情页主标题，通常是最有信息量的一行）
+    if (d.title) lines.push(d.title);
+
+    // 价格/薪资（面议不单列，避免噪音）
+    const price = d.isEquip ? d.equipPriceText
+      : d.isTransfer || d.isWantShop ? d.shopPriceText
+        : d.isOther ? d.otherPriceText
+          : d.salaryText;
+    if (price && price !== '-' && price !== '面议') {
+      const isSalary = !!(d.isRecruit || d.isJobseek || d.isShop);
+      lines.push(`${isSalary ? '薪资' : '价格'}：${price}`);
+    }
+
+    // 正文（朋友圈纯文本，超长截断）
+    const body = (d.body || '').trim();
+    if (body) lines.push(body.length > 120 ? `${body.slice(0, 120)}…` : body);
+
+    // 地址
+    if (d.address) lines.push(`地址：${d.address}`);
+
+    // 联系方式（详情页已脱敏，发朋友圈用的也是这版）
+    // 注意：没有电话时也要把这一行显出来（写「无」），让人一眼知道这条没留电话
+    const phone = (d.phonesText || d.contactText || '').trim();
+    lines.push(`联系电话：${phone || '无'}`);
+
+    lines.push('感谢包子一哥传媒');
+    return lines.join('\n');
+  },
+
+  // 点悬浮「转发」按钮：
+  //   朋友圈是给潜在客户看的，脱敏号（138****5678）发出去根本没法联系，
+  //   所以先找云函数要完整号替换掉，再弹编辑窗让管理员过一眼。
+  async onWxForward() {
+    let text = this.buildForwardText(this.data.d);
+    if (!text) {
+      wx.showToast({ title: '帖子内容还没加载完', icon: 'none' });
+      return;
+    }
+
+    wx.showLoading({ title: '准备文案…', mask: true });
+    try {
+      const real = await this.fetchRealPhone();
+      if (real) text = text.replace(/联系电话：.*$/m, `联系电话：${real}`);
+    } catch (e) {
+      // 拿不到就沿用脱敏号，不阻断流程（弹窗里还能手动改）
+    }
+    wx.hideLoading();
+
+    this.setData({ forwardDialogVisible: true, forwardText: text, forwardError: '' });
+  },
+
+  // 管理员专属：取该帖完整手机号（云函数 adminAuth 的 post_phone 动作，带管理员鉴权）
+  // 注意：不复用 payForPhone 的 reveal —— 那个有付费/会员门槛 + 单日频控
+  // 说明：该能力原挂在 wxTask（转发任务中心），职责错配且 openid 取值不稳定，
+  //       已统一收敛到 adminAuth（管理员专用，鉴权与 check_admin 同源）。
+  fetchRealPhone() {
+    if (this._fullPhone) return Promise.resolve(this._fullPhone);
+    return wx.cloud
+      .callFunction({
+        name: 'adminAuth',
+        data: { action: 'post_phone', postId: this._id },
+        config: { timeout: 10000 },
+      })
+      .then((res) => {
+        const r = (res && res.result) || {};
+        const phone = r.success ? String(r.phone || '').trim() : '';
+        if (phone) this._fullPhone = phone;
+        return phone;
+      })
+      .catch(() => '');
+  },
+
+  onForwardInput(e) {
+    this.setData({ forwardText: e.detail.value });
+  },
+
+  onForwardCancel() {
+    this.setData({ forwardDialogVisible: false, forwardError: '' });
+  },
+
+  // 确认转发：取在线号 → 建任务
+  onForwardConfirm() {
+    if (this.data.forwarding) return;
+    const content = (this.data.forwardText || '').trim();
+    if (!content) {
+      this.setData({ forwardError: '文案不能为空' });
+      return;
+    }
+
+    this.setData({ forwarding: true, forwardError: '' });
+
+    // 1) 问云函数当前在线的微信号（本机 Worker 挂着长连就会出现在里面）
+    wx.cloud
+      .callFunction({ name: 'wxTask', data: { action: 'online' }, config: { timeout: 10000 } })
+      .then((res) => {
+        const r = (res && res.result) || {};
+        const online = ((r.data || {}).online) || [];
+        if (!online.length) {
+          throw new Error('本机未上线：请确认电脑上的 WXLauncher 已启动并连接');
+        }
+        return this.createForwardTask(online[0], content);
+      })
+      .catch((err) => {
+        this.setData({
+          forwarding: false,
+          forwardError: (err && err.message) || '提交失败，请稍后再试',
+        });
+      });
+  },
+
+  // 真正下单
+  createForwardTask(wxid, content) {
+    return wx.cloud
+      .callFunction({
+        name: 'wxTask',
+        data: { action: 'create', wxid, content },
+        config: { timeout: 15000 },
+      })
+      .then((res) => {
+        const r = (res && res.result) || {};
+        if (!r.success) throw new Error(r.message || '提交失败');
+
+        this.setData({ forwarding: false, forwardDialogVisible: false });
+        wx.showToast({ title: '已提交，稍后自动发布', icon: 'success', duration: 2200 });
+
+        // 给个明确的"去哪儿看结果"的引导
+        setTimeout(() => {
+          wx.showModal({
+            title: '已提交',
+            content: '任务已进入队列，本机微信会自动发布到朋友圈。若本机没开，任务会排队等上线后补发。',
+            showCancel: false,
+            confirmText: '知道了',
+          });
+        }, 2400);
+      })
+      .catch((err) => {
+        this.setData({
+          forwarding: false,
+          forwardError: (err && err.message) || '提交失败，请稍后再试',
+        });
+      });
+  },
+
+  // 页面首次渲染完成后：关闭列表页跳转时展示的 loading
+  // （放在 onReady 而非数据就绪回调，保证 loading 稳定持续到详情页真正显示出来，
+  //   不会被缓存命中的同步快路径瞬间清掉，用户能看到明确的"加载中"反馈）
+  onReady() {
+    wx.hideLoading();
   },
 
   // 从列表页写入的 detail_pool 缓存取（存的是 feedPosts 原始帖子对象，含 _id/data_type）
@@ -368,8 +626,21 @@ Page({
     this.backfillCache(rawItem);
     // 判断当前帖子是否已被我收藏
     this.checkFav(rawItem._id);
+    // 查会员状态（会员可免费拨打电话）
+    this.loadVip();
     // 浏览量 +1（前端节流：同一帖子 10 秒内不重复上报）
     this.reportView(rawItem._id);
+  },
+
+  // 查当前是否会员 → 会员免费查看/拨打电话
+  loadVip() {
+    return wx.cloud
+      .callFunction({ name: 'memberService', data: { action: 'status' }, config: { timeout: 10000 } })
+      .then((res) => {
+        const r = (res && res.result) || {};
+        this.setData({ isVip: !!r.isVip });
+      })
+      .catch(() => {});
   },
 
   // 浏览量上报：进详情页 +1，10 秒内同一帖子不重复
@@ -441,47 +712,70 @@ Page({
     }
   },
 
-  // 底部"查看联系方式"按钮：付费后展示完整联系方式（与"查看电话"同一流程）
+  // 底部"查看联系方式"按钮：会员免费 / 付费后拨打电话（与"查看电话"同一流程）
   onViewContact() {
     this.payForContact();
   },
 
-  // 顶部"查看电话"按钮：付费 1 分钱查看完整手机号
+  // 顶部"查看电话"按钮：会员免费 / 付费后拨打电话（明文不渲染）
   onRevealPhone() {
     this.payForContact();
   },
 
-  // 统一付费查看流程（严格按官方文档）：
-  //   1) reveal 查是否已付费 → 已付费直接展示，不重复收费
-  //   2) wx.cloud.callHTTPFunction 调 pay-common 下单（/wx-pay/wxpay_order）
-  //   3) wx.requestPayment 拉起微信支付
-  //   4) 支付成功 → markPaid 记录付费
-  //   5) reveal 取完整手机号 → 展示并拨号
+  // 统一查看电话流程：
+  //   1) reveal 查权限：会员免费 / 已付费 → 服务端返回完整号 + 频控 + 记日志
+  //   2) 未付费非会员 → 走支付（create 建单 → wxpay_order → requestPayment → verify）
+  //   3) 拿到号后只存 this._phone 并直接拨号，**不渲染明文到界面**
   async payForContact() {
     const postId = this._id;
     if (!postId) return;
-    // 已展示过完整号，直接拨号
-    if (this.data.revealedPhone) {
-      this.callPhone(this.data.revealedPhone);
+    // 已拿到过完整号 → 直接拨号
+    if (this._phone) {
+      this.callPhone(this._phone);
       return;
     }
     if (this.data.paying) return;
     this.setData({ paying: true });
+    // 立即给反馈：发起支付前要串行经过 reveal/create/下单 多次云调用，用 loading 消除"点了没反应"的空白感
+    wx.showLoading({ title: '正在发起支付…', mask: true });
 
     try {
-      // 1) 是否已付费
+      // 1) 会员免费 / 已付费 → 直接拿到号
       const check = await this.callPay('reveal', postId);
       if (check.success && check.phone) {
-        this.showPhone(check.phone);
+        this._phone = check.phone;
+        this.setData({ paying: false, canCall: true });
+        this.callPhone(check.phone);
         return;
       }
 
-      // 2) 下单（无需传 payer.openid，平台自动注入 x-wx-openid）
-      const outTradeNo = `BZ${Date.now()}${Math.floor(Math.random() * 1000)}`;
+      // 2) 服务端建单：拿 out_trade_no + 权威金额（防伪造订单号 / 防改价）
+      const createRes = await wx.cloud.callFunction({
+        name: 'payForPhone',
+        data: { action: 'create', biz_type: 'phone', post_id: postId },
+        config: { timeout: 10000 },
+      });
+      const cr = (createRes && createRes.result) || {};
+      if (!cr.success) throw new Error(cr.message || '下单失败');
+      // 已付费（重复点击 / 并发）→ 直接取号，不重复扣费
+      if (cr.already_paid) {
+        const already = await this.callPay('reveal', postId);
+        if (already.success && already.phone) {
+          this._phone = already.phone;
+          this.setData({ paying: false, canCall: true });
+          this.callPhone(already.phone);
+          return;
+        }
+      }
+      const outTradeNo = cr.out_trade_no;
+      const amount = Number(cr.amount) || 1; // 单位：分
+      if (!outTradeNo) throw new Error('下单参数异常');
+
+      // 3) 调集成支付函数下单（无需传 payer.openid，平台自动注入 x-wx-openid）
       const order = await callPayCommon('wxpay_order', {
-        description: '查看联系电话',
+        description: cr.title || '查看联系电话',
         out_trade_no: outTradeNo,
-        amount: { total: 1, currency: 'CNY' }, // 单位：分（1 分钱）
+        amount: { total: amount, currency: 'CNY' },
       });
       console.log('[detail] 下单返回:', JSON.stringify(order));
       // 仅当明确返回了非 0 的 code 才判定失败（不同结构下 code 可能缺位）
@@ -495,7 +789,8 @@ Page({
         throw new Error('下单失败：未获取到 package');
       }
 
-      // 3) 拉起支付
+      // 4) 拉起支付（先隐藏 loading，避免遮挡系统支付面板）
+      wx.hideLoading();
       await new Promise((resolve, reject) => {
         wx.requestPayment({
           timeStamp: String(p.timeStamp || ''),
@@ -508,17 +803,26 @@ Page({
         });
       });
 
-      // 4) 支付成功 → 记录付费
-      await this.callPay('markPaid', postId, outTradeNo);
+      // 5) 支付成功 → 服务端校验订单并履约（幂等，重复核销不重复记录）
+      const verifyRes = await wx.cloud.callFunction({
+        name: 'payForPhone',
+        data: { action: 'verify', out_trade_no: outTradeNo },
+        config: { timeout: 10000 },
+      });
+      const vr = (verifyRes && verifyRes.result) || {};
+      if (!vr.success) throw new Error(vr.message || '支付核销失败');
 
-      // 5) 取完整号
+      // 6) 取完整号并拨号（明文只存实例，不渲染）
       const reveal = await this.callPay('reveal', postId);
       if (!reveal.success || !reveal.phone) {
         throw new Error(reveal.message || '获取电话失败');
       }
-      this.showPhone(reveal.phone);
+      this._phone = reveal.phone;
+      this.setData({ paying: false, canCall: true });
+      this.callPhone(reveal.phone);
     } catch (err) {
-      console.error('[detail] 付费查看失败:', err && (err.errMsg || err.message));
+      console.error('[detail] 查看电话失败:', err && (err.errMsg || err.message));
+      wx.hideLoading();
       this.setData({ paying: false });
       const msg = String((err && (err.errMsg || err.message)) || '操作失败');
       if (msg.indexOf('cancel') >= 0) {
@@ -529,7 +833,7 @@ Page({
     }
   },
 
-  // 调用 payForPhone 云函数（reveal 取号 / markPaid 记付费）
+  // 调用 payForPhone 云函数（reveal 取号）
   callPay(action, postId, outTradeNo) {
     return wx.cloud.callFunction({
       name: 'payForPhone',
@@ -538,14 +842,7 @@ Page({
     }).then((res) => res.result || {});
   },
 
-  // 展示完整号并自动拨号
-  showPhone(phone) {
-    this.setData({ revealedPhone: phone, paying: false });
-    wx.showToast({ title: '已获取电话', icon: 'success' });
-    this.callPhone(phone);
-  },
-
-  // 拨打完整号
+  // 拨打完整号（号码只存实例，绝不渲染到界面，防复制/截图/抓取）
   callPhone(phone) {
     if (!phone) return;
     wx.makePhoneCall({ phoneNumber: phone }).catch(() => {});

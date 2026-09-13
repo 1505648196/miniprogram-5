@@ -1,0 +1,58 @@
+<!-- components/ad-block/ad-block.wxml -->
+<!-- 通用广告区块：轮播图 + 双卡 + 全局弹窗，空则整块不渲染 -->
+
+<!-- 轮播图（banner） -->
+<view class="ads" wx:if="{{ads.length}}">
+  <t-swiper
+    class="ads-swiper"
+    list="{{ads}}"
+    height="240rpx"
+    autoplay="{{true}}"
+    interval="{{5000}}"
+    navigation="{{swiperNav}}"
+    bind:click="onAdTap"
+  />
+</view>
+
+<!-- 双卡（card） -->
+<view class="banners" wx:if="{{banners.length}}">
+  <view
+    class="banner"
+    wx:for="{{banners}}"
+    wx:key="id"
+    style="background: linear-gradient(135deg, {{item.bgFrom}} 0%, {{item.bgTo}} 100%);"
+    data-item="{{item}}"
+    bindtap="onBannerTap"
+  >
+    <image wx:if="{{item.icon}}" class="banner-emoji banner-emoji-img" src="{{item.icon}}" mode="aspectFit" />
+    <view wx:else class="banner-emoji">{{item.emoji}}</view>
+    <view class="banner-info">
+      <view class="banner-title">{{item.title}}</view>
+      <view class="banner-sub" wx:if="{{item.sub}}">{{item.sub}}</view>
+    </view>
+  </view>
+</view>
+
+<!-- 全局弹窗（popup） -->
+<t-popup
+  visible="{{popupVisible}}"
+  placement="center"
+  bind:visible-change="onPopupClose"
+>
+  <view class="ad-popup-inner" wx:if="{{popupAd}}">
+    <image
+      wx:if="{{popupAd.image}}"
+      class="ad-popup-img"
+      src="{{popupAd.image}}"
+      mode="widthFix"
+      bindtap="onPopupTap"
+    />
+    <view wx:else class="ad-popup-text" bindtap="onPopupTap">
+      <view class="ad-popup-title">{{popupAd.title}}</view>
+      <view class="ad-popup-sub">{{popupAd.sub}}</view>
+    </view>
+    <view class="ad-popup-close" bindtap="onPopupClose">
+      <t-icon name="close" size="40rpx" color="#ffffff" />
+    </view>
+  </view>
+</t-popup>

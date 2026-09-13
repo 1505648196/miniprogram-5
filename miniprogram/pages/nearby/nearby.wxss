@@ -37,6 +37,21 @@
   background: #FFF1DB;
 }
 
+/* ============ 业务标签筛选条（t-tabs theme=tag） ============ */
+.filter-tabs {
+  --td-tab-item-color: #333333;
+  --td-tab-item-active-color: #FF7A45;
+  --td-tab-item-tag-bg: #F5F5F5;
+  --td-tab-item-tag-active-bg: #FFF1E8;
+  --td-tab-item-height: 80rpx;
+  --td-tab-item-tag-height: 60rpx;
+  background: #FFFFFF;
+}
+/* 隐藏 t-tabs 的内容面板（本页只用头部标签做筛选，不展示面板内容） */
+.tabs-hide-content {
+  display: none;
+}
+
 /* ============ 同城帖子流 ============ */
 .feed {
   background: #FFFFFF;

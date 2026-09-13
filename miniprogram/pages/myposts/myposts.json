@@ -8,6 +8,11 @@
     "t-empty": "/miniprogram_npm/tdesign-miniprogram/empty/empty",
     "t-loading": "/miniprogram_npm/tdesign-miniprogram/loading/loading",
     "t-skeleton": "/miniprogram_npm/tdesign-miniprogram/skeleton/skeleton",
-    "t-toast": "/miniprogram_npm/tdesign-miniprogram/toast/toast"
+    "t-toast": "/miniprogram_npm/tdesign-miniprogram/toast/toast",
+    "t-tab-bar": "/miniprogram_npm/tdesign-miniprogram/tab-bar/tab-bar",
+    "t-tab-bar-item": "/miniprogram_npm/tdesign-miniprogram/tab-bar-item/tab-bar-item",
+    "t-popup": "/miniprogram_npm/tdesign-miniprogram/popup/popup",
+    "t-grid": "/miniprogram_npm/tdesign-miniprogram/grid/grid",
+    "t-grid-item": "/miniprogram_npm/tdesign-miniprogram/grid-item/grid-item"
   }
 }

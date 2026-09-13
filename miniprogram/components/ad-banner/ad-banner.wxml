@@ -1,0 +1,25 @@
+<!-- components/ad-banner/ad-banner.wxml -->
+<!-- 通用广告横幅：items 为空时整块不渲染 -->
+<view class="ad-banner" wx:if="{{items.length}}">
+  <view
+    class="ad-banner-item"
+    wx:for="{{items}}"
+    wx:key="_id"
+    data-item="{{item}}"
+    bindtap="onTap"
+  >
+    <!-- 优先图片横幅；无图回退渐变文字卡 -->
+    <image wx:if="{{item.image}}" class="ad-banner-img" src="{{item.image}}" mode="widthFix" />
+    <view
+      wx:else
+      class="ad-banner-card"
+      style="background: linear-gradient(135deg, {{item.bgFrom || '#FFF1E8'}} 0%, {{item.bgTo || '#FFE0C2'}} 100%);"
+    >
+      <view wx:if="{{item.emoji}}" class="ad-banner-emoji">{{item.emoji}}</view>
+      <view class="ad-banner-info">
+        <view wx:if="{{item.title}}" class="ad-banner-title">{{item.title}}</view>
+        <view wx:if="{{item.sub}}" class="ad-banner-sub">{{item.sub}}</view>
+      </view>
+    </view>
+  </view>
+</view>

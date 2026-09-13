@@ -42,22 +42,28 @@ Page({
     // 编辑态
     isEdit: false,
     editId: '',
+    isAdmin: false, // 管理员模式（从管理员对话进入，绕过归属校验，走 adminAuth）
   },
 
   onLoad(options) {
     const editId = (options && options.id) || '';
+    const isAdmin = (options && options.admin) === '1';
+    this.setData({ isAdmin });
     if (editId) {
       this.setData({ isEdit: true, editId });
-      wx.setNavigationBarTitle({ title: '编辑顺风车' });
+      wx.setNavigationBarTitle({ title: isAdmin ? '编辑顺风车(管理员)' : '编辑顺风车' });
       this.loadForEdit(editId);
     }
   },
 
-  // 编辑态：拉本人原帖预填
+  // 编辑态：拉原帖预填（管理员走 adminAuth，普通用户走 managePost）
   loadForEdit(id) {
     wx.showLoading({ title: '加载中…', mask: true });
+    const call = this.data.isAdmin
+      ? { name: 'adminAuth', data: { action: 'get', _id: id, user: 'admin', pass: 'admin' } }
+      : { name: 'managePost', data: { action: 'get', _id: id } };
     wx.cloud
-      .callFunction({ name: 'managePost', data: { action: 'get', _id: id }, config: { timeout: 10000 } })
+      .callFunction(Object.assign({ config: { timeout: 10000 } }, call))
       .then((res) => {
         wx.hideLoading();
         const r = res.result || {};
@@ -219,16 +225,19 @@ Page({
 
     this.setData({ submitting: true });
     if (this.data.isEdit) {
-      // 编辑：managePost(action=update)
+      // 编辑保存：管理员走 adminAuth.update，普通用户走 managePost.update
       wx.showLoading({ title: '保存中…', mask: true });
+      const call = this.data.isAdmin
+        ? { name: 'adminAuth', data: { action: 'update', _id: this.data.editId, data: base, user: 'admin', pass: 'admin' } }
+        : { name: 'managePost', data: { action: 'update', _id: this.data.editId, form: base } };
       wx.cloud
-        .callFunction({ name: 'managePost', data: { action: 'update', _id: this.data.editId, form: base }, config: { timeout: 10000 } })
+        .callFunction(Object.assign({ config: { timeout: 10000 } }, call))
         .then((res) => {
           wx.hideLoading();
           const r = res.result || {};
           this.setData({ submitting: false });
           if (r.success) {
-            wx.showToast({ title: r.needs_review ? '已保存待审核' : '保存成功', icon: 'success' });
+            wx.showToast({ title: '保存成功', icon: 'success' });
             setTimeout(() => wx.navigateBack(), 1200);
           } else {
             wx.showToast({ title: r.message || '保存失败', icon: 'none' });

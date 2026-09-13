@@ -42,27 +42,135 @@
       </t-grid-item>
     </t-grid>
 
-    <!-- 模块 4:Banner 双卡(AI顾问 / 免费发布) -->
-    <!-- <view class="banners">
-      <view class="banner banner-ai" data-id="ai" bindtap="onEntry">
-        <view class="banner-emoji">🤖</view>
-        <view class="banner-info">
-          <view style="font-size: 23rpx;">AI 查询发布助手</view>
-          <view style="font-size: 18rpx;" class="banner-sub">转让 / 招聘 / 求职 / 设备</view>
+    <!-- 模块 4:广告轮播位（ads 为空时整块不渲染） -->
+    <view class="ads" wx:if="{{ads.length}}">
+      <t-swiper
+        class="ads-swiper"
+        list="{{ads}}"
+        height="240rpx"
+        autoplay="{{true}}"
+        interval="{{5000}}"
+        navigation="{{swiperNav}}"
+        bind:click="onAdTap"
+      />
+    </view>
+
+    <!-- 模块 4b:热门推荐运营卡（白底卡片组容器）
+         设计稿来源：WorkBuddy「包子一哥首页卡片组 - 改版」
+         区头「热门推荐 + 查看全部」+ 左大卡（今日头条红tag+包子插画+黄牛号新闻+查看详情CTA）+
+         右上 VIP会员（皇冠t-icon）· 右下 包友群（气泡t-icon） -->
+    <view class="card-group" wx:if="{{cardAds.headline._id || cardAds.vip._id || cardAds.group._id}}">
+      <view class="section-head">
+        <text class="section-title">热门推荐</text>
+        <view class="more" bindtap="onCardMoreTap">
+          <text class="more-text">查看全部</text>
+          <t-icon name="chevron-right" size="23rpx" color="#A09386" />
         </view>
       </view>
-      <view class="banner banner-pub" data-id="publish" bindtap="onTap">
-        <view class="banner-emoji">📝</view>
-        <view class="banner-info">
-          <view style="font-size: 23rpx;">免费发布</view>
-          <view style="font-size: 18rpx;" class="banner-sub">转让 / 招聘 / 求职 / 设备</view>
+
+      <view class="card-row">
+        <!-- 左大卡：今日头条（广告系统驱动，有广告才显示，下线/无广告不渲染） -->
+        <view wx:if="{{cardAds.headline._id}}" class="headline-card" bindtap="onCardHeadlineTap" bindlongpress="onCardAdLongPress" data-ad-key="headline">
+          <t-tag class="badge-tag" t-class="badge-tag" theme="danger" variant="dark" size="small" shape="square">{{cardAds.headline.badge_text || card.headline.badge}}</t-tag>
+          <!-- 右上角包子插画：用 view 包 t-image，外层做绝对定位 -->
+          <view class="headline-illust-wrap">
+            <t-image class="headline-illust" t-class="headline-illust" src="{{cardAds.headline.headline_image || card.headline.image}}" mode="aspectFill" width="185rpx" height="185rpx" />
+          </view>
+          <view class="title-group">
+            <text class="title-line">{{cardAds.headline.line1 || card.headline.line1}}</text>
+            <view class="title-line2">
+              <text class="title-strong">{{cardAds.headline.strong || card.headline.strong}}</text>
+              <text class="title-price">{{cardAds.headline.price || card.headline.price}} 元</text>
+            </view>
+          </view>
+          <view class="cta">
+            <text class="cta-text">{{cardAds.headline.cta_text || card.headline.cta}}</text>
+            <t-icon name="chevron-right" size="23rpx" color="#8A5A2B" />
+          </view>
+        </view>
+
+        <!-- 右 上下两小卡：图标+标题水平一排 + 副标题 + 右下标签+箭头 + 右上插画（广告系统驱动，无广告回退 card.mini 兜底） -->
+        <view class="side-column">
+          <!-- VIP 会员卡：右上角 金色奖章(带五角星+流苏丝带)，有广告才显示 -->
+          <view wx:if="{{cardAds.vip._id}}" class="mini-card vip" bindtap="onCardVipTap" bindlongpress="onCardAdLongPress" data-ad-key="vip">
+            <view class="mini-head">
+              <t-icon class="mini-icon" name="{{cardAds.vip.icon_name || 'user-vip'}}" size="34rpx" color="#C98A1F" />
+              <text class="mini-title">{{cardAds.vip.title || 'VIP 会员'}}</text>
+            </view>
+            <text class="mini-sub">{{cardAds.vip.sub || '畅享全部特权'}}</text>
+            <view class="mini-bottom">
+              <text class="mini-bottom-text">{{cardAds.vip.bottom_text || card.mini.vipRights}}</text>
+              <t-icon name="chevron-right" size="22rpx" color="#14513B" />
+            </view>
+            <image class="mini-illust vip-medal" src="{{cardAds.vip.image || '/assets/images/vip-medal.png'}}" mode="aspectFit" />
+          </view>
+          <!-- 包友群卡：右侧 一群可爱包子(笑脸+蒸汽)，有广告才显示 -->
+          <view wx:if="{{cardAds.group._id}}" class="mini-card group" bindtap="onCardGroupTap" bindlongpress="onCardAdLongPress" data-ad-key="group">
+            <view class="mini-head">
+              <t-icon class="mini-icon" name="{{cardAds.group.icon_name || 'chat-bubble'}}" size="34rpx" color="#E8873A" />
+              <text class="mini-title">{{cardAds.group.title || '包友群'}}</text>
+            </view>
+            <text class="mini-sub">{{cardAds.group.sub || '同行交流互助'}}</text>
+            <view class="mini-bottom">
+              <text class="mini-bottom-text">{{cardAds.group.bottom_text || card.mini.groupMembers}}</text>
+              <t-icon name="chevron-right" size="22rpx" color="#7A4A22" />
+            </view>
+            <image class="mini-illust baozi-group" src="{{cardAds.group.image || '/assets/images/baozi-group.png'}}" mode="aspectFit" />
+          </view>
         </view>
       </view>
-    </view> -->
+    </view>
+
+    <!-- 模块 4c:包友圈商家骨架（加载中占位，横滚卡片骨架） -->
+    <view class="partners" wx:if="{{partnersLoading}}">
+      <view class="partners-head">
+        <view class="partners-title-wrap">
+          <t-icon name="location" size="28rpx" color="#FF7A45" />
+          <text class="partners-title">包友圈商家</text>
+        </view>
+      </view>
+      <view class="partners-scroll">
+        <view class="partners-skeleton" wx:for="{{[1,2,3,4]}}" wx:key="*this">
+          <t-skeleton theme="image" animation="gradient" />
+        </view>
+      </view>
+    </view>
+
+    <!-- 模块 4c:包友圈商家（横向滚动：3 张商家小卡 + 1 张"更多商家"卡，标题右侧"全部 >"） -->
+    <view class="partners" wx:elif="{{partners.length}}">
+      <view class="partners-head">
+        <view class="partners-title-wrap">
+          <t-icon name="location" size="28rpx" color="#FF7A45" />
+          <text class="partners-title">包友圈商家</text>
+        </view>
+        <view class="partners-all" bindtap="onPartnersAll">
+          <text>全部</text>
+          <t-icon name="chevron-right" size="24rpx" color="#999999" />
+        </view>
+      </view>
+      <!-- 可拖动横滚：scroll-view 单份内容，自动滚到末尾（更多商家）后停止；手指可左右拖动 -->
+      <scroll-view
+        class="partners-scroll"
+        scroll-x="{{true}}"
+        enhanced="{{true}}"
+        show-scrollbar="{{false}}"
+        scroll-left="{{partnersScrollLeft}}"
+        bindtouchstart="onPartnersTouchStart"
+        bindtouchend="onPartnersTouchEnd"
+      >
+        <view class="partners-card" wx:for="{{partners}}" wx:key="id" data-item="{{item}}" bindtap="onPartnerTap">
+          <image class="partners-img" src="{{item.image}}" mode="aspectFill" />
+          <view class="partners-name">{{item.name}}</view>
+        </view>
+        <view class="partners-card partners-card-more" bindtap="onPartnersMore">
+          <text class="partners-more-text">更多商家</text>
+        </view>
+      </scroll-view>
+    </view>
 
   </view>
 
-  <!-- 模块 5:顶部选项卡(最新/附近/VIP/求职招聘) · TDesign 原生吸顶 -->
+  <!-- 模块 5:顶部选项卡(最新/附近/转让求店/求职招聘) · TDesign 原生吸顶 -->
   <t-tabs
     class="top-tabs {{tabsSticky ? 'is-sticky' : ''}}"
     value="{{activeTopTab}}"
@@ -82,13 +190,16 @@
   <!-- loading 时展示双列卡片骨架屏(t-skeleton)；否则按 空态/列表 渲染 -->
   <!-- bindtouchstart/touchend：帖子流上左右滑切换顶部 Tab（不影响上下滚动） -->
   <view class="feed" bindtouchstart="onFeedTouchStart" bindtouchend="onFeedTouchEnd">
-    <t-skeleton
-      wx:if="{{loading}}"
-      class="feed-skeleton"
-      theme="paragraph"
-      animation="gradient"
-      row-col="{{skeletonRows}}"
-    />
+    <view class="feed-skeleton" wx:if="{{loading}}">
+      <view class="feed-skeleton-col">
+        <t-skeleton theme="text" animation="gradient" row-col="{{skeletonCard}}" />
+        <t-skeleton theme="text" animation="gradient" row-col="{{skeletonCard}}" />
+      </view>
+      <view class="feed-skeleton-col">
+        <t-skeleton theme="text" animation="gradient" row-col="{{skeletonCard}}" />
+        <t-skeleton theme="text" animation="gradient" row-col="{{skeletonCard}}" />
+      </view>
+    </view>
     <view class="goods-empty" wx:elif="{{!goodsLeft.length && !goodsRight.length}}">暂无相关帖子</view>
 
     <view class="goods" wx:else>
@@ -190,8 +301,8 @@
       badge-props="{{ item.id === 'message' ? { count: unread } : null }}">{{item.label}}</t-tab-bar-item>
   </t-tab-bar>
 
-  <!-- 模块 8:发布类型选择弹层(TDesign t-popup + t-grid) -->
-  <t-popup
+  <!-- 模块 8:发布类型选择弹层(TDesign t-popup + t-grid)—— 临时注释掉 -->
+  <!-- <t-popup
     visible="{{publishSheetVisible}}"
     placement="bottom"
     bind:visible-change="onPublishSheetClose"
@@ -207,6 +318,54 @@
           <view class="pub-name">{{item.name}}</view>
         </t-grid-item>
       </t-grid>
+    </view>
+  </t-popup> -->
+
+  <!-- 模块 9:金色悬浮按钮（圆形，右下角，位于分享按钮上方）—— 仅管理员可见 -->
+  <button
+    wx:if="{{isAdmin}}"
+    class="gold-fab"
+    hover-class="share-fab-hover"
+    bindtap="onGoldFabTap"
+  >
+    <t-icon name="robot" size="44rpx" color="#7A4E00" />
+  </button>
+
+  <!-- 模块 9:悬浮分享按钮（圆形，右下角）—— open-type=share 直接触发「转发给好友」 -->
+  <button
+    class="share-fab"
+    hover-class="share-fab-hover"
+    open-type="share"
+  >
+    <t-icon name="share" size="40rpx" color="#FFFFFF" />
+    <text class="share-fab-text">分享</text>
+  </button>
+
+  <!-- 模块 11:全局弹窗广告（popupAd 为空 / 今日已弹 时不显示） -->
+  <t-popup
+    visible="{{popupVisible}}"
+    placement="center"
+    bind:visible-change="onPopupClose"
+    t-class="ad-popup"
+  >
+    <view class="ad-popup-inner" wx:if="{{popupAd}}">
+      <!-- 有图：展示图片，点击跳转 -->
+      <image
+        wx:if="{{popupAd.image}}"
+        class="ad-popup-img"
+        src="{{popupAd.image}}"
+        mode="widthFix"
+        bindtap="onPopupTap"
+      />
+      <!-- 无图：文字卡兜底 -->
+      <view wx:else class="ad-popup-text" bindtap="onPopupTap">
+        <view class="ad-popup-title">{{popupAd.title}}</view>
+        <view class="ad-popup-sub">{{popupAd.sub}}</view>
+      </view>
+      <!-- 关闭按钮 -->
+      <view class="ad-popup-close" bindtap="onPopupClose">
+        <t-icon name="close" size="40rpx" color="#ffffff" />
+      </view>
     </view>
   </t-popup>
 

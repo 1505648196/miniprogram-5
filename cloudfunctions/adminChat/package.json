@@ -1,0 +1,15 @@
+{
+  "name": "adminChat",
+  "version": "1.0.0",
+  "description": "包子行业信息平台 · 管理员 AI 对话：意图识别 + 查全量数据(含待审/下架) + 运营指标反馈",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.7.2",
+    "wx-server-sdk": "~2.6.3"
+  }
+}

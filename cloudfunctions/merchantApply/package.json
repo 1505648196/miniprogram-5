@@ -1,0 +1,9 @@
+{
+  "name": "merchantApply",
+  "version": "1.0.0",
+  "description": "商家入驻：列表 / 提交申请 / 状态查询",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

@@ -13,6 +13,18 @@
     </view> -->
   </view>
 
+  <!-- 顶部卡片广告（方案 C：detailAds 为空时整块不渲染） -->
+  <view class="detail-ads" wx:if="{{detailAds.length}}">
+    <view
+      class="detail-ad-card"
+      wx:for="{{detailAds}}" wx:key="id"
+      data-item="{{item}}" bindtap="onDetailAdTap"
+    >
+      <image wx:if="{{item.image}}" class="detail-ad-img" src="{{item.image}}" mode="widthFix" />
+      <view wx:if="{{item.title}}" class="detail-ad-title">{{item.title}}</view>
+    </view>
+  </view>
+
   <!-- 有图时展示图片 -->
   <image wx:if="{{d.image}}" class="cover" src="{{d.image}}" mode="widthFix" />
 
@@ -131,12 +143,11 @@
       <text class="card-key">所在地区</text>
       <text class="card-val">{{d.regionText}}</text>
     </view>
-    <!-- 联系电话：正文/联系方式里识别出的号统一脱敏后单独一栏展示；右侧"查看电话"按钮(付费查看完整号) -->
+    <!-- 联系电话：始终只显示脱敏号；右侧按钮会员免费/付费后直接拨打，完整号不渲染到界面 -->
     <view wx:if="{{d.hasPhone}}" class="card-row phone-row">
       <text class="card-key">联系电话</text>
-      <text wx:if="{{revealedPhone}}" class="card-val phone-val" user-select>{{revealedPhone}}</text>
-      <text wx:else class="card-val phone-val" user-select>{{d.phonesText}}</text>
-      <view class="phone-action" bind:tap="onRevealPhone">{{revealedPhone ? '拨打' : '查看电话'}}</view>
+      <text class="card-val phone-val" user-select>{{d.phonesText}}</text>
+      <view class="phone-action {{paying ? 'is-loading' : ''}}" bind:tap="onRevealPhone">{{paying ? '加载中…' : (canCall ? '拨打' : (isVip ? '免费拨打' : '查看电话'))}}</view>
     </view>
     <view wx:if="{{d.address}}" class="card-row">
       <text class="card-key">详细地址</text>
@@ -225,8 +236,9 @@
           class="contact-btn"
           theme="primary"
           size="large"
+          loading="{{paying}}"
           bind:tap="onViewContact"
-        >查看联系方式</t-button>
+        >{{ isVip ? '免费拨打电话' : '查看联系方式' }}</t-button>
       </view>
     </block>
   </view>
@@ -242,6 +254,23 @@
     bind:cancel="onDeleteDialogClose"
     bind:close="onDeleteDialogClose"
   />
+
+  <!-- 悬浮分享按钮（右下角，悬浮在底部操作区上方，图标 + 文字） -->
+  <button class="share-fab" open-type="share" hover-class="share-fab--hover">
+    <t-icon name="share" size="40rpx" color="#FFFFFF" />
+    <text class="share-fab-text">分享</text>
+  </button>
+
+  <!-- 悬浮转发按钮（仅管理员可见，位于分享按钮上方） -->
+  <button
+    wx:if="{{isAdmin}}"
+    class="wxforward-fab"
+    hover-class="wxforward-fab--hover"
+    bind:tap="onWxForward"
+  >
+    <t-icon name="swap-right" size="40rpx" color="#FFFFFF" />
+    <text class="wxforward-fab-text">转发</text>
+  </button>
 </view>
 
 <!-- 加载中：骨架屏（模拟详情布局，避免白屏延迟感） -->
@@ -250,3 +279,42 @@
 </view>
 <!-- 空态 / 出错 -->
 <t-empty wx:else description="{{loadError || '帖子不存在'}}" class="state" />
+
+<!-- 转发到朋友圈：编辑弹窗（管理员专属）
+     点「转发」先预填文案，可以改完再确认；确认后由本机 Worker 发布 -->
+<view wx:if="{{forwardDialogVisible}}" class="fwd-mask" catchtouchmove="true">
+  <view class="fwd-panel">
+    <view class="fwd-head">
+      <text class="fwd-title">转发到朋友圈</text>
+      <text class="fwd-tip">文案可以直接改，确认后由你电脑上的微信自动发布</text>
+    </view>
+
+    <textarea
+      class="fwd-text"
+      value="{{forwardText}}"
+      bindinput="onForwardInput"
+      maxlength="1200"
+      auto-height
+      show-confirm-bar="{{false}}"
+      cursor-spacing="24"
+      placeholder="朋友圈文案"
+    />
+
+    <view class="fwd-count">{{forwardText.length}} / 1200</view>
+
+    <view wx:if="{{forwardError}}" class="fwd-error">{{forwardError}}</view>
+
+    <view class="fwd-btns">
+      <view class="fwd-btn fwd-btn--cancel" hover-class="fwd-btn--hover" bindtap="onForwardCancel">
+        取消
+      </view>
+      <view
+        class="fwd-btn fwd-btn--ok {{forwarding ? 'is-busy' : ''}}"
+        hover-class="fwd-btn--hover"
+        bindtap="onForwardConfirm"
+      >
+        {{forwarding ? '提交中…' : '确认转发'}}
+      </view>
+    </view>
+  </view>
+</view>

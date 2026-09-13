@@ -1,8 +1,9 @@
 # 包子一哥 · 云函数 API 对接文档（供后台管理系统开发）
 
-> 本文档面向「后台管理系统」开发。用于对接云函数 CRUD / 审核 / 推送通知 / 会员等能力。
+> 本文档面向「后台管理系统」开发。用于对接云函数 CRUD / 审核 / 推送通知 / 会员 / 操作日志等能力。
 > 项目：微信小程序 + 腾讯云开发（CloudBase）。环境 `cloud1-9gcxv3wk28637b62`。
-> 后台前端为 Vue3 + naive-ui + `@cloudbase/js-sdk`，通过 HTTP 网关调用云函数 `adminAuth`。
+> 后台前端位于 `C:\Users\user\Downloads\shadcn-vue-admin\`（Vue3 + TypeScript + Vite + Tailwind + shadcn-vue + TanStack Vue Query + ofetch），通过 HTTP 网关调用云函数 `adminAuth`。
+> ⚠️ 仓库内的 `admin/` 目录已废弃（旧 naive-ui 版本），不要使用。
 
 ---
 
@@ -27,6 +28,7 @@
 | `baozi_messages` | 站内通知（global/review/member） | |
 | `baozi_favorites` | 收藏（`_openid`+`post_id` 唯一） | |
 | `baozi_post_tops` | 帖子置顶（独立集合） | 见 §2.1 置顶管理 |
+| `advertisements` | 广告运营位（轮播图/Banner/信息流/弹窗） | 见 §6 广告系统 |
 | `recruit_drafts` | AI 招工草稿（非本后台主流程） | |
 
 > ⚠️ **地区词典不是集合**：省市县级联代码在 `miniprogram/utils/regionData.js`（导出 `PROVINCE_CODES / CITY_CODES / CASCADER_OPTIONS`）及云函数内 `cityCodes.js`，是本地 JS 文件，无 `dicts` 数据库集合。
@@ -40,16 +42,27 @@
 | action | 用途 | 关键入参 | 返回 |
 |---|---|---|---|
 | `login` | 账号密码校验（免二次校验） | `user`,`pass` | `{ success, authed, user }` |
-| `list` | 分页+筛选查询 | `page`,`pageSize`,`data_type`,`city`,`role`,`needs_review`,`keyword` | `{ success, list[], total, page, pageSize }` |
+| `list` | 分页+筛选查询 | `page`,`pageSize`,`data_type`,`city`,`city_code`,`role`,`role_id`,`needs_review`,`sec_status`,`source`,`keyword`,`salary_min`,`salary_max`,`price_min`,`price_max`,`published_from`,`published_to` | `{ success, list[], total, page, pageSize }` |
 | `get` | 单条详情 | `_id` | `{ success, item }` |
 | `create` | 新增 | `data{...}`（按白名单清洗） | `{ success, _id }` |
-| `update` | 编辑 | `_id`, `data{...}` | `{ success, updated }` |
-| `delete` | 删除 | `_id` | `{ success }` |
-| `audit` | 审核通过 | `_id`, `note` | `{ success }`（置 `needs_review:false, reviewed:true`） |
-| `list_tops` | 查询置顶列表 | `page`,`pageSize`,`data_type` | `{ success, list[], total, page, pageSize }` |
+| `update` | 编辑（也用于撤回审核，写 `approved:false`） | `_id`, `data{...}` | `{ success, updated }` |
+| `delete` | 删除（物理删除） | `_id` | `{ success }` |
+| `audit` | 审核通过 | `_id`, `note` | `{ success, notified }`（置 `approved:true, reviewed:true, reviewed_at, review_note`；`notified`=是否已推站内通知） |
+| `reject` | 审核退回 | `_id`, `note` | `{ success, notified }`（置 `approved:false, status:"rejected"`） |
+| `offline` | 帖子下架 | `_id` | `{ success, offline:1 }`（写 `status:"offline"`） |
+| `online` | 帖子上架 | `_id` | `{ success, online:1 }`（`_.remove()` 删 status） |
+| `list_tops` | 查询置顶列表（附帖子摘要） | `page`,`pageSize`,`data_type` | `{ success, list[], total, page, pageSize }` |
 | `top` | 设置/取消置顶 | `op`(`set`/`cancel`), `post_id`, `data_type`, `level`, `days`(0=永久), `top_type` | `{ success, _id?, expire_at? }` 或 `{ success, cancelled }` |
+| `users` | 用户列表 | `page`,`pageSize`,`keyword`,`membership` | `{ success, list[], total, page, pageSize }` |
+| `member` | 会员开通/取消 | `op`(`activate`/`cancel`), `_id`或`openid`, `plan`(month/quarter/year) | `{ success, isVip, expire_at }` |
+| `file_url` | fileID → 临时 https URL | `file_ids[]` | `{ success, fileList[] }` |
+| `stats` | 统计看板 | 无 | `{ success, posts_total, posts_by_type{}, pending, users_total, users_new_today, top_views[], cities[] }` |
+| `user_ban` | 封禁/解封用户 | `_id`, `banned`(bool) | `{ success, banned, status }` |
+| `logs` | 操作日志查询 | `page`,`pageSize` | `{ success, list[], total, page, pageSize }` |
 
-**鉴权账号**：`admin / admin`（部署后可改云函数内 `ADMIN_USER / ADMIN_PASS` 并重传）。
+**鉴权账号**：`admin / admin`（环境变量 `ADMIN_USER`/`ADMIN_PASS` 优先，未配置回落默认）。
+
+> ⚠️ `reject`/`offline`/`online` 后端已实现、埋日志，**后台前端已接入**（列表行操作菜单 + 详情页「退回/下架/上架」按钮）。审核「通过」用 `audit`，退回用 `reject`；下架/上架用 `offline`/`online`。
 
 ### 2.1 置顶管理（`baozi_post_tops` 独立集合）
 
@@ -75,11 +88,57 @@
 
 **后台前端建议**：帖子列表每行加「置顶/取消置顶」按钮；置顶弹窗选板块 + 天数 + 优先级。
 
-### ⚠️ 关键坑：adminAuth 用的是「旧版字段白名单」
-`adminAuth` 的 `ALLOWED_FIELDS` 仍是**旧版字段**（从早期 AI 抓取数据沿用）：
-`data_type, province, city, district, role, salary_low, salary_high, salary_note, rent, transfer_fee, turnover_low, turnover_high, area_m2, is_franchise, brand, budget, shop_type, equip_desc, equip_price, equip_region, equip_budget, phone, phone_masked, raw_text, content, remark, source, needs_review, reviewed, reviewed_at, review_note, published_at`
+### ✅ 字段口径已统一为「新版」（旧坑已修复）
+`adminAuth` 的 `ALLOWED_FIELDS` **已升级到新版字段**，与小程序 C 端一致：
+- 通用：`data_type, _openid, userid, province, province_code, city, city_code, district, district_code, address, latitude, longitude, raw_text, content, phone, phone_masked, contact, username, image, credit, published_at, source, needs_review, reviewed, reviewed_at, review_note, approved, sec_status, sec_label, sec_checked_at, tags`
+- recruit/jobseek：`role, role_id, salary`；jobseek 专项 `salary_expect, salary_note, availability, service_area, want_terms`
+- transfer：`price, monthly_rent, area_sqm, daily_revenue, has_equipment, terms`
+- want_shop：`rent_max, area_min`；equip：`cond`
+- carpool：`from_place, to_place, depart_time, depart_deadline, seats`
+- 旧版字段（`salary_low/rent/transfer_fee/...`）**保留在白名单中兼容历史数据**，不影响新写入。
 
-但**小程序端现在发布的是新版字段**（见 §3），两者字段名不同。**做后台务必把 `adminAuth.ALLOWED_FIELDS` 与后台前端 `admin/src/utils/constants.js` 的 `TYPE_FIELDS` 都升级到新版字段**，否则后台新增/编辑出来的帖子会缺字段、小程序端无法正确展示/筛选。
+`sanitizeFields` 会自动补齐：`phone_masked`（有 phone 时）、`salary = salary_expect`（jobseek 冗余）、`published_at`（缺省补当前时间）。后台新增/编辑的帖子字段与小程序一致，无需再迁移字段口径。
+
+### 2.2 操作日志（`admin_logs` 集合 + `adminAuth.logs`）
+
+> 后台「操作日志」页（`shadcn-vue-admin/src/pages/logs/index.vue`）对接的审计接口。
+
+**数据模型（`admin_logs` 集合，已建）**：
+```js
+{
+  _id,         // 自动
+  operator,    // 操作人（= event.user，即后台登录账号）
+  action,      // 动作标识
+  target_id,   // 目标对象 _id（帖子 _id / 用户 _id）
+  detail,      // 附加说明（审核备注 / 会员套餐到期日 / 置顶天数等）
+  created_at,  // 时间戳(ms)
+}
+```
+
+**查询接口（`adminAuth.logs`）**：
+```js
+// 请求
+{ action: "logs", page: 1, pageSize: 50, user, pass }
+// 返回
+{ success: true, list: [ { _id, operator, action, target_id, detail, created_at } ], total, page, pageSize }
+```
+- `pageSize` 上限 50，默认 20；按 `created_at` 降序。
+
+**动作枚举（`action` 字段，`writeLog` 埋点覆盖 13 个）**：
+| action | 含义 | 触发 |
+|---|---|---|
+| `post_create` / `post_update` / `post_delete` | 新增/编辑/删除帖子 | `create`/`update`/`delete` |
+| `post_audit` / `post_reject` | 审核通过/退回 | `audit`/`reject` |
+| `post_offline` / `post_online` | 下架/上架 | `offline`/`online` |
+| `top_set` / `top_cancel` | 设置/取消置顶 | `top` |
+| `user_ban` / `user_unban` | 封禁/解封用户 | `user_ban` |
+| `member_activate` / `member_cancel` | 开通/取消会员 | `member` |
+
+> ⚠️ `writeLog` 写失败**不阻塞主业务**（catch 内只 `console.error`），日志可能偶发缺失，属可接受的降级行为。
+
+**前端注意**：
+- `useLogsQuery` 已设 `staleTime: 0`（覆盖全局默认 5 分钟），**每次进入页面强制拉最新**，避免缓存导致看不到新日志。
+- 动作中文名/颜色在 `logs/index.vue` 的 `ACTION_LABELS`/`variantFor` 维护（新增动作需同步补映射）。
 
 ---
 
@@ -189,3 +248,142 @@ regionBase.salary = exp;         // 同名冗余，供统一筛选
 6. **删除为物理删除**（`remove`），如需回收站需自行扩展（标记删除 + 过滤）。
 7. **账号安全**：`admin/admin` 是硬编码明文，正式环境请改复杂口令或接 JWT/网关鉴权。
 8. 后台前端已有页面：`Login / PostList / PostCreate / PostEdit / PostDetail`，接 adminAuth；新增/编辑表单字段由 `TYPE_FIELDS` 驱动，改常量即可全类型生效。
+
+---
+
+## 6. 广告系统（`advertisements` 集合 + `adService` 云函数）
+
+> 广告运营位统一管理。展示端已接首页（demo.js），后台管理端待开发。
+
+### 6.1 数据模型（`advertisements` 集合）
+
+```js
+{
+  _id,            // 自动生成
+  slot,           // 广告位标识（见下方枚举，必填）
+  type,           // banner(轮播图/Banner卡) / feed(信息流占位) / popup(全局弹窗)
+  title,          // 标题
+  image,          // 图片 URL（轮播图/feed 用）
+  icon,           // 图标路径（Banner 卡用，如 /static/news-icon.png）
+  emoji,          // 无图时兜底 emoji
+  sub,            // 副标题（Banner 卡用）
+  bgFrom, bgTo,   // Banner 卡渐变背景色（如 '#FFF1E8' → '#FFE0C2'）
+  link,           // 跳转地址
+  linkType,       // page(页面路径) / post(帖子id) / url(外链) / none(不跳)
+  target,         // 跳转参数（post 时=帖子 _id；url 时=完整 URL）
+  sort,           // 排序权重（数字越大越靠前）
+  status,         // online(上线显示) / offline(下线隐藏)
+  start_at,       // 生效开始时间戳(ms)
+  end_at,         // 生效结束时间戳(ms)
+  pages,          // 出现页面数组（[]=全部页面；如 ['recruit'] 仅招工频道）
+  created_at,     // 创建时间戳(ms)
+
+  // ===== 弹窗频控（仅 type=popup 生效，由后台「广告管理」表单配置）=====
+  freq,           // 频率策略：daily(每天一次,默认) / once(只一次) / always(每次都弹) / session(每次启动一次) / every_n(每N天)
+  freq_days,      // freq=every_n 时的间隔天数（默认1）
+  freq_max,       // 最多弹 N 次（0=不限，对所有策略生效）
+}
+```
+
+### 6.2 广告位 slot 枚举
+
+| slot | 含义 | type |
+|---|---|---|
+| `home_banner` | 首页轮播图 | banner |
+| `home_banner_card` | 首页 Banner 双卡 | banner |
+| `recruit_banner` / `transfer_banner` / ... | 各频道轮播图（按频道名扩展） | banner |
+| `home_feed` | 首页信息流占位 | feed |
+| `recruit_feed` / `transfer_feed` / ... | 各频道信息流占位 | feed |
+| `global_popup` | 全局弹窗 | popup |
+
+### 6.3 展示端云函数 `adService`（已部署，免鉴权）
+
+**入参**（三种方式，任选其一）：
+```js
+// 方式1：按广告位数组精确拉
+{ slots: ['home_banner', 'home_banner_card'] }
+
+// 方式2：单个广告位
+{ slot: 'home_banner' }
+
+// 方式3：按页面拉（pages 字段匹配，[] = 全部页通用）
+{ page: 'recruit' }
+```
+
+**返回**：
+```js
+{
+  success: true,
+  list: [
+    // 只含 status=online 且 start_at <= now <= end_at 的广告
+    // 按 sort 降序、created_at 降序排列
+    { _id, slot, type, title, image, icon, emoji, sub, bgFrom, bgTo,
+      link, linkType, target, sort, status, start_at, end_at, pages, created_at },
+    ...
+  ]
+}
+```
+
+**过滤规则**（云函数内部）：
+```js
+where({
+  status: "online",
+  start_at: _.lte(now),   // 已开始
+  end_at: _.gte(now),     // 未结束
+  slot: _.in(slots),      // 或 slot / pages 匹配
+})
+.orderBy("sort", "desc")
+.orderBy("created_at", "desc")
+```
+
+### 6.4 前端接入方式（已接首页 demo.js）
+
+```js
+// 拉广告
+wx.cloud.callFunction({
+  name: 'adService',
+  data: { slots: ['home_banner', 'home_banner_card'] },
+}).then((res) => {
+  const list = res.result.list || [];
+  const ads = list.filter(a => a.slot === 'home_banner').map(...);      // 轮播图
+  const banners = list.filter(a => a.slot === 'home_banner_card').map(...); // Banner 卡
+});
+```
+
+**点击跳转（`openAdLink` 统一处理）**：
+| linkType | 行为 |
+|---|---|
+| `page` | `wx.navigateTo({ url: link })` |
+| `post` | `wx.navigateTo({ url: '/pages/detail/detail?id=' + target })` |
+| `url` | 外链（需 webview 页承载，当前暂提示"待接入"） |
+| `none` | 不跳转 |
+
+### 6.5 后台管理端（shadcn-vue-admin，✅ 已完成）
+
+**「广告管理」页（`/ads`）**，功能：
+1. 广告列表：按 `slot`/`status` 筛选。
+2. 新增/编辑广告：Dialog 表单含 slot、type、title、image、icon、emoji、sub、bgFrom、bgTo、link、linkType、target、sort、status、start_at、end_at、pages。
+3. 上下线：Switch 切换（`ad_toggle`，改 status）。
+4. 排序：`sort` 字段（表单内改）。
+5. 删除：物理删除。
+
+**对接方式**：复用 `adminAuth` 加 5 个 action（`ad_list`/`ad_create`/`ad_update`/`ad_delete`/`ad_toggle`），均走 `user+pass` 鉴权 + 操作日志埋点。前端 service 层在 `shadcn-vue-admin/src/services/ad.api.ts`。
+
+> `adService` 云函数仍为**只读**（C 端展示拉取），管理端写操作统一走 `adminAuth`。
+
+**仍待做（展示端增强）**：信息流占位（feed）插入列表、全局弹窗（popup）展示逻辑、展示/点击统计（show_count/click_count）。
+
+### 6.6 管理员 AI 对话广告能力（`adminChat`，✅ 已实现）
+
+管理员在小程序「AI 对话」页（开深度思考）可用自然语言管理广告：
+
+| 工具 | 用途 | 入参 | 示例问法 |
+|---|---|---|---|
+| `ads` | 查询广告列表 | `{slot, status, page}` 都可选 | "有哪些广告"、"首页轮播图有哪些"、"已下线的广告" |
+| `adToggle` | 广告上下线 | `{op, adTitle, slot, adId}` | "把包子快讯下线"、"重新上线包友群" |
+
+**`adToggle` 定位优先级**：`adId`（精确）> `adTitle`（标题关键词）> `slot`（广告位）；带兜底（slot 值也按标题匹配），批量上限 10 条。
+
+**返回**：`{ success, title, blocks[], mode:"deepThink", tool:"ads"|"adToggle" }`，`blocks` 为结构化卡片（列表项带"已上线/已下线"标签）。
+
+> AI 对话支持**查询 + 上下线**；广告**新增/编辑/删除**走后台管理端（§6.5）。

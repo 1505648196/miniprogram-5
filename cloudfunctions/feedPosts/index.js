@@ -52,6 +52,8 @@ const LIST_KEYS = [
   "created_at", "updated_at",
   // 浏览点击量
   "views",
+  // 状态（offline=已下架）
+  "status",
 ];
 
 // 按给定完整 query 条件取一页（limit+1 判 hasMore），白名单 + isMine
@@ -105,8 +107,8 @@ async function fetchTops(types, openid, cityCode) {
     const topIds = (topRes.data || []).map((t) => t.post_id).filter(Boolean);
     if (!topIds.length) return [];
 
-    // 回查帖子完整内容：已过审 + 可选同城过滤
-    const postConds = [{ _id: _.in(topIds) }, { approved: _.eq(true) }];
+    // 回查帖子完整内容：已过审 + 可选同城过滤（下架帖不回显）
+    const postConds = [{ _id: _.in(topIds) }, { approved: _.eq(true) }, { status: _.neq("offline") }];
     if (cityCode) postConds.push({ city_code: cityCode });
     const postRes = await db
       .collection("baozi_posts")
@@ -154,6 +156,7 @@ exports.main = async (event) => {
   // 存量数据已回填 approved，故直接用 approved 过滤即可。
   const baseConds = [
     { approved: _.eq(true) }, // 只展示已通过
+    { status: _.neq("offline") }, // 排除已下架帖子
   ];
   if (city) baseConds.push({ city });
   if (cityCode) baseConds.push({ city_code: cityCode });
@@ -218,7 +221,14 @@ exports.main = async (event) => {
     let list = rawList;
     // 第一页顶部合并置顶帖
     if (page === 1) {
-      const topTypes = dataTypes && dataTypes.length ? dataTypes : [event.dataType || "recruit"];
+      // 全 9 类（全量查询/全局搜索时不限定类型，置顶应覆盖所有板块）
+      const ALL_TYPES = [
+        "recruit", "jobseek", "transfer", "want_shop",
+        "equip_sell", "equip_buy", "carpool_car", "carpool_person", "other",
+      ];
+      const topTypes = dataTypes && dataTypes.length
+        ? dataTypes
+        : (event.dataType ? [event.dataType] : ALL_TYPES);
       const tops = await fetchTops(topTypes, openid, cityCode);
       if (tops.length) {
         const topIdSet = {};

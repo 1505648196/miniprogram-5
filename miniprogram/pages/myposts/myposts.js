@@ -40,10 +40,34 @@ function fmtMoney(n) {
   return String(num);
 }
 
+// 发布类型（与 demo 首页一致）
+const PUBLISH_TYPES = [
+  { id: 'recruit',    name: '招工',     emoji: '👨', image: '', bg: '#F0F5FF', color: '#597EF7', light: '#F0F5FF' },
+  { id: 'transfer',   name: '转让',     emoji: '🥟', image: '', bg: '#FFF1E8', color: '#FF7A45', light: '#FFF1E8' },
+  { id: 'equip_sell', name: '设备出售', emoji: '🛒', image: '', bg: '#FFF7E6', color: '#FA8C16', light: '#FFF7E6' },
+  { id: 'want_shop',  name: '求店',     emoji: '🔎', image: '', bg: '#E6FFFB', color: '#36CFC9', light: '#E6FFFB' },
+  { id: 'jobseek',    name: '求职',     emoji: '🙋', image: '', bg: '#F9F0FF', color: '#9254DE', light: '#F9F0FF' },
+  { id: 'equip_buy',  name: '设备求购', emoji: '🧰', image: '', bg: '#F6FFED', color: '#73D13D', light: '#F6FFED' },
+  { id: 'carpool',    name: '顺风车',   emoji: '🚗', image: '', bg: '#E6FFFB', color: '#36CFC9', light: '#E6FFFB' },
+  { id: 'other',      name: '其他',     emoji: '📦', image: '', bg: '#FAFAFA', color: '#8C8C8C', light: '#FAFAFA' },
+];
+
 Page({
   data: {
     list: [],
     loading: true,
+    // 底部 TabBar（默认高亮「我的」：myposts 是从"我的"点进来的子页）
+    activeBar: 'me',
+    tabbar: [
+      { id: 'home',    icon: 'home',        label: '首页' },
+      { id: 'nearby',  icon: 'location',    label: '附近' },
+      { id: 'publish', icon: 'add-circle',  label: '发布' },
+      { id: 'message', icon: 'chat',        label: '消息' },
+      { id: 'me',      icon: 'user',        label: '我的' },
+    ],
+    // 发布类型弹层（同 demo 首页）
+    publishTypes: PUBLISH_TYPES,
+    publishSheetVisible: false,
     // 删除确认弹层
     deleteDialogVisible: false,
     pendingDeleteId: '',
@@ -121,6 +145,7 @@ Page({
       reviewing,
       statusText: reviewing ? '审核中' : '已发布',
       statusTheme: reviewing ? 'warning' : 'success',
+      status: p.status || '',
     };
   },
 
@@ -184,8 +209,176 @@ Page({
     wx.navigateTo({ url: `/pages/detail/detail?id=${id}` });
   },
 
-  // 去发布
+  // ---------- 擦亮（刷新，付费 5 毛） ----------
+  onRefresh(e) {
+    const { id } = e.currentTarget.dataset;
+    if (!id) return;
+    this.payForPost(id, 'refresh', '擦亮', '0.5');
+  },
+
+  // ---------- 置顶（付费 50 元，有效期 1 天） ----------
+  onTop(e) {
+    const { id } = e.currentTarget.dataset;
+    if (!id) return;
+    this.payForPost(id, 'top', '置顶', '50');
+  },
+
+  // 通用付费流程：服务端建单 → 集成支付下单 → 拉起支付 → verify 履约
+  payForPost(postId, bizType, label, priceText) {
+    wx.showModal({
+      title: `信息${label}`,
+      content: `${label}费用 ${priceText} 元，确认支付？`,
+      confirmText: '去支付',
+      success: (res) => {
+        if (!res.confirm) return;
+        this.doPay(postId, bizType, label);
+      },
+    });
+  },
+
+  async doPay(postId, bizType, label) {
+    const { callPayCommon, pickPayment } = require('../../utils/pay.js');
+    wx.showLoading({ title: '下单中…', mask: true });
+    try {
+      // 1) 服务端建单
+      const createRes = await wx.cloud.callFunction({
+        name: 'payForPhone',
+        data: { action: 'create', biz_type: bizType, post_id: postId },
+        config: { timeout: 10000 },
+      });
+      const cr = (createRes && createRes.result) || {};
+      if (!cr.success) throw new Error(cr.message || '下单失败');
+      const outTradeNo = cr.out_trade_no;
+      const amount = Number(cr.amount) || 0;
+      if (!outTradeNo || !amount) throw new Error('下单参数异常');
+
+      // 2) 调集成支付函数下单
+      const order = await callPayCommon('wxpay_order', {
+        description: cr.title || `信息${label}`,
+        out_trade_no: outTradeNo,
+        amount: { total: amount, currency: 'CNY' },
+      });
+      if (order && order.code !== undefined && order.code !== null && order.code !== 0) {
+        throw new Error(order.msg || '下单失败');
+      }
+      const payParams = pickPayment(order);
+      if (!payParams || !payParams.package) {
+        console.error('[myposts] 未取到 package，完整返回：', order);
+        throw new Error('下单失败：未获取到支付参数');
+      }
+
+      // 3) 拉起微信支付
+      wx.hideLoading();
+      await new Promise((resolve, reject) => {
+        wx.requestPayment({
+          timeStamp: String(payParams.timeStamp || ''),
+          nonceStr: payParams.nonceStr || '',
+          package: payParams.package,
+          signType: payParams.signType || 'RSA',
+          paySign: payParams.paySign || '',
+          success: resolve,
+          fail: reject,
+        });
+      });
+
+      // 4) verify 履约
+      wx.showLoading({ title: '处理中…', mask: true });
+      const verifyRes = await wx.cloud.callFunction({
+        name: 'payForPhone',
+        data: { action: 'verify', out_trade_no: outTradeNo },
+        config: { timeout: 10000 },
+      });
+      wx.hideLoading();
+      const vr = (verifyRes && verifyRes.result) || {};
+      if (!vr.success) throw new Error(vr.message || `${label}失败`);
+
+      wx.showToast({ title: `${label}成功`, icon: 'success' });
+      this.loadList();
+    } catch (err) {
+      wx.hideLoading();
+      console.error(`[myposts] ${label}失败:`, err && (err.errMsg || err.message));
+      const msg = String((err && (err.errMsg || err.message)) || '操作失败');
+      if (msg.indexOf('cancel') >= 0) {
+        wx.showToast({ title: '已取消支付', icon: 'none' });
+      } else {
+        wx.showToast({ title: msg, icon: 'none' });
+      }
+    }
+  },
+
+  // ---------- 下架（免费） ----------
+  onOffline(e) {
+    const { id } = e.currentTarget.dataset;
+    if (!id) return;
+    wx.showModal({
+      title: '下架信息',
+      content: '下架后该信息将不在首页展示，可随时重新上架。',
+      confirmText: '下架',
+      success: (res) => {
+        if (!res.confirm) return;
+        this.toggleOffline(id, 'offline');
+      },
+    });
+  },
+
+  // ---------- 上架（免费） ----------
+  onOnline(e) {
+    const { id } = e.currentTarget.dataset;
+    if (!id) return;
+    this.toggleOffline(id, 'online');
+  },
+
+  toggleOffline(id, action) {
+    wx.showLoading({ title: '处理中…', mask: true });
+    wx.cloud
+      .callFunction({ name: 'managePost', data: { action, _id: id }, config: { timeout: 10000 } })
+      .then((res) => {
+        wx.hideLoading();
+        const r = res.result || {};
+        if (r.success) {
+          wx.showToast({ title: action === 'offline' ? '已下架' : '已上架', icon: 'success' });
+          this.loadList();
+        } else {
+          wx.showToast({ title: r.message || '操作失败', icon: 'none' });
+        }
+      })
+      .catch((err) => {
+        wx.hideLoading();
+        console.error('[myposts] 上下架失败:', err && err.errMsg);
+        wx.showToast({ title: '操作失败，请重试', icon: 'none' });
+      });
+  },
+
+  // 底部 TabBar 切换（myposts 是独立页，跨页用 reLaunch 清栈）
+  onTabBar(e) {
+    const key = e.detail.value;
+    // 发布：在当前页弹类型选择弹层（同 demo 弹层）
+    if (key === 'publish') { this.openPublishSheet(); return; }
+    if (key === 'nearby') { wx.reLaunch({ url: '/pages/nearby/nearby' }); return; }
+    if (key === 'message') { wx.reLaunch({ url: '/pages/message/message' }); return; }
+    if (key === 'me') { wx.navigateBack({ fail: () => wx.reLaunch({ url: '/pages/mine/mine' }) }); return; }
+    // home：回首页
+    if (key === 'home') { wx.reLaunch({ url: '/pages/demo/demo' }); return; }
+  },
+
+  // ---------- 发布类型选择弹层（同 demo 首页） ----------
+  openPublishSheet() {
+    this.setData({ publishSheetVisible: true });
+  },
+  onPublishSheetClose(e) {
+    if (!e.detail.visible) this.setData({ publishSheetVisible: false });
+  },
+  onPickPublishType(e) {
+    const type = (e && (e.detail || e.currentTarget.dataset.item)) || null;
+    this.setData({ publishSheetVisible: false });
+    if (!type || !type.id) { wx.showToast({ title: '未识别到发布类型', icon: 'none' }); return; }
+    if (type.id === 'recruit') { wx.navigateTo({ url: '/pages/publish_recruit/publish_recruit' }); return; }
+    if (type.id === 'carpool') { wx.navigateTo({ url: '/pages/publish_carpool/publish_carpool' }); return; }
+    wx.navigateTo({ url: `/pages/publish/publish?type=${type.id}` });
+  },
+
+  // 去发布（空态点击"去发布"按钮）：在当前页直接弹出发布类型选择弹层
   goPublish() {
-    wx.navigateBack();
+    this.openPublishSheet();
   },
 });

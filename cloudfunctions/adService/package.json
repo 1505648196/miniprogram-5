@@ -1,0 +1,9 @@
+{
+  "name": "adService",
+  "version": "1.0.0",
+  "description": "广告运营位：拉取轮播图 / Banner / 信息流占位 / 全局弹窗",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

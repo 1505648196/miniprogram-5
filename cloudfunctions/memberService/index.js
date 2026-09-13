@@ -1,26 +1,17 @@
 // cloudfunctions/memberService/index.js
-// 会员开通（当前为"模拟支付"阶段：activate 直接当支付成功处理，将来接真实 wx.requestPayment 时
-// 只需把"前端拉起支付成功后调用 activate"改成"微信支付回调里调用"，逻辑不变）
+// 会员状态查询（C 端）
 //
-// - activate：把当前用户开通为会员（写 baozi_users.membership/membership_expire_at）+ 推 member 站内通知
-//   plan: month(30天)/quarter(90天)/year(365天)；可在现有到期上顺延，过期则从现在起算
-// - status：查当前用户会员状态
-// - cancel(可选调试)：手动取消会员（仅供测试）
+// - status：查当前用户会员状态（isVip / 到期时间 / 到期文案）
+//
+// ⚠️ 会员「开通/取消」已迁移到统一支付中心与后台：
+//   - C 端开通：payForPhone（create 服务端建单 → 微信支付 → verify 校验订单后履约）
+//   - 后台人工：adminAuth.member（activate/cancel）
+//   本文件的 activate / cancel 已废弃，仅返回明确提示，
+//   避免任何人直接调用云函数白开通或恶意取消会员。
 const cloud = require("wx-server-sdk");
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
-
-const PLAN_DAYS = {
-  month: 30,
-  quarter: 90,
-  year: 365,
-};
-const PLAN_NAMES = {
-  month: "月卡",
-  quarter: "季卡",
-  year: "年卡",
-};
 
 function ok(data = {}) { return { success: true, ...data }; }
 function fail(message, code = "ERROR") { return { success: false, code, message }; }
@@ -48,14 +39,30 @@ async function getOrCreateUser(openid) {
   const users = db.collection("baozi_users");
   const exist = (await users.where({ openid_wxapp: openid }).limit(1).get()).data;
   if (exist.length) return { user: exist[0], isNew: false };
-  // 与 getOrCreateUser 建号一致地补一个（缺省字段兜底）
+  // 兜底建号：字段与 getOrCreateUser.createUser 对齐（此前缺失 uid/unionid/status/
+  // credit_score 等关键字段，会导致后续按这些字段判断时行为异常）
   const now = Date.now();
   const doc = {
     openid_wxapp: openid,
+    openid_mp: "",
+    openid_web: "",
+    openid_app: "",
+    unionid: "",
     username: "",
     avatar: "",
+    gender: 0,
+    role: "user",
+    status: "active",
+    register_source: "wxapp",
+    phone: "",
+    phone_masked: "",
+    phone_verified: false,
+    email: "",
     membership: "normal",
     membership_expire_at: 0,
+    credit_score: 100,
+    credit_count: 0,
+    remark: "",
     created_at: now,
     updated_at: now,
   };
@@ -76,57 +83,18 @@ async function actionStatus(openid) {
   });
 }
 
-// 模拟开通：把当前用户升级为 vip，会员期顺延；写会员信息并推 member 站内通知
-async function actionActivate(openid, event) {
-  const plan = String(event.plan || "month").trim();
-  const days = PLAN_DAYS[plan] || PLAN_DAYS.month;
-  const planName = PLAN_NAMES[plan] || "月卡";
-
-  const { user } = await getOrCreateUser(openid);
-  const now = Date.now();
-  // 若当前仍是会员且未到期 → 顺延；否则从现在起算
-  const base = user.membership === "vip" && Number(user.membership_expire_at) > now
-    ? Number(user.membership_expire_at)
-    : now;
-  const newExpire = base + days * 86400000;
-
-  const users = db.collection("baozi_users");
-  if (user._id) {
-    await users.doc(user._id).update({ data: { membership: "vip", membership_expire_at: newExpire, updated_at: now } });
-  } else {
-    await users.add({ data: { openid_wxapp: openid, membership: "vip", membership_expire_at: newExpire, updated_at: now } });
-  }
-
-  // 推一条 member 站内通知
-  const typeName = "会员";
-  try {
-    await db.collection("baozi_messages").add({
-      data: {
-        type: "member",
-        to_openid: openid,
-        title: "会员开通成功",
-        content: `恭喜您开通「${planName}」，会员有效期至 ${fmtDate(newExpire)}，发布信息将获得更多曝光与专属标识。`,
-        post_id: "",
-        read_by: [],
-        sender: "system",
-        created_at: now,
-      },
-    });
-  } catch (e) {
-    console.error("memberService 推送 member 通知失败:", e && e.errMsg);
-  }
-
-  return ok({ isVip: true, plan, planName, expire_at: newExpire, expireText: fmtDate(newExpire) });
+// ⚠️ 已废弃：原「模拟支付直接开通」存在严重漏洞——任何人可直接调用本接口白得会员。
+// 会员开通统一走支付中心 payForPhone（create → 微信支付 → verify 履约），
+// 由服务端校验订单（订单号服务端生成 + 权威定价 + 幂等）后才开通。
+// 后台人工开通请用 adminAuth.member。此处保留仅为兼容旧调用并给出明确提示。
+async function actionActivate() {
+  return fail("请通过支付流程开通会员", "USE_PAY_FLOW");
 }
 
-// 取消会员（仅调试用）
-async function actionCancel(openid) {
-  const users = db.collection("baozi_users");
-  const { user } = await getOrCreateUser(openid);
-  if (user._id) {
-    await users.doc(user._id).update({ data: { membership: "normal", membership_expire_at: 0, updated_at: Date.now() } });
-  }
-  return ok({ isVip: false });
+// 取消会员：已废弃（原为调试用，可被任意调用取消自己的会员）。
+// 会员变更统一走支付中心 payForPhone 与后台 adminAuth.member。
+async function actionCancel() {
+  return fail("请通过后台管理会员", "USE_ADMIN");
 }
 
 function fmtDate(ts) {

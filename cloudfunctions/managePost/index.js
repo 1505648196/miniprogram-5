@@ -51,6 +51,8 @@ const LIST_KEYS = [
   "address", "latitude", "longitude", "image", "created_at", "updated_at",
   // 浏览点击量
   "views",
+  // 状态（offline=已下架）
+  "status",
 ];
 
 function ok(data = {}) { return { success: true, ...data }; }
@@ -115,6 +117,8 @@ exports.main = async (event) => {
       case "detail": return await actionDetail(openid, event);
       case "update": return await actionUpdate(openid, event);
       case "delete": return await actionDelete(openid, event);
+      case "offline": return await actionOffline(openid, event);
+      case "online": return await actionOnline(openid, event);
       case "view": return await actionView(event);
       default: return fail("未知操作: " + action, "UNKNOWN_ACTION");
     }
@@ -217,6 +221,28 @@ async function actionDelete(openid, event) {
   if (!d) return fail("无权删除或帖子不存在", "FORBIDDEN");
   await db.collection(COLLECTION).doc(event._id).remove();
   return ok({ deleted: 1 });
+}
+
+// 下架：标记 status=offline，feedPosts 查询时排除（不删除数据，可重新上架）
+async function actionOffline(openid, event) {
+  if (!event._id) return fail("缺少 _id");
+  const d = await getOwned(openid, event._id);
+  if (!d) return fail("无权下架或帖子不存在", "FORBIDDEN");
+  await db.collection(COLLECTION).doc(event._id).update({
+    data: { status: "offline", updated_at: Date.now() },
+  });
+  return ok({ offline: 1 });
+}
+
+// 上架：取消下架状态（status 恢复为空/正常）
+async function actionOnline(openid, event) {
+  if (!event._id) return fail("缺少 _id");
+  const d = await getOwned(openid, event._id);
+  if (!d) return fail("无权上架或帖子不存在", "FORBIDDEN");
+  await db.collection(COLLECTION).doc(event._id).update({
+    data: { status: _.remove(), updated_at: Date.now() },
+  });
+  return ok({ online: 1 });
 }
 
 // 浏览点击量 +1（原子自增）。任何登录用户浏览帖子详情时调用。

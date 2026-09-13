@@ -1,0 +1,14 @@
+{
+  "name": "recommendPosts",
+  "version": "1.0.0",
+  "description": "发布成功后的互补推荐：按类型+城市推荐同城互补信息，无同城数据回退最新",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

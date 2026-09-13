@@ -15,6 +15,9 @@
     />
   </view>
 
+  <!-- 广告区块：搜索栏下方第一栏（轮播图 + 双卡 + 全局弹窗） -->
+  <ad-block page="turnover" />
+
   <view class="content">
 
     <!-- 模块 2:金刚位（店铺类型 5 格，点选即按该店铺类型筛选；再点一次取消） -->
@@ -249,6 +252,6 @@
   />
 
   <!-- 底部导航 -->
-  <comp-tabbar current="home" />
+  <comp-tabbar current="" />
 
 </view>

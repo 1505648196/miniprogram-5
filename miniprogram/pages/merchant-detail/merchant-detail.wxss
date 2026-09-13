@@ -1,0 +1,117 @@
+/* pages/merchant-detail/merchant-detail.wxss */
+.page {
+  min-height: 100vh;
+  background: #F5F5F5;
+  padding: 24rpx 24rpx 60rpx;
+}
+
+.skeleton-wrap {
+  padding: 24rpx;
+}
+
+/* 头部 */
+.head {
+  background: #FFFFFF;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  display: flex;
+  gap: 20rpx;
+  align-items: center;
+  margin-bottom: 16rpx;
+}
+
+.head-avatar {
+  width: 140rpx;
+  height: 140rpx;
+  border-radius: 12rpx;
+  background: #F0F0F0;
+  flex-shrink: 0;
+}
+
+.head-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.head-name {
+  font-size: 34rpx;
+  font-weight: 800;
+  color: #1A1A1A;
+  margin-bottom: 12rpx;
+}
+
+.head-row {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  flex-wrap: wrap;
+}
+
+.head-hours {
+  font-size: 24rpx;
+  color: #999999;
+}
+
+/* 相册 */
+.gallery {
+  border-radius: 16rpx;
+  overflow: hidden;
+  margin-bottom: 16rpx;
+}
+
+.gallery-swiper {
+  height: 360rpx;
+}
+
+.gallery-img {
+  width: 100%;
+  height: 360rpx;
+}
+
+/* 卡片 */
+.card {
+  background: #FFFFFF;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin-bottom: 16rpx;
+}
+
+.card-title {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #1A1A1A;
+  margin-bottom: 16rpx;
+}
+
+.card-text {
+  font-size: 28rpx;
+  color: #333333;
+  line-height: 1.6;
+}
+
+.info-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12rpx;
+  margin-bottom: 16rpx;
+}
+
+.info-text {
+  flex: 1;
+  font-size: 28rpx;
+  color: #333333;
+  line-height: 1.5;
+}
+
+.contact-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.empty {
+  text-align: center;
+  color: #999999;
+  font-size: 28rpx;
+  padding: 120rpx 0;
+}

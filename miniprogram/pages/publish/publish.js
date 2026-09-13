@@ -164,12 +164,14 @@ Page({
     submitting: false,
     isEdit: false,
     editId: '',
+    isAdmin: false, // 管理员模式（从管理员对话进入，绕过归属校验，走 adminAuth）
   },
 
   onLoad(options) {
     const type = (options && options.type) || '';
     const cfg = TYPES[type] || null;
     const editId = (options && options.id) || '';
+    const isAdmin = (options && options.admin) === '1';
     if (!cfg) {
       wx.showToast({ title: '不支持的发布分类', icon: 'none' });
       setTimeout(() => wx.navigateBack(), 1000);
@@ -188,19 +190,23 @@ Page({
       condOptions: COND_OPTIONS,
       isEdit: !!editId,
       editId,
+      isAdmin,
     });
     if (cfg.navTitle) {
-      wx.setNavigationBarTitle({ title: editId ? `编辑${cfg.mainTag}` : cfg.navTitle });
+      wx.setNavigationBarTitle({ title: editId ? (isAdmin ? `编辑${cfg.mainTag}(管理员)` : `编辑${cfg.mainTag}`) : cfg.navTitle });
     }
-    // 编辑态：先拉本人原帖预填
+    // 编辑态：先拉原帖预填（管理员走 adminAuth，普通用户走 managePost）
     if (editId) this.loadForEdit(editId, cfg);
   },
 
-  // 编辑态预填：managePost(action=get) 返回本人完整原帖（含完整 phone 等）
+  // 编辑态预填：管理员走 adminAuth.get，普通用户走 managePost.get
   loadForEdit(id, cfg) {
     wx.showLoading({ title: '加载中…', mask: true });
+    const call = this.data.isAdmin
+      ? { name: 'adminAuth', data: { action: 'get', _id: id, user: 'admin', pass: 'admin' } }
+      : { name: 'managePost', data: { action: 'get', _id: id } };
     wx.cloud
-      .callFunction({ name: 'managePost', data: { action: 'get', _id: id }, config: { timeout: 10000 } })
+      .callFunction(Object.assign({ config: { timeout: 10000 } }, call))
       .then((res) => {
         wx.hideLoading();
         const r = res.result || {};
@@ -362,7 +368,7 @@ Page({
     const files = (e && e.detail && e.detail.files) || [];
     const newOne = files.slice().reverse().find((f) => f && f.url && !/^cloud:\/\//.test(f.url));
     if (!newOne) { this.setData({ imageFiles: files }); return; }
-    wx.showLoading({ title: '图片上传中…', mask: true });
+    wx.showLoading({ title: '图片检测中…', mask: true });
     this.uploadOne(newOne)
       .then((fileID) => {
         wx.hideLoading();
@@ -370,15 +376,43 @@ Page({
       })
       .catch((err) => {
         wx.hideLoading();
-        console.error('[publish] 图片上传失败:', err && err.errMsg);
-        wx.showToast({ title: '图片上传失败，请重试', icon: 'none' });
+        console.error('[publish] 图片处理失败:', err && (err.errMsg || err.message));
+        const title = (err && err.isIllegal) ? '图片内容违规，请更换' : '图片上传失败，请重试';
+        wx.showToast({ title, icon: 'none' });
+        // 违规时清掉这条图，避免残留
+        if (err && err.isIllegal) this.setData({ image: '', imageFiles: [] });
       });
   },
   uploadOne(file) {
     const src = file.url || file.name || '';
     const ext = (src.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
     const cloudPath = `posts/${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}.${ext}`;
-    return wx.cloud.uploadFile({ cloudPath, filePath: file.url }).then((res) => res.fileID || '');
+    return wx.cloud.uploadFile({ cloudPath, filePath: file.url })
+      .then((res) => {
+        const fileID = res.fileID || '';
+        if (!fileID) return '';
+        // 上传后立即做图片安全检测（不等到点发布）
+        return this.checkImageSafe(fileID).then((suggest) => {
+          if (suggest === 'reject' || suggest === 'risky') {
+            const err = new Error('图片内容违规');
+            err.isIllegal = true;
+            throw err;
+          }
+          return fileID;
+        });
+      });
+  },
+
+  // 图片安全检测：调 imgSecCheck 云函数，返回 suggest（pass/risky/reject/pending）
+  checkImageSafe(fileID) {
+    return wx.cloud.callFunction({
+      name: 'imgSecCheck',
+      data: { fileID },
+      config: { timeout: 15000 },
+    }).then((res) => {
+      const r = (res && res.result) || {};
+      return r.success ? (r.suggest || 'pass') : 'pass';
+    }).catch(() => 'pass'); // 检测接口异常降级放行，由发布时文本检测兜底
   },
   onUploadRemove() { this.setData({ image: '', imageFiles: [] }); },
 
@@ -547,14 +581,18 @@ Page({
 
   callUpdate(updateForm) {
     wx.showLoading({ title: '保存中…', mask: true });
+    // 管理员走 adminAuth.update（data 字段），普通用户走 managePost.update（form 字段）
+    const call = this.data.isAdmin
+      ? { name: 'adminAuth', data: { action: 'update', _id: this.data.editId, data: updateForm, user: 'admin', pass: 'admin' } }
+      : { name: 'managePost', data: { action: 'update', _id: this.data.editId, form: updateForm } };
     wx.cloud
-      .callFunction({ name: 'managePost', data: { action: 'update', _id: this.data.editId, form: updateForm }, config: { timeout: 10000 } })
+      .callFunction(Object.assign({ config: { timeout: 10000 } }, call))
       .then((res) => {
         const r = res.result || {};
         wx.hideLoading();
         this.setData({ submitting: false });
         if (r.success) {
-          wx.showToast({ title: r.needs_review ? '已保存待审核' : '保存成功', icon: 'success' });
+          wx.showToast({ title: '保存成功', icon: 'success' });
           setTimeout(() => wx.navigateBack(), 1200);
         } else {
           wx.showToast({ title: r.message || '保存失败', icon: 'none' });

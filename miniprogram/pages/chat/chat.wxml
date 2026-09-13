@@ -1,0 +1,209 @@
+<!-- pages/chat/chat.wxml -->
+<!-- 管理员 AI 对话页：自定义消息列表 + 结构化卡片渲染 -->
+<view class="chat-page {{deepThinkActive ? 'chat-page--deep' : ''}}" style="padding-bottom: {{keyboardHeight}}px;">
+
+  <!-- 消息滚动区 -->
+  <scroll-view class="chat-scroll" scroll-y scroll-into-view="{{scrollIntoView}}" scroll-with-animation>
+    <!-- 空态：无消息时展示欢迎引导 -->
+    <view class="chat-welcome" wx:if="{{!chatList.length}}">
+      <view class="welcome-avatar">
+        <t-icon name="chat" size="64rpx" color="#FFFFFF" />
+      </view>
+      <view class="welcome-title">管理员 AI 助手</view>
+      <view class="welcome-sub">用自然语言查询后台数据</view>
+
+      <!-- 示例问题卡片 -->
+      <view class="welcome-questions">
+        <t-cell-group theme="card">
+          <t-cell
+            wx:for="{{quickQuestions}}" wx:key="*this"
+            title="{{item}}" hover arrow left-icon="chat"
+            data-q="{{item}}" bind:tap="onQuickTap"
+          />
+        </t-cell-group>
+      </view>
+
+      <!-- 能力标签 -->
+      <view class="welcome-caps">
+        <t-tag wx:for="{{capabilities}}" wx:key="*this" size="small" variant="light" theme="warning">{{item}}</t-tag>
+      </view>
+    </view>
+
+    <!-- 消息列表 -->
+    <view class="msg-list" wx:else>
+      <block wx:for="{{chatList}}" wx:key="id">
+        <!-- 用户消息（右侧） -->
+        <view class="msg-row msg-row--user" wx:if="{{item.role === 'user'}}">
+          <view class="msg-bubble msg-bubble--user">{{item.text}}</view>
+        </view>
+
+        <!-- 助手消息（左侧，含头像 + 结构化卡片） -->
+        <view class="msg-row msg-row--assistant" wx:else>
+          <!-- 头像：开启深度思考时换成「深度思考」图标，否则用原 AI 头像 -->
+          <view wx:if="{{deepThinkActive}}" class="msg-avatar msg-avatar--think">
+            <t-icon name="system-sum" size="36rpx" color="#FFFFFF" />
+          </view>
+          <image wx:else class="msg-avatar" src="{{item.avatar}}" mode="aspectFill" />
+          <view class="msg-main">
+            <view class="msg-meta">
+              <text class="msg-name">{{item.name}}</text>
+              <text class="msg-time">{{item.time}}</text>
+            </view>
+
+            <!-- 深度思考模式：思考过程（loading 状态用 t-loading dots，complete 状态用 t-chat-thinking 折叠展示） -->
+            <view class="msg-card msg-card--thinking" wx:if="{{item.loading && item.thinking}}">
+              <!-- 思考中：纯文字 + dots 加载动画，避免 t-chat-loading 图标与深度思考按钮图标撞脸 -->
+              <view wx:if="{{item.thinkingStatus === 'pending'}}" class="thinking-pending">
+                <t-loading theme="dots" size="32rpx" text="{{item.thinkingContent.title || '正在深度思考…'}}" />
+              </view>
+              <!-- 完成：折叠展示思考结论 -->
+              <t-chat-thinking
+                wx:else
+                status="{{item.thinkingStatus}}"
+                content="{{item.thinkingContent}}"
+                layout="block"
+                animation="moving"
+              />
+            </view>
+
+            <!-- 普通模式：loading -->
+            <view class="msg-card msg-card--loading" wx:elif="{{item.loading}}">
+              <t-loading theme="dots" size="48rpx" text="正在查询…" />
+            </view>
+
+            <!-- 已完成：结构化卡片 -->
+            <view class="msg-card" wx:else>
+              <!-- 主标题 -->
+              <view class="card-title" wx:if="{{item.blocks && item.blocks.length}}">
+                <t-icon name="chart" size="32rpx" color="{{deepThinkActive ? '#7C3AED' : '#FF7A45'}}" />
+                <text>{{item.title}}</text>
+              </view>
+
+              <!-- 遍历 blocks -->
+              <block wx:for="{{item.blocks}}" wx:for-item="blk" wx:for-index="blkIndex" wx:key="index">
+                <!-- KPI 数字卡 -->
+                <view class="kpi-grid" wx:if="{{blk.type === 'kpi'}}">
+                  <view class="kpi-item" wx:for="{{blk.items}}" wx:for-item="kpi" wx:key="label">
+                    <text class="kpi-value" style="color: {{kpi.color}};">{{kpi.value}}</text>
+                    <text class="kpi-unit" wx:if="{{kpi.unit}}">{{kpi.unit}}</text>
+                    <text class="kpi-label">{{kpi.label}}</text>
+                  </view>
+                </view>
+
+                <!-- 小节标题 -->
+                <view class="card-section" wx:if="{{blk.type === 'section'}}">{{blk.title}}</view>
+
+                <!-- 列表 -->
+                <view class="card-list" wx:if="{{blk.type === 'list'}}">
+                  <view class="card-list-item" wx:for="{{blk.items}}" wx:for-item="li" wx:key="index">
+                    <view class="card-list-main">
+                      <text class="card-list-text">{{li.text}}</text>
+                      <text class="card-list-sub" wx:if="{{li.sub}}">{{li.sub}}</text>
+                    </view>
+                    <view class="card-list-right">
+                      <view class="tag-row">
+                        <t-tag wx:if="{{li.tag}}" size="small" variant="light" theme="{{li.tagColor || 'default'}}">{{li.tag}}</t-tag>
+                        <!-- 复制按钮：复制排好版的完整信息（有 detail 字段才显示） -->
+                        <view class="copy-btn" wx:if="{{li.detail}}" data-detail="{{li.detail}}" catch:tap="onCopyDetail">复制</view>
+                      </view>
+                      <!-- 置顶列表条目：显示 编辑/取消置顶 按钮（有 topId 字段标识） -->
+                      <view class="audit-btns" wx:if="{{li.topId}}">
+                        <view class="audit-btn audit-btn--edit" data-id="{{li.id}}" data-type="{{li.type}}" catch:tap="onEditPost">编辑</view>
+                        <view class="audit-btn audit-btn--untop" data-top-id="{{li.topId}}" data-id="{{li.id}}" catch:tap="onCancelTop">取消置顶</view>
+                      </view>
+                      <!-- 待审核：显示 通过/编辑/删除 按钮 -->
+                      <view class="audit-btns" wx:elif="{{li.pending}}">
+                        <view class="audit-btn audit-btn--pass" data-id="{{li.id}}" catch:tap="onAuditPass">通过</view>
+                        <view class="audit-btn audit-btn--edit" data-id="{{li.id}}" data-type="{{li.type}}" catch:tap="onEditPost">编辑</view>
+                        <view class="audit-btn audit-btn--delete" data-id="{{li.id}}" catch:tap="onDeletePost">删除</view>
+                      </view>
+                      <!-- 已过审（帖子）：显示 编辑/置顶/下架 按钮 -->
+                      <view class="audit-btns" wx:elif="{{li.type}}">
+                        <view class="audit-btn audit-btn--edit" data-id="{{li.id}}" data-type="{{li.type}}" catch:tap="onEditPost">编辑</view>
+                        <view class="audit-btn audit-btn--top" data-id="{{li.id}}" data-type="{{li.type}}" catch:tap="onTopPost">置顶</view>
+                        <view class="audit-btn audit-btn--offline" data-id="{{li.id}}" catch:tap="onOfflinePost">下架</view>
+                      </view>
+                    </view>
+                  </view>
+                  <!-- 分页器 -->
+                  <view class="pagination" wx:if="{{blk.pagination && blk.pagination.total > blk.pagination.pageSize}}">
+                    <view
+                      class="pager-btn {{blk.pagination.page <= 1 ? 'is-disabled' : ''}}"
+                      data-msg-id="{{item.id}}"
+                      data-blk-index="{{blkIndex}}"
+                      data-page="{{blk.pagination.page - 1}}"
+                      catch:tap="onPageChange"
+                    >上一页</view>
+                    <text class="pager-info">{{blk.pagination.page}} / {{blk.pagination.pageCount}} 页 · 共 {{blk.pagination.total}} 条</text>
+                    <view
+                      class="pager-btn {{blk.pagination.page >= blk.pagination.pageCount ? 'is-disabled' : ''}}"
+                      data-msg-id="{{item.id}}"
+                      data-blk-index="{{blkIndex}}"
+                      data-page="{{blk.pagination.page + 1}}"
+                      catch:tap="onPageChange"
+                    >下一页</view>
+                  </view>
+                </view>
+
+                <!-- 纯文本 -->
+                <view class="card-text" wx:if="{{blk.type === 'text'}}">{{blk.text}}</view>
+
+                <!-- 空态 -->
+                <view class="card-empty" wx:if="{{blk.type === 'empty'}}">
+                  <t-empty icon="info-circle" description="{{blk.text}}" />
+                </view>
+              </block>
+            </view>
+          </view>
+        </view>
+      </block>
+    </view>
+    <view id="chat-bottom"></view>
+  </scroll-view>
+
+  <!-- 底部输入区 -->
+  <view class="chat-footer">
+    <t-chat-sender
+      value="{{value}}"
+      loading="{{loading}}"
+      disabled="{{disabled}}"
+      placeholder="输入问题，查询后台数据…"
+      auto-rise-with-keyboard="{{true}}"
+      textarea-props="{{textareaProps}}"
+      render-presets="{{renderPresets}}"
+      allow-speech="{{true}}"
+      bind:send="onSend"
+      bind:stop="onStop"
+      bind:focus="onFocus"
+      bind:change="onChange"
+      bind:keyboardheightchange="onKeyboardHeightChange"
+    >
+      <!-- footer-prefix：深度思考 + 上下文 按钮（统一容器内，避免多 slot 兄弟节点渲染问题） -->
+      <view slot="footer-prefix" class="footer-prefix-bar">
+        <view class="deep-think-block {{deepThinkActive ? 'active' : ''}}" bind:tap="onDeepThinkTap">
+          <t-icon name="system-sum" size="36rpx" />
+        </view>
+        <view
+          wx:if="{{deepThinkActive}}"
+          class="context-btn {{contextActive ? 'active' : ''}}"
+          bind:tap="onContextTap"
+        >
+          <t-icon name="link" size="36rpx" />
+        </view>
+      </view>
+      <!-- speech：语音输入模式下的内容（按住说话），独立 slot，不影响 footer-prefix -->
+      <view slot="speech">
+        <t-chat-record bind:recognize="onRecognize">
+          <view slot="speechInput" class="speech-input">按住 说话</view>
+          <view slot="speechNoAuth" class="speech-input speech-no-auth">点击 授权麦克风</view>
+        </t-chat-record>
+      </view>
+    </t-chat-sender>
+    <view class="chat-tip {{deepThinkActive ? 'chat-tip--active' : ''}}">
+      <t-icon name="{{deepThinkActive ? 'system-sum' : 'info-circle'}}" size="24rpx" color="{{deepThinkActive ? '#0052D9' : '#BBBBBB'}}" />
+      <text>{{deepThinkActive ? 'AI 全面接管模式' : '内容由 AI 生成，仅供参考'}}</text>
+      <view class="clear-btn" wx:if="{{chatList.length}}" bind:tap="onClearChat">清除</view>
+    </view>
+  </view>
+
+</view>

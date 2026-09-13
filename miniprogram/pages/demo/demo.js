@@ -109,11 +109,20 @@ const TABBAR = [
 
 // 顶部选项卡
 const TOP_TABS = [
-  { id: 'latest',  label: '最新消息' },
-  { id: 'nearby',  label: '附近消息' },
-  { id: 'vip',     label: 'VIP信息' },
-  { id: 'recruit', label: '求职招聘' },
+  { id: 'latest',   label: '最新消息' },
+  { id: 'nearby',   label: '附近消息' },
+  { id: 'transfer', label: '转让求店' },
+  { id: 'recruit',  label: '求职招聘' },
 ];
+
+const { loadAds, openAdLink } = require('../../utils/ad');
+
+// 首页全局弹窗广告的「今日已弹」标记（storage key，值为当天日期字符串）
+const POPUP_SHOWN_KEY = 'demo_popup_shown_date';       // 每天一次：已弹日期
+const POPUP_ONCE_KEY = 'demo_popup_shown_once';         // 只弹一次：是否弹过
+const POPUP_LAST_KEY = 'demo_popup_last_ts';            // 每N天：上次弹的时间戳
+const POPUP_COUNT_KEY = 'demo_popup_show_count';        // 次数统计
+const POPUP_SESSION_KEY = '_popupShownThisSession';     // 每次启动：内存标记（不落库）
 
 const SUB_TMPL_IDS = [
   'bQSbo99ET7wuboZeBOHnGmxSrLFDBLOhjEUE-ECWdEA',
@@ -169,20 +178,57 @@ Page({
     publishSheetVisible: false,
     stickyProps: { zIndex: 99, offsetTop: 0 },
     tabsSticky: false,
+    isAdmin: false,         // 是否管理员（调 adminAuth.check_admin 判定，决定 AI 入口显隐）
+    // 运营位（广告轮播 / Banner 双卡 / 全局弹窗 / 包友圈商家），空数组时对应区块不渲染
+    ads: [],
+    banners: [],
+    popupAd: null,          // 全局弹窗广告（无则不弹）
+    popupVisible: false,    // 弹窗显示开关
+    partners: [],
+    partnersLoading: true,
+    partnersScrollLeft: 0,
+    swiperNav: { type: 'dots' },
     page: 1,
     pageSize: 20,
     hasMore: false,
     loadingMore: false,
     loading: true,
     firstLoaded: false,
-    skeletonRows: [
-      [{ width: '48%', height: '220rpx', type: 'rect', marginRight: '4%' }, { width: '48%', height: '180rpx', type: 'rect' }],
-      [{ width: '48%', height: '24rpx', type: 'text', marginRight: '4%' }, { width: '48%', height: '24rpx', type: 'text' }],
-      [{ width: '30%', height: '24rpx', type: 'text', marginRight: '22%' }, { width: '30%', height: '24rpx', type: 'text' }],
-      [{ width: '48%', height: '200rpx', type: 'rect', marginRight: '4%' }, { width: '48%', height: '220rpx', type: 'rect' }],
-      [{ width: '48%', height: '24rpx', type: 'text', marginRight: '4%' }, { width: '48%', height: '24rpx', type: 'text' }],
-      [{ width: '30%', height: '24rpx', type: 'text', marginRight: '22%' }, { width: '30%', height: '24rpx', type: 'text' }],
+    // 单张帖子卡片的骨架（纵向：图 + 标题两行 + 标签 + 地区 + 价格），
+    // 左右两列各复用同一份，还原真实双列卡片流
+    skeletonCard: [
+      { type: 'rect', height: '220rpx' },
+      { type: 'text', width: '100%', height: '26rpx' },
+      { type: 'text', width: '70%', height: '26rpx' },
+      { type: 'text', width: '52%', height: '22rpx' },
+      { type: 'text', width: '60%', height: '22rpx' },
+      { type: 'text', width: '40%', height: '28rpx' },
     ],
+    // 模块 4b 热门推荐：左大卡「今日头条」文案 + 右上下两小卡右下小标签
+    // 回退兜底数据（loadAds 拉不到 card 广告位时仍显示这套硬编码文案，页面不塌）
+    card: {
+      headline: {
+        badge: '今日头条',
+        line1: '杭州包子铺凌晨排队',
+        strong: '黄牛号炒到',
+        price: '50',
+        cta: '查看详情',
+        image: '/assets/images/baozi.png',
+        theme: 'headline',
+      },
+      mini: {
+        vipRights: '6 项特权',
+        groupMembers: '2,300+ 包友',
+      },
+    },
+    // 广告系统驱动的三张卡（今日头条大卡 + VIP 小卡 + 包友群小卡）
+    // 初始为空对象（而非 null），wxml 里 cardAds.xxx.字段 在空对象上取属性安全返回 undefined，
+    // 配合 || 回退到 card 兜底文案；拉取成功后 setData 覆盖为真实广告对象
+    cardAds: {
+      headline: {},   // layout=headline 的大卡广告
+      vip: {},        // layout=mini  且 theme=vip 的小卡广告
+      group: {},      // layout=mini  且 theme=group 的小卡广告
+    },
   },
 
   onLoad() {
@@ -191,13 +237,376 @@ Page({
     // 只拉 feed。会员状态/未读数放 onShow 拉，避免首次进入时
     // onLoad+onShow 先后触发导致 vip/unread 各请求两遍。
     this.loadFeed();
+    this.loadAdSlots();
   },
 
   onShow() {
     // 首次进入紧随 onLoad 触发、从其他页/切 tab 返回也触发：
-    // 在此刷新会员状态（底部"我的"图标）+ 未读消息数（消息 tab 红点）。
+    // 在此刷新会员状态（底部"我的"图标）+ 未读消息数（消息 tab 红点）+ 管理员身份。
     this.loadVipStatus();
     this.refreshUnread();
+    this.checkAdmin();
+  },
+
+  // 判断当前登录用户是否为管理员（决定「管理员 AI 入口」金色按钮是否显示）
+  // 用云函数服务端 OPENID 比对白名单，用户无法伪造；只拿布尔值，不泄露数据
+  checkAdmin() {
+    wx.cloud
+      .callFunction({ name: 'adminAuth', data: { action: 'check_admin' }, config: { timeout: 10000 } })
+      .then((res) => {
+        const r = (res && res.result) || {};
+        const isAdmin = !!r.isAdmin;
+        if (isAdmin !== this.data.isAdmin) this.setData({ isAdmin });
+      })
+      .catch(() => {
+        // 失败按非管理员处理：不显示入口，不影响其他功能
+      });
+  },
+
+  onHide() {
+    this.stopPartnersScroll();
+  },
+
+  onUnload() {
+    this.stopPartnersScroll();
+  },
+
+  // 运营位（广告轮播 / Banner 双卡 / 全局弹窗） + 包友圈商家（真实数据）
+  // 方案 C：走通用 loadAds(page, positions)，广告位由后台 ad_slots 动态定义
+  async loadAdSlots() {
+    const groups = await loadAds('demo', ['banner', 'card', 'popup']);
+    // banner 轮播图：一条广告可含多图（images 数组），否则回退单 image
+    const ads = [];
+    (groups.banner || []).forEach((a) => {
+      const imgs = (Array.isArray(a.images) && a.images.length)
+        ? a.images
+        : (a.image ? [a.image] : []);
+      imgs.forEach((img) => {
+        if (img) {
+          ads.push({
+            value: img,
+            path: a.link || '',
+            linkType: a.linkType || 'page',
+            target: a.target || '',
+          });
+        }
+      });
+    });
+    // card 双卡运营位（旧 banner 风格，保留兼容）
+    const banners = (groups.card || []).map((a) => ({
+      id: a._id,
+      icon: a.icon || '',
+      emoji: a.emoji || '',
+      title: a.title || '',
+      sub: a.sub || '',
+      bgFrom: a.bgFrom || '#FFF1E8',
+      bgTo: a.bgTo || '#FFE0C2',
+      path: a.link || '',
+      linkType: a.linkType || 'page',
+      target: a.target || '',
+    }));
+    // popup 全局弹窗广告：只取第一条；「每天最多弹一次」由 storage 记录当天日期控制
+    const popupList = groups.popup || [];
+    const popupAd = popupList.length ? popupList[0] : null;
+
+    // 模块 4b 热门推荐卡片组（广告系统驱动）：从 card 广告位里按 layout 分类
+    //   layout=headline → 今日头条大卡；layout=mini + theme=vip → VIP 小卡；
+    //   layout=mini + theme=group → 包友群小卡。拉不到对应广告时 cardAds 对应字段保持空对象（无 _id → 前端不渲染该卡）。
+    const cardAds = { headline: {}, vip: {}, group: {} };
+    (groups.card || []).forEach((a) => {
+      const layout = a.layout || '';
+      const theme = a.theme || '';
+      if (layout === 'headline' && !cardAds.headline._id) cardAds.headline = a;
+      else if (layout === 'mini' && theme === 'vip' && !cardAds.vip._id) cardAds.vip = a;
+      else if (layout === 'mini' && theme === 'group' && !cardAds.group._id) cardAds.group = a;
+    });
+
+    this.setData({ ads, banners, popupAd, cardAds });
+    this.maybeShowPopup(popupAd);
+    this.loadPartners();
+  },
+
+  // 决定是否弹出全局弹窗广告：按广告配置的 freq 频控策略判断
+  // freq 取值：daily(每天一次,默认) / once(只一次) / always(每次都弹) / session(每次启动一次) / every_n(每N天)
+  maybeShowPopup(ad) {
+    if (!ad) return;
+    const freq = ad.freq || 'daily';
+    const today = new Date().toDateString();
+    const now = Date.now();
+    try {
+      // 最多弹 N 次限制（freq_max > 0 时生效）
+      const maxShow = Number(ad.freq_max) || 0;
+      if (maxShow > 0) {
+        const cnt = Number(wx.getStorageSync(POPUP_COUNT_KEY)) || 0;
+        if (cnt >= maxShow) return;
+      }
+
+      if (freq === 'once') {
+        // 只弹一次（永久）
+        if (wx.getStorageSync(POPUP_ONCE_KEY)) return;
+      } else if (freq === 'always') {
+        // 每次都弹，不做拦截
+      } else if (freq === 'session') {
+        // 每次小程序冷启动弹一次：用内存标记（app 未重启就不会清）
+        if (this[POPUP_SESSION_KEY]) return;
+      } else if (freq === 'every_n') {
+        // 每 N 天弹一次
+        const n = Math.max(1, Number(ad.freq_days) || 1);
+        const last = Number(wx.getStorageSync(POPUP_LAST_KEY)) || 0;
+        if (last && (now - last) < n * 86400000) return;
+      } else {
+        // daily（默认）：今天已弹过则不再弹
+        const shownDate = wx.getStorageSync(POPUP_SHOWN_KEY) || '';
+        if (shownDate === today) return;
+      }
+    } catch (e) {
+      // 读缓存失败按未弹过处理
+    }
+    this.setData({ popupVisible: true });
+  },
+
+  // 记录"弹窗已展示"（关闭/点击时调用）：按当前 ad 的 freq 写对应标记
+  markPopupShown() {
+    const ad = this.data.popupAd || {};
+    const freq = ad.freq || 'daily';
+    const now = Date.now();
+    try {
+      // 次数统计（所有策略都累加，供 freq_max 使用）
+      const cnt = (Number(wx.getStorageSync(POPUP_COUNT_KEY)) || 0) + 1;
+      wx.setStorageSync(POPUP_COUNT_KEY, cnt);
+
+      if (freq === 'once') {
+        wx.setStorageSync(POPUP_ONCE_KEY, 1);
+      } else if (freq === 'every_n') {
+        wx.setStorageSync(POPUP_LAST_KEY, now);
+      } else if (freq === 'session') {
+        this[POPUP_SESSION_KEY] = true;
+      } else if (freq !== 'always') {
+        // daily（默认）
+        wx.setStorageSync(POPUP_SHOWN_KEY, new Date().toDateString());
+      }
+    } catch (err) {
+      // 写缓存失败忽略：下次进入可能再弹一次，不影响功能
+    }
+  },
+
+  // 关闭弹窗（点遮罩/关闭按钮）→ 记录已弹
+  onPopupClose(e) {
+    // t-popup 的 visible-change 事件 detail.visible=false 表示关闭
+    if (e && e.detail && e.detail.visible) return;
+    this.setData({ popupVisible: false });
+    this.markPopupShown();
+  },
+
+  // 点击弹窗广告内容 → 关闭弹窗 + 统一跳转
+  onPopupTap() {
+    const ad = this.data.popupAd;
+    this.setData({ popupVisible: false });
+    this.markPopupShown();
+    // popupAd 是后端原始对象，字段为 link/linkType/target；
+    // 走 Page 方法 this.openAdLink（已兼容 link 字段）
+    this.openAdLink(ad);
+  },
+
+  // 包友圈商家：调 merchantApply(list) 拉已审核商家（推荐前 10 条），映射为横滚卡片数据
+  loadPartners() {
+    wx.cloud.callFunction({
+      name: 'merchantApply',
+      data: { action: 'list', page: 1, pageSize: 10 },
+      config: { timeout: 10000 },
+    }).then((res) => {
+      const r = (res && res.result) || {};
+      if (r.success && Array.isArray(r.list)) {
+        const partners = r.list.map((m) => ({
+          id: m._id,
+          name: m.name || '',
+          image: m.avatar || '',
+        }));
+        this.setData({ partners, partnersLoading: false }, () => {
+          // 数据就绪后，稍等一帧启动慢速自动滚动
+          setTimeout(() => this.startPartnersScroll(), 300);
+        });
+      } else {
+        this.setData({ partners: [], partnersLoading: false });
+      }
+    }).catch(() => {
+      this.setData({ partners: [], partnersLoading: false });
+    });
+  },
+
+  // 慢速自动向右滚动，滚到末尾（更多商家）后停止；用户触摸/点击即停止
+  startPartnersScroll() {
+    if (this._partnersTimer) return;
+    if (!this.data.partners.length) return;
+    this._partnersTimer = setInterval(() => {
+      const left = (this.data.partnersScrollLeft || 0) + 1; // 每步 +1px，慢速
+      // 估算内容总宽：卡片数(10+1张更多)×(140rpx+16rpx间距)。超出即停止
+      const totalWidth = (this.data.partners.length + 1) * (140 + 16);
+      if (left >= totalWidth) {
+        this.stopPartnersScroll(); // 到末尾，停止
+        return;
+      }
+      this.setData({ partnersScrollLeft: left });
+    }, 50);
+  },
+
+  stopPartnersScroll() {
+    if (this._partnersTimer) {
+      clearInterval(this._partnersTimer);
+      this._partnersTimer = null;
+    }
+  },
+
+  // 手指开始触摸：停止自动滚动（让用户手动拖动）
+  onPartnersTouchStart() {
+    this.stopPartnersScroll();
+  },
+
+  // 手指松开：保持停在当前位置（不再自动续滚）
+  onPartnersTouchEnd() {
+    // 不重启自动滚动；用户拖动后停在原地
+  },
+
+  // 统一广告跳转：支持 page(页面) / post(帖子详情) / url(外链) / none(不跳)
+  // 兼容两种字段来源：banner/card 映射后是 path；popup 原始对象是 link
+  openAdLink(item) {
+    if (!item) return;
+    const linkType = item.linkType || 'page';
+    const target = item.target || item.path || item.link || '';
+    if (!target && linkType !== 'none') return;
+    switch (linkType) {
+      case 'post':
+        wx.navigateTo({ url: `/pages/detail/detail?id=${target}` });
+        break;
+      case 'url':
+        // 外链需 webview 页面承载（当前未建，暂提示）
+        wx.showToast({ title: '外链跳转待接入', icon: 'none' });
+        break;
+      case 'none':
+        break;
+      case 'page':
+      default:
+        if (target) wx.navigateTo({ url: target });
+        break;
+    }
+  },
+
+  onAdTap(e) {
+    const ad = this.data.ads[e.detail.index];
+    this.openAdLink(ad);
+  },
+
+  onBannerTap(e) {
+    const item = e.currentTarget.dataset.item;
+    this.openAdLink(item);
+  },
+
+  // 热门推荐卡片组：四个入口跳转（区头查看全部 / 左大新闻 / VIP / 包友群）
+  // 广告系统驱动：对应广告位有 link 时走 openAdLink(ad)，否则回退到固定页面跳转
+  onCardMoreTap() {
+    // 区头「查看全部」：进快讯列表页（区头非广告位，保持固定跳转）
+    wx.navigateTo({ url: '/pages/news/news' });
+  },
+  onCardHeadlineTap() {
+    const ad = this.data.cardAds && this.data.cardAds.headline;
+    if (ad && (ad.link || ad.target)) { this.openAdLink(ad); return; }
+    wx.navigateTo({ url: '/pages/news/news' });
+  },
+  onCardVipTap() {
+    const ad = this.data.cardAds && this.data.cardAds.vip;
+    if (ad && (ad.link || ad.target)) { this.openAdLink(ad); return; }
+    wx.navigateTo({ url: '/pages/vip/vip' });
+  },
+  onCardGroupTap() {
+    const ad = this.data.cardAds && this.data.cardAds.group;
+    if (ad && (ad.link || ad.target)) { this.openAdLink(ad); return; }
+    wx.navigateTo({ url: '/pages/group/group' });
+  },
+
+  // 管理员长按热门推荐卡片 → 上下线该广告
+  // 入口：仅 isAdmin=true 时生效；普通用户长按只触发震动不出菜单
+  onCardAdLongPress(e) {
+    if (!this.data.isAdmin) return; // 普通用户：无操作（保留长按震动）
+    const key = (e && e.currentTarget && e.currentTarget.dataset && e.currentTarget.dataset.adKey) || '';
+    const ad = this.data.cardAds && this.data.cardAds[key];
+    if (!ad || !ad._id) {
+      wx.showToast({ title: '该卡片不是广告（兜底文案）', icon: 'none' });
+      return;
+    }
+    const online = ad.status === 'online';
+    const KEY_LABELS = { headline: '今日头条大卡', vip: 'VIP 会员卡', group: '包友群卡' };
+    const itemName = KEY_LABELS[key] || '该卡片';
+    wx.showActionSheet({
+      itemList: online ? [`下线${itemName}`, `查看广告详情`] : [`重新上线${itemName}`, `查看广告详情`],
+      success: (res) => {
+        if (res.tapIndex === 0) {
+          this.toggleCardAd(key, !online);
+        }
+        else if (res.tapIndex === 1) {
+          wx.showModal({
+            title: `${itemName} 广告详情`,
+            content: `slot：${ad.slot || '-'}\ntype：${ad.type || '-'}\nlayout：${ad.layout || '-'}\ntheme：${ad.theme || '-'}\ntitle：${ad.title || ad.line1 || '-'}\nlink：${ad.link || ad.target || '（无）'}\n当前状态：${online ? 'online（展示中）' : 'offline（已下线）'}`,
+            showCancel: false,
+            confirmText: '知道了',
+          });
+        }
+      },
+    });
+  },
+
+  // 调 adminAuth.ad_toggle 切换广告 status
+  // 入参：key=headline/vip/group；nextStatus=true 上线 / false 下线
+  async toggleCardAd(key, nextStatus) {
+    const ad = this.data.cardAds && this.data.cardAds[key];
+    if (!ad || !ad._id) return;
+    const KEY_LABELS = { headline: '今日头条大卡', vip: 'VIP 会员卡', group: '包友群卡' };
+    const itemName = KEY_LABELS[key] || '该卡片';
+    wx.showLoading({ title: nextStatus ? '上线中…' : '下线中…', mask: true });
+    try {
+      const res = await wx.cloud.callFunction({
+        name: 'adminAuth',
+        data: {
+          action: 'ad_toggle',
+          user: 'admin',
+          pass: 'admin', // 走环境变量兜底口令
+          _id: ad._id,
+          status: nextStatus ? 'online' : 'offline',
+        },
+        config: { timeout: 10000 },
+      });
+      const r = (res && res.result) || {};
+      if (r.success) {
+        wx.showToast({ title: nextStatus ? '已重新上线' : '已下线', icon: 'success' });
+        // 立即刷新 cardAds：本地乐观更新 + 后台拉新
+        this.loadAdSlots();
+      }
+      else {
+        wx.showModal({ title: `${itemName}操作失败`, content: r.message || '未知错误', showCancel: false });
+      }
+    }
+    catch (err) {
+      wx.showToast({ title: (err && err.errMsg) || '调用失败', icon: 'none' });
+    }
+    finally {
+      wx.hideLoading();
+    }
+  },
+
+  // 包友圈：点击单个商家卡 → 停止滚动 + 进商家详情页
+  onPartnerTap(e) {
+    this.stopPartnersScroll();
+    const item = e.currentTarget.dataset.item;
+    if (!item || !item.id) return;
+    wx.navigateTo({ url: `/pages/merchant-detail/merchant-detail?id=${item.id}` });
+  },
+
+  // 包友圈：点击"更多商家"或"全部" → 停止滚动 + 进入驻页
+  onPartnersMore() {
+    this.stopPartnersScroll();
+    wx.navigateTo({ url: '/pages/merchant-apply/merchant-apply' });
+  },
+  onPartnersAll() {
+    this.onPartnersMore();
   },
 
   // 查询未读站内通知数（消息 tab 红点）
@@ -283,16 +692,43 @@ Page({
     try { wx.setStorageSync('detail_pool', map); } catch (e) {}
   },
 
+  // 全量按时间倒序查询：不传 dataType/dataTypes，云端直接对全集合按 published_at 倒序取一页，
+  // 首页「最新消息」用（比「按 7 类各取 20 再合并」更直接、更省：1 次查询拿最新 N 条）。
+  fetchAll(page, cityCode) {
+    const data = { page: page || 1, pageSize: this.data.pageSize || 20 };
+    if (cityCode) data.city_code = cityCode;
+    return wx.cloud
+      .callFunction({ name: 'feedPosts', data, config: { timeout: 10000 } })
+      .then((res) => {
+        const r = res.result || {};
+        if (r.success) return { list: r.list || [], hasMore: !!r.hasMore };
+        console.error('[demo] feedPosts 全量返回失败:', r.error);
+        return null;
+      })
+      .catch((err) => {
+        console.error('[demo] feedPosts 全量调用失败:', err && err.errMsg);
+        return null;
+      });
+  },
+
   async fetchAllTypes(page) {
     const t = this.data.activeTopTab;
     const isRecruit = t === 'recruit';
     const isNearby = t === 'nearby';
+    const isTransfer = t === 'transfer';
     const cityCode = isNearby ? this._nearbyCode : '';
+
+    // 首页「最新消息」：直接全集合按时间倒序查（1 次查询拿最新 N 条，不再按类型拆分）
+    if (!isRecruit && !isNearby && !isTransfer) {
+      return this.fetchAll(page, '');
+    }
+
+    // 求职招聘 / 转让求店 / 附近：按类型批量（附近带 cityCode 同城过滤）
     const TYPES = isRecruit
       ? ['recruit', 'jobseek']
-      : ['transfer', 'want_shop', 'recruit', 'jobseek', 'equip_sell', 'equip_buy', 'other'];
-    // 一次批量调用替代旧「多类型并发各查一次」，云端按 types 内部逐类取当前页再合并，
-    // 返回 list 结构与旧 Promise.all 拼接完全一致，hasMore 语义一致（任一类型还有即还有）。
+      : isTransfer
+        ? ['transfer', 'want_shop']
+        : ['transfer', 'want_shop', 'recruit', 'jobseek', 'equip_sell', 'equip_buy', 'other'];
     return this.fetchBatch(TYPES, page, cityCode);
   },
 
@@ -337,7 +773,7 @@ Page({
       light: meta.light,
       title,
       priceText,
-      meta: `${loc || '未知地区'} · ${fmtAgo(p.published_at)}${Number(p.views) > 0 ? ' · ' + p.views + ' 浏览' : ''}`,
+      meta: `${loc || '未知地区'} · ${fmtAgo(p.published_at)}`,
       tags,
       ts: p.published_at || 0,
       isTop: !!p.isTop,
@@ -386,7 +822,8 @@ Page({
 
   onTabBar(e) {
     const key = e.detail.value;
-    if (key === 'publish') { this.openPublishSheet(); this.setData({ activeBar: 'home' }); return; }
+    // 发布：直接跳转「我的发布」列表页（临时改动，暂注释掉原发布类型弹层）
+    if (key === 'publish') { this.setData({ activeBar: 'home' }); wx.navigateTo({ url: '/pages/myposts/myposts' }); return; }
     if (key === 'nearby') {
       wx.showLoading({ title: '正在进入', mask: true });
       wx.navigateTo({ url: '/pages/nearby/nearby' });
@@ -427,7 +864,6 @@ Page({
   onTopTab(e) {
     const key = e.detail.value;
     if (key === 'nearby') { this.locateAndShowNearby(); return; }
-    if (key === 'vip') { wx.showToast({ title: 'VIP 专区待接入', icon: 'none' }); return; }
     if (key === this.data.activeTopTab) return;
     this.setData({ activeTopTab: key });
     this.loadFeed();
@@ -493,7 +929,7 @@ Page({
     if (next < 0 || next >= TOP_TABS.length) return;
     // 判定为滑动 → 短暂抑制紧随其后的卡片 tap，避免误进详情
     this._suppressTapUntil = Date.now() + 500;
-    // 复用顶部 Tab 的统一激活逻辑(含 nearby 定位 / vip 占位等)
+    // 复用顶部 Tab 的统一激活逻辑(含 nearby 定位)
     this.onTopTab({ detail: { value: TOP_TABS[next].id } });
   },
 
@@ -533,6 +969,41 @@ Page({
     const { id } = e.currentTarget.dataset;
     if (!id) return;
     if (id === 'publish') { this.openPublishSheet(); return; }
-    wx.navigateTo({ url: `/pages/detail/detail?id=${id}` });
+    // 进详情：先显示 loading（微延迟一帧再跳转，确保 loading 先渲染出来，不被页面切换瞬间吞掉），
+    // 由详情页 onReady 关闭
+    wx.showLoading({ title: '加载中…', mask: true });
+    setTimeout(() => {
+      wx.navigateTo({
+        url: `/pages/detail/detail?id=${id}`,
+        // 跳转失败时兜底关闭 loading，防止残留
+        fail: () => wx.hideLoading(),
+      });
+    }, 30);
+  },
+
+  // ---------- 金色悬浮按钮：进入智能对话页（管理员对话入口） ----------
+  onGoldFabTap() {
+    wx.navigateTo({ url: '/pages/chat/chat' });
+  },
+
+  // ---------- 分享 ----------
+  // 分享按钮用 open-type="share"，点击直接触发「转发给好友」（微信原生支持）；
+  // 朋友圈分享仍只能通过右上角「···」菜单（微信平台限制，按钮无法触发）。
+  // 下面两个回调同时服务「转发按钮」和「右上角菜单」两种入口。
+
+  // 分享给好友（open-type=share 按钮 + 右上角菜单共用）
+  onShareAppMessage() {
+    return {
+      title: '包子一哥传媒 · 招聘求职/店铺转让/二手设备/顺风车',
+      path: '/pages/demo/demo',
+    };
+  },
+
+  // 右上角「···」菜单分享朋友圈
+  onShareTimeline() {
+    return {
+      title: '包子一哥传媒 · 招聘求职/店铺转让/二手设备/顺风车',
+      query: '',
+    };
   },
 });

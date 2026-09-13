@@ -18,6 +18,7 @@
  */
 
 const cloud = require("wx-server-sdk");
+const crypto = require("crypto");
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
@@ -30,19 +31,140 @@ const _ = db.command;
 // 未配置时回落默认值，保证本地/存量部署不中断。
 const ADMIN_USER = process.env.ADMIN_USER || "admin";
 const ADMIN_PASS = process.env.ADMIN_PASS || "admin";
+
+// 管理员 openid 白名单（逗号分隔）；用于小程序端「管理员 AI 入口」显隐判断。
+// 云函数环境变量配置 ADMIN_OPENIDS，如 "oREGN7xxx,oREGN7yyy"；未配置时不返回管理员身份。
+const ADMIN_OPENIDS = String(process.env.ADMIN_OPENIDS || "")
+  .split(/[,，\s]+/)
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+/**
+ * 统一「小程序端」管理员判定（C 端 openid 通道）：
+ *   ① 环境变量 ADMIN_OPENIDS 白名单命中 → 直接为管理员（免查库，冷启动兜底）
+ *   ② 未命中 → 查 baozi_users 里 role === 'admin'（权威来源，后台可动态增删）
+ * 与 wxTask / adminChat 三处保持同一口径；改一处务必同步另两处。
+ */
+async function isAdminOpenid(openid) {
+  if (!openid) return false;
+  if (ADMIN_OPENIDS.includes(openid)) return true;
+  try {
+    const r = await db
+      .collection(USERS)
+      .where({ openid_wxapp: openid, role: "admin" })
+      .limit(1)
+      .get();
+    return !!(r.data && r.data.length);
+  } catch (e) {
+    console.error("[adminAuth] isAdminOpenid 查 role 失败:", e && e.errMsg);
+    return false;
+  }
+}
 // 数据集合名
 const COLLECTION = "baozi_posts";
 const USERS = "baozi_users";
 const TOPS = "baozi_post_tops"; // 置顶独立集合
 const LOGS = "admin_logs"; // §2.8 操作日志（需先在控制台建该集合）
+const ADS = "advertisements"; // §2.9 广告运营位（广告内容）
+const AD_SLOTS = "ad_slots"; // §2.9 广告位定义（方案 C：数据驱动）
+const GROUPS = "baozi_groups"; // 包友群（C 端只读，管理端增删改）
+const MERCHANTS = "baozi_merchants"; // 包友圈商家（C 端提交/浏览，管理端审核）
+
+// ---- RBAC：管理员账号 / 角色（多人分级权限）----
+const ADMIN_ACCOUNTS = "admin_accounts"; // 管理员账号表（username 唯一）
+const ADMIN_ROLES = "admin_roles"; // 角色权限表（role 唯一）
 // ==================== 配置区结束 ====================
+
+// ==================== RBAC 权限点 ====================
+// permission 粒度对应业务模块，action → permission 映射见 ACTION_PERM。
+// super_admin 角色无需查表，直接全量放行（避免权限表被误改导致超管失效）。
+const SUPER_ROLE = "super_admin";
+
+/** action → 所需权限点。未列出的 action 默认不校验（如 login/check_admin）。 */
+const ACTION_PERM = {
+  // 帖子查看
+  list: "post.view",
+  get: "post.view",
+  post_phone: "post.view", // 管理员取帖子完整手机号（转发用）
+  // 帖子增删改
+  create: "post.edit",
+  update: "post.edit",
+  delete: "post.edit",
+  // 审核 / 上下架
+  audit: "post.audit",
+  reject: "post.audit",
+  offline: "post.audit",
+  online: "post.audit",
+  // 置顶
+  list_tops: "post.top",
+  top: "post.top",
+  // 用户 / 会员 / 封禁
+  users: "user.manage",
+  member: "user.manage",
+  user_ban: "user.manage",
+  user_role: "user.manage", // 授予/撤销小程序管理员（role: user|admin）
+  // 广告运营位
+  ad_list: "ad.manage",
+  ad_create: "ad.manage",
+  ad_update: "ad.manage",
+  ad_delete: "ad.manage",
+  ad_toggle: "ad.manage",
+  ad_slot_list: "ad.manage",
+  ad_slot_create: "ad.manage",
+  ad_slot_update: "ad.manage",
+  ad_slot_delete: "ad.manage",
+  ad_slot_toggle: "ad.manage",
+  // 支付数据
+  pay_orders: "pay.view",
+  pay_records: "pay.view",
+  pay_stats: "pay.view",
+  // 包友群管理（baozi_groups）
+  group_list: "group.manage",
+  group_create: "group.manage",
+  group_update: "group.manage",
+  group_delete: "group.manage",
+  group_toggle: "group.manage",
+  // 包友圈商家管理（baozi_merchants）
+  merchant_list: "merchant.manage",
+  merchant_get: "merchant.manage",
+  merchant_create: "merchant.manage",
+  merchant_update: "merchant.manage",
+  merchant_delete: "merchant.manage",
+  merchant_audit: "merchant.manage", // 审核通过 / 驳回
+  // 日志 / 概览
+  logs: "log.view",
+  stats: "log.view",
+  // 账号 / 角色管理（仅超管）
+  admin_list: "admin.manage",
+  admin_create: "admin.manage",
+  admin_update: "admin.manage",
+  admin_delete: "admin.manage",
+  role_list: "admin.manage",
+  role_save: "admin.manage",
+};
+
+// ==================== 密码哈希工具 ====================
+/**
+ * 密码哈希：sha256(salt + pass) 十六进制串。
+ * 与数据库 admin_accounts.pass_hash 写入时所用的算法保持一致。
+ */
+function hashPass(pass, salt) {
+  return crypto.createHash("sha256").update(String(salt) + String(pass)).digest("hex");
+}
+
+/** 生成随机盐（16 字节 hex） */
+function genSalt() {
+  return crypto.randomBytes(16).toString("hex");
+}
 
 /** §2.8 操作日志：记录谁在什么时间做了什么。写失败不阻塞业务。 */
 async function writeLog(event, action, targetId, detail) {
   try {
+    const role = (event && event.__role) || "";
     await db.collection(LOGS).add({
       data: {
         operator: event.user || "",
+        operator_role: role,
         action,
         target_id: String(targetId || ""),
         detail: String(detail || ""),
@@ -64,8 +186,54 @@ function fail(message, code = "ERROR") {
   return { success: false, code, message };
 }
 
-function requireAuth(event) {
-  return event.user === ADMIN_USER && event.pass === ADMIN_PASS;
+// ==================== RBAC 鉴权 ====================
+/**
+ * RBAC 鉴权：查账号 → 校验密码哈希 → 查角色权限 → 判断当前 action 是否被允许。
+ * 返回：{ acct, role, perms } 通过；{ forbidden:true, acct, role } 无权限；null 账号/密码错误。
+ * 说明：超级管理员（super_admin）跳过权限表校验，直接全量放行。
+ */
+async function authorize(event) {
+  const username = String(event.user || "").trim();
+  const pass = String(event.pass || "");
+  if (!username || !pass) return null;
+
+  let acct = null;
+  try {
+    const r = await db
+      .collection(ADMIN_ACCOUNTS)
+      .where({ username, status: "active" })
+      .limit(1)
+      .get();
+    acct = (r.data && r.data[0]) || null;
+  } catch (e) {
+    console.error("[adminAuth] 查询管理员账号失败:", e && e.errMsg);
+    return null;
+  }
+  if (!acct) return null;
+  if (hashPass(pass, acct.salt) !== acct.pass_hash) return null;
+
+  const role = acct.role || "";
+  if (role === SUPER_ROLE) return { acct, role, perms: null };
+
+  let perms = [];
+  try {
+    const rr = await db.collection(ADMIN_ROLES).where({ role }).limit(1).get();
+    perms = (rr.data && rr.data[0] && rr.data[0].permissions) || [];
+  } catch (e) {
+    console.error("[adminAuth] 查询角色权限失败:", e && e.errMsg);
+  }
+
+  const need = ACTION_PERM[event.action];
+  if (need && perms.indexOf(need) < 0) {
+    return { forbidden: true, acct, role, perms, need };
+  }
+  return { acct, role, perms };
+}
+
+/** 兼容旧调用：仅判断账密是否有效（不带 action 权限判定） */
+async function requireAuth(event) {
+  const ctx = await authorize({ ...event, action: "" });
+  return !!ctx && !ctx.forbidden;
 }
 
 function escapeRegExp(s) {
@@ -76,6 +244,53 @@ function fmtDate(ts) {
   const d = new Date(ts);
   const p = (n) => (n < 10 ? "0" + n : "" + n);
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+// ---------- 管理员身份校验（小程序端「管理员 AI 入口」显隐用）----------
+
+/**
+ * check_admin：判断当前登录用户是否为管理员（小程序端统一入口）
+ * - 用服务端 getWXContext 的 OPENID（用户无法伪造）
+ * - 判定口径：ADMIN_OPENIDS 白名单命中 → 是；否则查 baozi_users.role === 'admin'
+ * - 免口令：任何登录用户都可调用（只返回 true/false，不泄露任何业务数据）
+ * - 返回：{ success, isAdmin, openid }（非管理员时 openid 为空字符串）
+ */
+async function actionCheckAdmin() {
+  const { OPENID } = cloud.getWXContext();
+  const openid = OPENID || "";
+  if (!openid) return ok({ isAdmin: false, openid: "" });
+  const admin = await isAdminOpenid(openid);
+  return ok({ isAdmin: admin, openid: admin ? openid : "" });
+}
+
+// ---------- 管理员取帖子完整手机号（转发到朋友圈用）----------
+
+/**
+ * post_phone：取指定帖子的完整手机号 —— **管理员专属**。
+ * 入参：{ postId }
+ * 返回：{ success, phone }（帖子不存在时 phone 为空串）
+ *
+ * 为什么单独开这个 action？
+ *   - C 端 payForPhone.reveal 有付费/会员门槛 + 单日频控（防批量抓号），管理员转发会被拦；
+ *     而转发到朋友圈必须带真号（脱敏号发出去没法联系）。
+ *   - 此前该能力挂在 wxTask（朋友圈转发任务中心）里，职责错配，且 wxTask 用 @cloudbase/node-sdk
+ *     取小程序 openid 不可靠。现统一收到 adminAuth：
+ *     · 它本身就是管理员专用云函数，鉴权走 exports.main 已统一的双通道（账密 RBAC / openid 管理员）；
+ *     · 用 wx-server-sdk，getWXContext().OPENID 取值稳定。
+ *   - 注意：本 action 在 switch 内分发，进入前已通过统一鉴权，无需再自行判权。
+ */
+async function actionPostPhone(event) {
+  const postId = String(event.postId || event._id || "").trim();
+  if (!postId) return fail("缺少 postId");
+  try {
+    const r = await db.collection(COLLECTION).doc(postId).get();
+    const doc = r && r.data;
+    const phone = String((doc && doc.phone) || "").trim();
+    return ok({ phone });
+  } catch (e) {
+    // 帖子不存在 / 已被删除：返回空串而非报错，调用方可沿用脱敏号
+    return ok({ phone: "" });
+  }
 }
 
 // ---------- 文件（云存储 fileID → 临时 URL）----------
@@ -219,10 +434,244 @@ function sanitizeFields(input) {
 // ---------- 帖子动作 ----------
 
 async function actionLogin(event) {
-  if (event.user === ADMIN_USER && event.pass === ADMIN_PASS) {
-    return ok({ authed: true, user: ADMIN_USER });
+  const username = String(event.user || "").trim();
+  const pass = String(event.pass || "");
+  if (!username || !pass) return fail("请输入账号和密码", "AUTH_FAILED");
+
+  let acct = null;
+  try {
+    const r = await db
+      .collection(ADMIN_ACCOUNTS)
+      .where({ username })
+      .limit(1)
+      .get();
+    acct = (r.data && r.data[0]) || null;
+  } catch (e) {
+    return fail("登录失败：" + String(e && e.message ? e.message : e));
   }
-  return fail("账号或密码错误", "AUTH_FAILED");
+  if (!acct) return fail("账号或密码错误", "AUTH_FAILED");
+  if (acct.status !== "active") return fail("该账号已被停用", "ACCOUNT_DISABLED");
+  if (hashPass(pass, acct.salt) !== acct.pass_hash) {
+    return fail("账号或密码错误", "AUTH_FAILED");
+  }
+
+  // 查角色权限（super_admin 直接返回全部权限点，供前端菜单/按钮控制）
+  let roleName = "";
+  let perms = [];
+  try {
+    const rr = await db.collection(ADMIN_ROLES).where({ role: acct.role }).limit(1).get();
+    const roleDoc = (rr.data && rr.data[0]) || null;
+    roleName = roleDoc ? roleDoc.name || "" : "";
+    perms = (roleDoc && roleDoc.permissions) || [];
+  } catch (e) {
+    console.error("[adminAuth] 登录查询角色失败:", e && e.errMsg);
+  }
+  if (acct.role === SUPER_ROLE) {
+    perms = Object.values(ACTION_PERM).filter((v, i, a) => a.indexOf(v) === i);
+  }
+
+  // 记录最后登录时间（失败不阻断）
+  try {
+    await db.collection(ADMIN_ACCOUNTS).doc(acct._id).update({
+      data: { last_login_at: Date.now() },
+    });
+  } catch (e) {
+    console.error("[adminAuth] 更新最后登录时间失败:", e && e.errMsg);
+  }
+
+  return ok({
+    authed: true,
+    user: acct.username,
+    nickname: acct.nickname || acct.username,
+    role: acct.role,
+    role_name: roleName,
+    permissions: perms,
+  });
+}
+
+// ---------- 管理员账号 / 角色管理（仅 super_admin，action 映射 admin.manage）----------
+
+/** 账号列表（不返回密码哈希/盐） */
+async function actionAdminList(event) {
+  try {
+    let r;
+    try {
+      r = await db
+        .collection(ADMIN_ACCOUNTS)
+        .orderBy("created_at", "desc")
+        .limit(200)
+        .get();
+    } catch (e) {
+      // created_at 无索引时降级为普通查询
+      r = await db.collection(ADMIN_ACCOUNTS).limit(200).get();
+    }
+    const list = (r.data || []).map((a) => ({
+      _id: a._id,
+      username: a.username,
+      nickname: a.nickname || "",
+      role: a.role,
+      status: a.status || "active",
+      last_login_at: a.last_login_at || 0,
+      created_at: a.created_at || 0,
+    }));
+    return ok({ list, total: list.length });
+  } catch (e) {
+    return fail(String(e && e.message ? e.message : e));
+  }
+}
+
+/** 新建管理员账号 */
+async function actionAdminCreate(event) {
+  const username = String(event.username || "").trim();
+  // ⚠️ 初始密码字段用 new_pass（pass 是登录凭证字段，会被网关调用覆盖）
+  const pass = String(event.new_pass !== undefined ? event.new_pass : "");
+  const role = String(event.role || "").trim();
+  if (!username) return fail("缺少登录名");
+  if (!pass || pass.length < 6) return fail("密码至少 6 位");
+  if (!role) return fail("缺少角色");
+  try {
+    // 用户名查重
+    const dup = await db.collection(ADMIN_ACCOUNTS).where({ username }).count();
+    if (dup.total > 0) return fail("登录名已存在");
+    // 角色必须存在
+    const roleOk = await db.collection(ADMIN_ROLES).where({ role }).count();
+    if (roleOk.total === 0) return fail("角色不存在");
+    const salt = genSalt();
+    const now = Date.now();
+    const res = await db.collection(ADMIN_ACCOUNTS).add({
+      data: {
+        username,
+        pass_hash: hashPass(pass, salt),
+        salt,
+        role,
+        nickname: String(event.nickname || username),
+        status: "active",
+        last_login_at: 0,
+        created_at: now,
+        updated_at: now,
+      },
+    });
+    await writeLog(event, "admin_create", res._id, `${username}/${role}`);
+    return ok({ _id: res._id });
+  } catch (e) {
+    return fail(String(e && e.message ? e.message : e));
+  }
+}
+
+/** 编辑账号：昵称 / 角色 / 状态 / 重置密码 */
+async function actionAdminUpdate(event) {
+  if (!event._id) return fail("缺少 _id");
+  try {
+    const cur = (await db.collection(ADMIN_ACCOUNTS).doc(event._id).get()).data;
+    if (!cur) return fail("账号不存在");
+
+    const data = {};
+    if (event.nickname !== undefined) data.nickname = String(event.nickname);
+    if (event.status !== undefined) {
+      data.status = event.status === "disabled" ? "disabled" : "active";
+      // 不允许停用自己，避免锁死
+      if (cur.username === String(event.user)) return fail("不能停用当前登录账号");
+    }
+    if (event.role !== undefined && event.role !== "") {
+      // 不允许把唯一的超管改成其他角色
+      if (cur.role === SUPER_ROLE && event.role !== SUPER_ROLE) {
+        const cnt = await db.collection(ADMIN_ACCOUNTS).where({ role: SUPER_ROLE }).count();
+        if (cnt.total <= 1) return fail("至少保留一个超级管理员");
+      }
+      data.role = String(event.role);
+    }
+    // 重置密码
+    // ⚠️ 新密码字段用 new_pass，不能用 pass：pass 是登录凭证字段，
+    // 网关调用时前端会把登录密码写到 body.pass，若新密码也用 pass 会被覆盖导致「改了无效」。
+    const newPass = event.new_pass !== undefined ? event.new_pass : event.pass;
+    if (newPass !== undefined && newPass !== "") {
+      if (String(newPass).length < 6) return fail("密码至少 6 位");
+      const salt = genSalt();
+      data.salt = salt;
+      data.pass_hash = hashPass(String(newPass), salt);
+    }
+    if (!Object.keys(data).length) return fail("没有可更新的字段");
+    data.updated_at = Date.now();
+
+    await db.collection(ADMIN_ACCOUNTS).doc(event._id).update({ data });
+    await writeLog(event, "admin_update", event._id, cur.username);
+    return ok({ updated: true });
+  } catch (e) {
+    return fail(String(e && e.message ? e.message : e));
+  }
+}
+
+/** 删除账号 */
+async function actionAdminDelete(event) {
+  if (!event._id) return fail("缺少 _id");
+  try {
+    const cur = (await db.collection(ADMIN_ACCOUNTS).doc(event._id).get()).data;
+    if (!cur) return fail("账号不存在");
+    if (cur.username === String(event.user)) return fail("不能删除当前登录账号");
+    if (cur.role === SUPER_ROLE) {
+      const cnt = await db.collection(ADMIN_ACCOUNTS).where({ role: SUPER_ROLE }).count();
+      if (cnt.total <= 1) return fail("至少保留一个超级管理员");
+    }
+    await db.collection(ADMIN_ACCOUNTS).doc(event._id).remove();
+    await writeLog(event, "admin_delete", event._id, cur.username);
+    return ok();
+  } catch (e) {
+    return fail(String(e && e.message ? e.message : e));
+  }
+}
+
+/** 角色列表（含权限点） */
+async function actionRoleList() {
+  try {
+    let r;
+    try {
+      r = await db.collection(ADMIN_ROLES).orderBy("sort", "desc").limit(100).get();
+    } catch (e) {
+      r = await db.collection(ADMIN_ROLES).limit(100).get();
+    }
+    return ok({ list: r.data || [] });
+  } catch (e) {
+    return fail(String(e && e.message ? e.message : e));
+  }
+}
+
+/** 保存角色权限（内置角色仅允许改 permissions） */
+async function actionRoleSave(event) {
+  const role = String(event.role || "").trim();
+  if (!role) return fail("缺少 role");
+  const permissions = Array.isArray(event.permissions)
+    ? event.permissions.filter((p) => typeof p === "string")
+    : [];
+  try {
+    const exist = await db.collection(ADMIN_ROLES).where({ role }).limit(1).get();
+    if (exist.data && exist.data.length) {
+      // 不允许修改/删除超级管理员的权限（硬编码全量放行，改表无效但避免误导）
+      if (role === SUPER_ROLE) return fail("超级管理员权限不可修改");
+      await db.collection(ADMIN_ROLES).doc(exist.data[0]._id).update({
+        data: { permissions, updated_at: Date.now() },
+      });
+      await writeLog(event, "role_save", exist.data[0]._id, role);
+      return ok({ updated: true });
+    }
+    // 新增自定义角色
+    const now = Date.now();
+    const res = await db.collection(ADMIN_ROLES).add({
+      data: {
+        role,
+        name: String(event.name || role),
+        desc: String(event.desc || ""),
+        permissions,
+        builtin: false,
+        sort: Number(event.sort) || 10,
+        created_at: now,
+        updated_at: now,
+      },
+    });
+    await writeLog(event, "role_save", res._id, role);
+    return ok({ _id: res._id });
+  } catch (e) {
+    return fail(String(e && e.message ? e.message : e));
+  }
 }
 
 /**
@@ -433,6 +882,90 @@ async function actionAudit(event) {
 
     await writeLog(event, "post_audit", event._id, event.note || "");
     return ok({ notified: !!toOpenid });
+  }
+  catch (e) {
+    return fail(String(e && e.message ? e.message : e));
+  }
+}
+
+/** 审核退回（拒绝）：不通过，保留 needs_review 状态但标记 reviewed */
+async function actionReject(event) {
+  if (!event._id) return fail("缺少 _id");
+  try {
+    // 先取帖子，退回时给发帖人推站内通知
+    let post = null;
+    try {
+      post = (await db.collection(COLLECTION).doc(event._id).get()).data;
+    }
+    catch (e) {
+      post = null;
+    }
+
+    await db.collection(COLLECTION).doc(event._id).update({
+      data: {
+        needs_review: false,
+        approved: false, // 结果型别名：退回=false
+        reviewed: true,
+        reviewed_at: Date.now(),
+        review_note: event.note || "退回",
+        status: "rejected", // 标记已退回
+      },
+    });
+
+    // 退回 → 站内通知发帖人
+    const toOpenid = post && post._openid;
+    if (toOpenid) {
+      try {
+        await db.collection("baozi_messages").add({
+          data: {
+            type: "review",
+            to_openid: toOpenid,
+            title: "帖子审核退回",
+            content: `您发布的帖子未通过审核，已被退回。${event.note ? `原因：${event.note}` : ""}`,
+            post_id: event._id,
+            read_by: [],
+            sender: "admin",
+            created_at: Date.now(),
+          },
+        });
+      }
+      catch (e) {
+        console.error("adminAuth 推送退回通知失败:", e && e.errMsg);
+      }
+    }
+
+    await writeLog(event, "post_reject", event._id, event.note || "退回");
+    return ok({ notified: !!toOpenid });
+  }
+  catch (e) {
+    return fail(String(e && e.message ? e.message : e));
+  }
+}
+
+/** 下架：status=offline（前端查询时排除，不删除数据） */
+async function actionOffline(event) {
+  if (!event._id) return fail("缺少 _id");
+  try {
+    await db.collection(COLLECTION).doc(event._id).update({
+      data: { status: "offline", updated_at: Date.now() },
+    });
+    await writeLog(event, "post_offline", event._id, "");
+    return ok({ offline: 1 });
+  }
+  catch (e) {
+    return fail(String(e && e.message ? e.message : e));
+  }
+}
+
+/** 上架：取消下架（status 恢复为空/正常） */
+async function actionOnline(event) {
+  if (!event._id) return fail("缺少 _id");
+  try {
+    await db.collection(COLLECTION).doc(event._id).update({
+      data: { status: _.remove(), updated_at: Date.now() },
+    });
+    await writeLog(event, "post_online", event._id, "");
+    return ok({ online: 1 });
   }
   catch (e) {
     return fail(String(e && e.message ? e.message : e));
@@ -770,6 +1303,35 @@ async function actionUserBan(event) {
   }
 }
 
+/**
+ * 设置用户角色（小程序管理员授予/撤销）—— 入参：_id, role("user"|"admin")
+ *
+ * 用途：小程序端「是否管理员」统一判定为 ADMIN_OPENIDS 白名单 + baozi_users.role==='admin'，
+ *      本 action 让后台能在界面上给某个用户加/撤 admin，而不必手动改库。
+ * 安全约束：role 只允许 user / admin（merchant 是业务角色，不从这里改，避免误伤）。
+ * 说明：本 action 走后台账密 + RBAC（user.manage 权限）鉴权，调用者身份是后台账号而非微信 openid，
+ *      因此不做「撤销自己」的 openid 比对（两者体系不同）；操作全程写 admin_logs 留痕可回溯。
+ */
+async function actionUserRole(event) {
+  if (!event._id) return fail("缺少 _id");
+  const role = String(event.role || "").trim();
+  if (role !== "user" && role !== "admin") {
+    return fail("不支持的角色（仅允许 user / admin）");
+  }
+  try {
+    const cur = (await db.collection(USERS).doc(event._id).get()).data;
+    if (!cur) return fail("用户不存在", "NOT_FOUND");
+
+    await db.collection(USERS).doc(event._id).update({
+      data: { role, updated_at: Date.now() },
+    });
+    await writeLog(event, role === "admin" ? "user_grant_admin" : "user_revoke_admin", event._id, cur.openid_wxapp || "");
+    return ok({ role });
+  } catch (e) {
+    return fail(String(e && e.message ? e.message : e));
+  }
+}
+
 // ---------- 操作日志查询（§2.8）----------
 
 async function actionLogs(event) {
@@ -789,6 +1351,783 @@ async function actionLogs(event) {
   }
 }
 
+// ---------- 支付管理（§2.10）----------
+// 集合：baozi_pay_orders（订单）、baozi_pay_records（付款记录）、baozi_phone_views（查看日志）
+// 订单 biz_type：phone=付费看电话 / member=会员 / refresh=擦亮 / top=置顶 / merchant=商家入驻
+// 订单 status：pending 待支付 / paid 已支付 / fulfilled 已履约
+const PAY_ORDERS = "baozi_pay_orders";
+const PAY_RECORDS = "baozi_pay_records";
+const PHONE_VIEWS = "baozi_phone_views";
+
+const PAY_BIZ_LABELS = {
+  phone: "付费看电话", member: "会员开通", refresh: "信息擦亮",
+  top: "信息置顶", merchant: "商家入驻",
+};
+const PAY_STATUS_LABELS = {
+  pending: "待支付", paid: "已支付", fulfilled: "已履约",
+};
+
+/** 订单列表：支持 status / biz_type / keyword(订单号/openid/post_id) / 时间范围 筛选 + 分页 */
+async function actionPayOrders(event) {
+  try {
+    const page = Math.max(1, parseInt(event.page, 10) || 1);
+    const pageSize = Math.min(100, Math.max(1, parseInt(event.pageSize, 10) || 20));
+    const coll = db.collection(PAY_ORDERS);
+    const conds = [];
+    if (event.status) conds.push({ status: event.status });
+    if (event.biz_type) conds.push({ biz_type: event.biz_type });
+
+    const kw = event.keyword ? String(event.keyword).trim() : "";
+    if (kw) {
+      const reg = db.RegExp({ regexp: escapeRegExp(kw), options: "i" });
+      conds.push(_.or([
+        { out_trade_no: reg },
+        { openid: reg },
+        { post_id: reg },
+        { title: reg },
+      ]));
+    }
+
+    // 时间范围（created_at）
+    const range = {};
+    const from = Number(event.created_from);
+    const to = Number(event.created_to);
+    if (event.created_from && !isNaN(from)) range.created_at = Object.assign(range.created_at || {}, { $gte: from });
+    if (event.created_to && !isNaN(to)) range.created_at = Object.assign(range.created_at || {}, { $lte: to });
+    if (Object.keys(range).length) conds.push(range);
+
+    const where = conds.length ? (conds.length === 1 ? conds[0] : _.and(conds)) : {};
+    const hasWhere = conds.length > 0;
+
+    const total = hasWhere ? (await coll.where(where).count()).total : (await coll.count()).total;
+    const query = hasWhere
+      ? coll.where(where).skip((page - 1) * pageSize).limit(pageSize)
+      : coll.skip((page - 1) * pageSize).limit(pageSize);
+    const res = await query.orderBy("created_at", "desc").get();
+
+    // 关联查询：客户信息（baozi_users） + 帖子详情（baozi_posts），供「查看详情」弹窗展示
+    const orders = res.data || [];
+    const openids = [];
+    const postIds = [];
+    orders.forEach((o) => {
+      if (o.openid && openids.indexOf(o.openid) < 0) openids.push(o.openid);
+      if (o.post_id && postIds.indexOf(o.post_id) < 0) postIds.push(o.post_id);
+    });
+
+    // 客户信息（openid → 用户昵称/手机号/会员状态）
+    const userMap = {};
+    if (openids.length) {
+      for (let i = 0; i < openids.length; i += 20) {
+        const batch = openids.slice(i, i + 20);
+        try {
+          const uRes = await db.collection(USERS)
+            .where({ openid_wxapp: _.in(batch) })
+            .limit(100)
+            .get();
+          (uRes.data || []).forEach((u) => { userMap[u.openid_wxapp] = u; });
+        } catch (e) {
+          // 用户表异常不阻断订单列表
+        }
+      }
+    }
+
+    // 帖子详情（post_id → 完整帖子，供弹窗展示原始信息）
+    const postMap = {};
+    if (postIds.length) {
+      for (let i = 0; i < postIds.length; i += 20) {
+        const batch = postIds.slice(i, i + 20);
+        try {
+          const pRes = await db.collection(COLLECTION)
+            .where({ _id: _.in(batch) })
+            .limit(100)
+            .get();
+          (pRes.data || []).forEach((p) => { postMap[p._id] = p; });
+        } catch (e) {
+          // 帖子已删则留空
+        }
+      }
+    }
+
+    // 金额单位分 → 元 + 关联客户/帖子信息
+    const list = orders.map((o) => {
+      const u = userMap[o.openid] || null;
+      const p = postMap[o.post_id] || null;
+      return Object.assign({}, o, {
+        biz_label: PAY_BIZ_LABELS[o.biz_type] || o.biz_type || "-",
+        status_label: PAY_STATUS_LABELS[o.status] || o.status || "-",
+        amount_yuan: o.amount != null ? (Number(o.amount) / 100) : 0,
+        // 客户信息
+        user: u ? {
+          _id: u._id,
+          openid: u.openid_wxapp || o.openid,
+          username: u.username || u.nickname || "",
+          phone: u.phone || "",
+          phone_masked: u.phone_masked || "",
+          membership: u.membership || "normal",
+          membership_expire_at: u.membership_expire_at || 0,
+          isVip: u.membership === "vip" && Number(u.membership_expire_at) > Date.now(),
+        } : null,
+        // 帖子详情
+        post: p ? {
+          _id: p._id,
+          data_type: p.data_type || "",
+          raw_text: p.raw_text || "",
+          content: p.content || "",
+          role: p.role || "",
+          role_id: p.role_id || 0,
+          salary: p.salary,
+          salary_expect: p.salary_expect,
+          price: p.price,
+          monthly_rent: p.monthly_rent,
+          area_sqm: p.area_sqm,
+          province: p.province || "",
+          city: p.city || "",
+          district: p.district || "",
+          address: p.address || "",
+          phone: p.phone || "",
+          phone_masked: p.phone_masked || "",
+          contact: p.contact || "",
+          username: p.username || "",
+          tags: p.tags || [],
+          published_at: p.published_at || 0,
+          status: p.status || "",
+          approved: p.approved,
+          needs_review: p.needs_review,
+        } : null,
+      });
+    });
+    return ok({ list, total, page, pageSize });
+  } catch (e) {
+    return fail(String(e && e.message ? e.message : e));
+  }
+}
+
+/** 付款记录列表：支持 keyword(openid/post_id) / 时间范围 筛选 + 分页 */
+async function actionPayRecords(event) {
+  try {
+    const page = Math.max(1, parseInt(event.page, 10) || 1);
+    const pageSize = Math.min(100, Math.max(1, parseInt(event.pageSize, 10) || 20));
+    const coll = db.collection(PAY_RECORDS);
+    const conds = [];
+
+    const kw = event.keyword ? String(event.keyword).trim() : "";
+    if (kw) {
+      const reg = db.RegExp({ regexp: escapeRegExp(kw), options: "i" });
+      conds.push(_.or([
+        { openid: reg },
+        { post_id: reg },
+        { post_title: reg },
+        { out_trade_no: reg },
+      ]));
+    }
+
+    const range = {};
+    const from = Number(event.created_from);
+    const to = Number(event.created_to);
+    if (event.created_from && !isNaN(from)) range.created_at = Object.assign(range.created_at || {}, { $gte: from });
+    if (event.created_to && !isNaN(to)) range.created_at = Object.assign(range.created_at || {}, { $lte: to });
+    if (Object.keys(range).length) conds.push(range);
+
+    const where = conds.length ? (conds.length === 1 ? conds[0] : _.and(conds)) : {};
+    const hasWhere = conds.length > 0;
+
+    const total = hasWhere ? (await coll.where(where).count()).total : (await coll.count()).total;
+    const query = hasWhere
+      ? coll.where(where).skip((page - 1) * pageSize).limit(pageSize)
+      : coll.skip((page - 1) * pageSize).limit(pageSize);
+    const res = await query.orderBy("created_at", "desc").get();
+
+    // 关联查询：客户 + 帖子详情（与订单一致，供详情弹窗展示）
+    const records = res.data || [];
+    const openids = [];
+    const postIds = [];
+    records.forEach((r) => {
+      if (r.openid && openids.indexOf(r.openid) < 0) openids.push(r.openid);
+      if (r.post_id && postIds.indexOf(r.post_id) < 0) postIds.push(r.post_id);
+    });
+
+    const userMap = {};
+    if (openids.length) {
+      for (let i = 0; i < openids.length; i += 20) {
+        const batch = openids.slice(i, i + 20);
+        try {
+          const uRes = await db.collection(USERS).where({ openid_wxapp: _.in(batch) }).limit(100).get();
+          (uRes.data || []).forEach((u) => { userMap[u.openid_wxapp] = u; });
+        } catch (e) {}
+      }
+    }
+
+    const postMap = {};
+    if (postIds.length) {
+      for (let i = 0; i < postIds.length; i += 20) {
+        const batch = postIds.slice(i, i + 20);
+        try {
+          const pRes = await db.collection(COLLECTION).where({ _id: _.in(batch) }).limit(100).get();
+          (pRes.data || []).forEach((p) => { postMap[p._id] = p; });
+        } catch (e) {}
+      }
+    }
+
+    const list = records.map((r) => {
+      const u = userMap[r.openid] || null;
+      const p = postMap[r.post_id] || null;
+      return Object.assign({}, r, {
+        amount_yuan: r.total_fee != null ? (Number(r.total_fee) / 100) : 0,
+        type_label: PAY_BIZ_LABELS[r.biz_type] || "",
+        user: u ? {
+          _id: u._id,
+          openid: u.openid_wxapp || r.openid,
+          username: u.username || u.nickname || "",
+          phone: u.phone || "",
+          phone_masked: u.phone_masked || "",
+          membership: u.membership || "normal",
+          isVip: u.membership === "vip" && Number(u.membership_expire_at) > Date.now(),
+        } : null,
+        post: p ? {
+          _id: p._id,
+          data_type: p.data_type || "",
+          raw_text: p.raw_text || "",
+          content: p.content || "",
+          role: p.role || "",
+          salary: p.salary,
+          price: p.price,
+          province: p.province || "",
+          city: p.city || "",
+          district: p.district || "",
+          address: p.address || "",
+          phone: p.phone || "",
+          phone_masked: p.phone_masked || "",
+          contact: p.contact || "",
+          username: p.username || "",
+          tags: p.tags || [],
+          published_at: p.published_at || 0,
+        } : null,
+      });
+    });
+    return ok({ list, total, page, pageSize });
+  } catch (e) {
+    return fail(String(e && e.message ? e.message : e));
+  }
+}
+
+/** 支付统计：订单总数 / 各状态数 / 各业务类型数 / 已履约金额合计（分） */
+async function actionPayStats(event) {
+  const out = {};
+  const orders = db.collection(PAY_ORDERS);
+  const records = db.collection(PAY_RECORDS);
+
+  try { out.orders_total = (await orders.count()).total; } catch (e) { out.orders_total = 0; }
+  try { out.records_total = (await records.count()).total; } catch (e) { out.records_total = 0; }
+
+  // 各状态订单数
+  out.orders_by_status = {};
+  for (const s of ["pending", "paid", "fulfilled"]) {
+    try { out.orders_by_status[s] = (await orders.where({ status: s }).count()).total; }
+    catch (e) { out.orders_by_status[s] = 0; }
+  }
+
+  // 各业务类型订单数
+  out.orders_by_biz = {};
+  for (const b of ["phone", "member", "refresh", "top", "merchant"]) {
+    try { out.orders_by_biz[b] = (await orders.where({ biz_type: b }).count()).total; }
+    catch (e) { out.orders_by_biz[b] = 0; }
+  }
+
+  // 已履约订单金额合计（分）—— 聚合失败则置 0
+  try {
+    const agg = db.command.aggregate;
+    const r = await orders.aggregate()
+      .match({ status: "fulfilled" })
+      .group({ _id: null, total: agg.sum("$amount") })
+      .end();
+    out.fulfilled_amount = (r.list && r.list[0] && r.list[0].total) || 0;
+  } catch (e) {
+    out.fulfilled_amount = 0;
+  }
+
+  // 今日新增订单 / 付款记录
+  const dayStart = new Date();
+  dayStart.setHours(0, 0, 0, 0);
+  try { out.orders_today = (await orders.where({ created_at: _.gte(dayStart.getTime()) }).count()).total; }
+  catch (e) { out.orders_today = 0; }
+  try { out.records_today = (await records.where({ created_at: _.gte(dayStart.getTime()) }).count()).total; }
+  catch (e) { out.records_today = 0; }
+
+  return ok(out);
+}
+
+// ---------- 广告运营位管理（§2.9）----------
+// 集合 advertisements，字段见文档 §2.9：
+//   slot, type(banner/feed/popup), title, image, icon, emoji, sub, bgFrom, bgTo,
+//   link, linkType(page/post/url/none), target, sort, status(online/offline),
+//   start_at, end_at, pages[], created_at
+
+/** 广告字段白名单（写库前清洗） */
+const AD_FIELDS = [
+  "slot", "type", "title", "image", "images", "icon", "emoji", "sub",
+  "bgFrom", "bgTo", "link", "linkType", "target", "sort",
+  "status", "start_at", "end_at", "pages", "page", "position",
+  // 弹窗频控字段（仅 type=popup 生效）
+  "freq", "freq_days", "freq_max",
+  // 热门推荐卡片组字段（模块 4b：layout 区分 headline/mini，theme 区分 vip/group）
+  "layout", "theme",
+  "badge_text", "line1", "strong", "price", "cta_text", "headline_image",
+  "icon_name", "bottom_text",
+];
+const AD_NUMBER_FIELDS = ["sort", "start_at", "end_at", "freq_days", "freq_max", "price"];
+const AD_ARRAY_FIELDS = ["pages", "images"];
+
+function sanitizeAd(input = {}) {
+  const out = {};
+  for (const k of AD_FIELDS) {
+    if (input[k] === undefined || input[k] === null) continue;
+    let v = input[k];
+    if (AD_NUMBER_FIELDS.includes(k)) {
+      if (v === "" || v === null) continue;
+      v = Number(v);
+      if (isNaN(v)) continue;
+    }
+    if (AD_ARRAY_FIELDS.includes(k)) {
+      v = Array.isArray(v) ? v : (v === "" ? [] : String(v).split(/[,，]/).map(s => s.trim()).filter(Boolean));
+    }
+    out[k] = v;
+  }
+  return out;
+}
+
+/** 广告列表：支持 slot/status 筛选 + 分页 */
+async function actionAdList(event) {
+  try {
+    const page = Math.max(1, parseInt(event.page, 10) || 1);
+    const pageSize = Math.min(50, Math.max(1, parseInt(event.pageSize, 10) || 20));
+    const coll = db.collection(ADS);
+    const conds = [];
+    if (event.slot) conds.push({ slot: event.slot });
+    if (event.status) conds.push({ status: event.status });
+    const where = conds.length ? (conds.length === 1 ? conds[0] : _.and(conds)) : {};
+    const hasWhere = conds.length > 0;
+
+    const total = hasWhere ? (await coll.where(where).count()).total : (await coll.count()).total;
+    const query = hasWhere
+      ? coll.where(where).skip((page - 1) * pageSize).limit(pageSize)
+      : coll.skip((page - 1) * pageSize).limit(pageSize);
+    const res = await query.orderBy("sort", "desc").orderBy("created_at", "desc").get();
+    return ok({ list: res.data, total, page, pageSize });
+  } catch (e) {
+    return fail(String(e && e.message ? e.message : e));
+  }
+}
+
+/** 新增广告 */
+async function actionAdCreate(event) {
+  const data = sanitizeAd(event.data || {});
+  if (!data.slot) return fail("缺少广告位 slot");
+  if (!data.type) return fail("缺少广告类型 type");
+  try {
+    const res = await db.collection(ADS).add({
+      data: Object.assign({ created_at: Date.now() }, data),
+    });
+    await writeLog(event, "ad_create", res._id, data.slot || "");
+    return ok({ _id: res._id });
+  } catch (e) {
+    return fail(String(e && e.message ? e.message : e));
+  }
+}
+
+/** 编辑广告 */
+async function actionAdUpdate(event) {
+  if (!event._id) return fail("缺少 _id");
+  const data = sanitizeAd(event.data || {});
+  delete data._id;
+  try {
+    const res = await db.collection(ADS).doc(event._id).update({ data });
+    await writeLog(event, "ad_update", event._id, data.slot || "");
+    return ok({ updated: res.stats && res.stats.updated });
+  } catch (e) {
+    return fail(String(e && e.message ? e.message : e));
+  }
+}
+
+/** 删除广告（物理删除） */
+async function actionAdDelete(event) {
+  if (!event._id) return fail("缺少 _id");
+  try {
+    await db.collection(ADS).doc(event._id).remove();
+    await writeLog(event, "ad_delete", event._id, "");
+    return ok();
+  } catch (e) {
+    return fail(String(e && e.message ? e.message : e));
+  }
+}
+
+/** 上下线（改 status） */
+async function actionAdToggle(event) {
+  if (!event._id) return fail("缺少 _id");
+  const status = event.status === "online" ? "online" : "offline";
+  try {
+    await db.collection(ADS).doc(event._id).update({ data: { status } });
+    await writeLog(event, status === "online" ? "ad_online" : "ad_offline", event._id, "");
+    return ok({ status });
+  } catch (e) {
+    return fail(String(e && e.message ? e.message : e));
+  }
+}
+
+// ==================== 广告位管理（方案 C：ad_slots 数据驱动） ====================
+// 广告位定义字段白名单
+const AD_SLOT_FIELDS = [
+  "slot", "page", "position", "type", "title", "sort", "status",
+];
+const AD_SLOT_NUMBER_FIELDS = ["sort"];
+
+function sanitizeAdSlot(input = {}) {
+  const out = {};
+  for (const k of AD_SLOT_FIELDS) {
+    if (input[k] === undefined || input[k] === null) continue;
+    let v = input[k];
+    if (AD_SLOT_NUMBER_FIELDS.includes(k)) {
+      if (v === "" || v === null) continue;
+      v = Number(v);
+      if (isNaN(v)) continue;
+    }
+    out[k] = v;
+  }
+  return out;
+}
+
+/** 广告位列表：支持 page/status 筛选 */
+async function actionAdSlotList(event) {
+  try {
+    const coll = db.collection(AD_SLOTS);
+    const conds = [];
+    if (event.page) conds.push({ page: event.page });
+    if (event.status) conds.push({ status: event.status });
+    const where = conds.length ? (conds.length === 1 ? conds[0] : _.and(conds)) : {};
+    const hasWhere = conds.length > 0;
+    const res = hasWhere
+      ? await coll.where(where).orderBy("sort", "desc").orderBy("created_at", "desc").limit(200).get()
+      : await coll.orderBy("sort", "desc").orderBy("created_at", "desc").limit(200).get();
+    return ok({ list: res.data });
+  } catch (e) {
+    return fail(String(e && e.message ? e.message : e));
+  }
+}
+
+/** 新增广告位 */
+async function actionAdSlotCreate(event) {
+  const data = sanitizeAdSlot(event.data || {});
+  if (!data.slot) return fail("缺少广告位标识 slot");
+  if (!data.page) return fail("缺少所属页面 page");
+  if (!data.position) return fail("缺少位置 position");
+  try {
+    // 同 slot 已存在则拒绝，避免重复
+    const dup = await db.collection(AD_SLOTS).where({ slot: data.slot }).count();
+    if (dup.total > 0) return fail("广告位标识已存在");
+    const res = await db.collection(AD_SLOTS).add({
+      data: Object.assign({ created_at: Date.now(), status: "online" }, data),
+    });
+    await writeLog(event, "ad_slot_create", res._id, `${data.page}/${data.position}`);
+    return ok({ _id: res._id });
+  } catch (e) {
+    return fail(String(e && e.message ? e.message : e));
+  }
+}
+
+/** 编辑广告位 */
+async function actionAdSlotUpdate(event) {
+  if (!event._id) return fail("缺少 _id");
+  const data = sanitizeAdSlot(event.data || {});
+  delete data._id;
+  delete data.slot; // slot 是唯一标识，不允许改
+  try {
+    await db.collection(AD_SLOTS).doc(event._id).update({ data });
+    await writeLog(event, "ad_slot_update", event._id, "");
+    return ok();
+  } catch (e) {
+    return fail(String(e && e.message ? e.message : e));
+  }
+}
+
+/** 删除广告位（物理删除） */
+async function actionAdSlotDelete(event) {
+  if (!event._id) return fail("缺少 _id");
+  try {
+    await db.collection(AD_SLOTS).doc(event._id).remove();
+    await writeLog(event, "ad_slot_delete", event._id, "");
+    return ok();
+  } catch (e) {
+    return fail(String(e && e.message ? e.message : e));
+  }
+}
+
+/** 广告位上下线 */
+async function actionAdSlotToggle(event) {
+  if (!event._id) return fail("缺少 _id");
+  const status = event.status === "online" ? "online" : "offline";
+  try {
+    await db.collection(AD_SLOTS).doc(event._id).update({ data: { status } });
+    await writeLog(event, status === "online" ? "ad_slot_online" : "ad_slot_offline", event._id, "");
+    return ok({ status });
+  } catch (e) {
+    return fail(String(e && e.message ? e.message : e));
+  }
+}
+
+// ==================== 包友群管理（baozi_groups） ====================
+// C 端口径（groupService）：{ _id, name, city, cover, qr_code, intro, member_count, sort, status, created_at }
+// 管理端补齐：增 / 删 / 改（含封面、群二维码）、启停、排序。
+
+const GROUP_FIELDS = ["name", "city", "cover", "qr_code", "intro", "member_count", "sort", "status"];
+const GROUP_NUMBER_FIELDS = ["member_count", "sort"];
+
+function sanitizeGroup(input = {}) {
+  const out = {};
+  for (const k of GROUP_FIELDS) {
+    if (input[k] === undefined || input[k] === null) continue;
+    let v = input[k];
+    if (GROUP_NUMBER_FIELDS.includes(k)) {
+      if (v === "" || v === null) continue;
+      v = Number(v);
+      if (isNaN(v)) continue;
+    }
+    out[k] = v;
+  }
+  return out;
+}
+
+/** 群列表：支持 keyword（群名/城市）、status 筛选 + 分页 */
+async function actionGroupList(event) {
+  try {
+    const page = Math.max(1, parseInt(event.page, 10) || 1);
+    const pageSize = Math.min(100, Math.max(1, parseInt(event.pageSize, 10) || 20));
+    const coll = db.collection(GROUPS);
+    const conds = [];
+    if (event.status) conds.push({ status: event.status });
+    const kw = event.keyword ? String(event.keyword).trim() : "";
+    if (kw) {
+      const reg = db.RegExp({ regexp: escapeRegExp(kw), options: "i" });
+      conds.push(_.or([{ name: reg }, { city: reg }, { intro: reg }]));
+    }
+    const where = conds.length ? (conds.length === 1 ? conds[0] : _.and(conds)) : {};
+    const hasWhere = conds.length > 0;
+
+    const total = hasWhere ? (await coll.where(where).count()).total : (await coll.count()).total;
+    const query = hasWhere
+      ? coll.where(where).skip((page - 1) * pageSize).limit(pageSize)
+      : coll.skip((page - 1) * pageSize).limit(pageSize);
+    let res;
+    try {
+      res = await query.orderBy("sort", "desc").orderBy("created_at", "desc").get();
+    } catch (e) {
+      res = await query.get();
+    }
+    return ok({ list: res.data || [], total, page, pageSize });
+  } catch (e) {
+    return fail(String(e && e.message ? e.message : e));
+  }
+}
+
+/** 新增群 */
+async function actionGroupCreate(event) {
+  const data = sanitizeGroup(event.data || {});
+  if (!data.name) return fail("缺少群名称");
+  try {
+    const res = await db.collection(GROUPS).add({
+      data: Object.assign({ created_at: Date.now(), updated_at: Date.now(), status: "active" }, data),
+    });
+    await writeLog(event, "group_create", res._id, data.name || "");
+    return ok({ _id: res._id });
+  } catch (e) {
+    return fail(String(e && e.message ? e.message : e));
+  }
+}
+
+/** 编辑群 */
+async function actionGroupUpdate(event) {
+  if (!event._id) return fail("缺少 _id");
+  const data = sanitizeGroup(event.data || {});
+  delete data._id;
+  data.updated_at = Date.now();
+  try {
+    const res = await db.collection(GROUPS).doc(event._id).update({ data });
+    await writeLog(event, "group_update", event._id, data.name || "");
+    return ok({ updated: res.stats && res.stats.updated });
+  } catch (e) {
+    return fail(String(e && e.message ? e.message : e));
+  }
+}
+
+/** 删除群（物理删除） */
+async function actionGroupDelete(event) {
+  if (!event._id) return fail("缺少 _id");
+  try {
+    await db.collection(GROUPS).doc(event._id).remove();
+    await writeLog(event, "group_delete", event._id, "");
+    return ok();
+  } catch (e) {
+    return fail(String(e && e.message ? e.message : e));
+  }
+}
+
+/** 群启停：status=active / disabled */
+async function actionGroupToggle(event) {
+  if (!event._id) return fail("缺少 _id");
+  const status = event.status === "disabled" ? "disabled" : "active";
+  try {
+    await db.collection(GROUPS).doc(event._id).update({ data: { status, updated_at: Date.now() } });
+    await writeLog(event, status === "active" ? "group_enable" : "group_disable", event._id, "");
+    return ok({ status });
+  } catch (e) {
+    return fail(String(e && e.message ? e.message : e));
+  }
+}
+
+// ==================== 包友圈商家管理（baozi_merchants） ====================
+// C 端口径（merchantApply）：{ openid, name, category, address, latitude, longitude, phone,
+//   business_hours, intro, avatar, photos[], wechat_qr, license_img, invite_code, plan,
+//   status(pending/approved/rejected), reject_reason, created_at, updated_at }
+// 管理端补齐：列表 / 详情 / 新建 / 编辑 / 审核(通过|驳回) / 删除。
+
+const MERCHANT_CATEGORIES = [
+  "供应商", "技术培训", "连锁品牌", "面粉辅料", "馅料面点", "饮品/其他", "厨具设备", "早餐培训",
+];
+const MERCHANT_FIELDS = [
+  "name", "category", "address", "latitude", "longitude", "phone", "business_hours",
+  "intro", "avatar", "photos", "wechat_qr", "license_img", "invite_code", "plan",
+  "status", "reject_reason", "sort", "recommend",
+];
+const MERCHANT_NUMBER_FIELDS = ["latitude", "longitude", "sort"];
+const MERCHANT_ARRAY_FIELDS = ["photos"];
+
+function sanitizeMerchant(input = {}) {
+  const out = {};
+  for (const k of MERCHANT_FIELDS) {
+    if (input[k] === undefined || input[k] === null) continue;
+    let v = input[k];
+    if (MERCHANT_ARRAY_FIELDS.includes(k)) {
+      v = Array.isArray(v) ? v : (v === "" ? [] : String(v).split(/[,，]/).map(s => s.trim()).filter(Boolean));
+    } else if (MERCHANT_NUMBER_FIELDS.includes(k)) {
+      if (v === "" || v === null) continue;
+      v = Number(v);
+      if (isNaN(v)) continue;
+    } else if (k === "recommend") {
+      v = v === true || v === "true" || v === 1 || v === "1";
+    }
+    out[k] = v;
+  }
+  return out;
+}
+
+/** 商家列表：支持 keyword / status / category 筛选 + 分页 */
+async function actionMerchantList(event) {
+  try {
+    const page = Math.max(1, parseInt(event.page, 10) || 1);
+    const pageSize = Math.min(100, Math.max(1, parseInt(event.pageSize, 10) || 20));
+    const coll = db.collection(MERCHANTS);
+    const conds = [];
+    if (event.status) conds.push({ status: event.status });
+    if (event.category) conds.push({ category: event.category });
+    const kw = event.keyword ? String(event.keyword).trim() : "";
+    if (kw) {
+      const reg = db.RegExp({ regexp: escapeRegExp(kw), options: "i" });
+      conds.push(_.or([{ name: reg }, { address: reg }, { phone: reg }, { intro: reg }]));
+    }
+    const where = conds.length ? (conds.length === 1 ? conds[0] : _.and(conds)) : {};
+    const hasWhere = conds.length > 0;
+
+    const total = hasWhere ? (await coll.where(where).count()).total : (await coll.count()).total;
+    const query = hasWhere
+      ? coll.where(where).skip((page - 1) * pageSize).limit(pageSize)
+      : coll.skip((page - 1) * pageSize).limit(pageSize);
+    let res;
+    try {
+      res = await query.orderBy("created_at", "desc").get();
+    } catch (e) {
+      res = await query.get();
+    }
+    return ok({ list: res.data || [], total, page, pageSize });
+  } catch (e) {
+    return fail(String(e && e.message ? e.message : e));
+  }
+}
+
+/** 商家详情（含待审/驳回，供后台查看） */
+async function actionMerchantGet(event) {
+  if (!event._id) return fail("缺少 _id");
+  try {
+    const r = await db.collection(MERCHANTS).doc(event._id).get();
+    return ok({ item: r.data });
+  } catch (e) {
+    return fail(String(e && e.message ? e.message : e));
+  }
+}
+
+/** 新建商家（后台代录） */
+async function actionMerchantCreate(event) {
+  const data = sanitizeMerchant(event.data || {});
+  if (!data.name) return fail("缺少店铺名称");
+  if (data.category && MERCHANT_CATEGORIES.indexOf(data.category) < 0) return fail("分类不合法");
+  try {
+    const now = Date.now();
+    const res = await db.collection(MERCHANTS).add({
+      data: Object.assign({ status: "approved", reject_reason: "", created_at: now, updated_at: now }, data),
+    });
+    await writeLog(event, "merchant_create", res._id, data.name || "");
+    return ok({ _id: res._id });
+  } catch (e) {
+    return fail(String(e && e.message ? e.message : e));
+  }
+}
+
+/** 编辑商家 */
+async function actionMerchantUpdate(event) {
+  if (!event._id) return fail("缺少 _id");
+  const data = sanitizeMerchant(event.data || {});
+  delete data._id;
+  if (data.category && MERCHANT_CATEGORIES.indexOf(data.category) < 0) return fail("分类不合法");
+  data.updated_at = Date.now();
+  try {
+    const res = await db.collection(MERCHANTS).doc(event._id).update({ data });
+    await writeLog(event, "merchant_update", event._id, data.name || "");
+    return ok({ updated: res.stats && res.stats.updated });
+  } catch (e) {
+    return fail(String(e && e.message ? e.message : e));
+  }
+}
+
+/** 审核商家：op=approve / reject（reject 可带 reason） */
+async function actionMerchantAudit(event) {
+  if (!event._id) return fail("缺少 _id");
+  const op = event.op === "reject" ? "reject" : "approve";
+  const status = op === "reject" ? "rejected" : "approved";
+  try {
+    await db.collection(MERCHANTS).doc(event._id).update({
+      data: {
+        status,
+        reject_reason: op === "reject" ? String(event.reason || "") : "",
+        reviewed_at: Date.now(),
+        updated_at: Date.now(),
+      },
+    });
+    await writeLog(event, op === "reject" ? "merchant_reject" : "merchant_approve", event._id, event.reason || "");
+    return ok({ status });
+  } catch (e) {
+    return fail(String(e && e.message ? e.message : e));
+  }
+}
+
+/** 删除商家（物理删除） */
+async function actionMerchantDelete(event) {
+  if (!event._id) return fail("缺少 _id");
+  try {
+    await db.collection(MERCHANTS).doc(event._id).remove();
+    await writeLog(event, "merchant_delete", event._id, "");
+    return ok();
+  } catch (e) {
+    return fail(String(e && e.message ? e.message : e));
+  }
+}
+
 // ---------- 入口 ----------
 exports.main = async (event = {}) => {
   const action = event.action || "list";
@@ -797,19 +2136,59 @@ exports.main = async (event = {}) => {
     return actionLogin(event);
   }
 
-  // 所有业务操作（含 list/get/users/member）都要求登录
-  if (!requireAuth(event)) {
-    return fail("未授权：请先登录", "AUTH_FAILED");
+  // 管理员身份校验：免口令（普通用户也需调用以判断自己是否为管理员，决定 AI 入口显隐）
+  // 用服务端 OPENID 比对白名单，用户无法伪造，只返回 true/false 不泄露数据
+  if (action === "check_admin") {
+    return actionCheckAdmin();
+  }
+
+  // ==================== 鉴权：双通道（账密 RBAC / 小程序 openid） ====================
+  // ① 账密通道：后台 Web 调用（带 user/pass）→ 查 admin_accounts → 验哈希 → 查角色权限（RBAC）
+  // ② openid 通道：小程序调用（无账密，但有服务端 OPENID）
+  //    - 命中 ADMIN_OPENIDS 白名单 或 baozi_users.role === 'admin' → 视为管理员，全量放行（A1）
+  //    - 说明：OPENID 由服务端 getWXContext 取，用户无法伪造；后台 Web 经网关调用时 OPENID 为空，不会误放行
+  let ctx = null;
+  try {
+    ctx = await authorize(event);
+  } catch (e) {
+    return fail("鉴权失败：" + String(e && e.message ? e.message : e));
+  }
+
+  if (!ctx) {
+    // 账密未通过 → 尝试 openid 管理员通道（A1：命中即为超管级，放行全部管理 action）
+    const { OPENID } = cloud.getWXContext();
+    const byOpenid = await isAdminOpenid(OPENID || "");
+    if (!byOpenid) {
+      return fail("未授权：请先登录", "AUTH_FAILED");
+    }
+    // 以"小程序管理员"身份放行；角色记为 mp_admin 便于操作日志区分来源
+    event.__role = "mp_admin";
+  } else {
+    if (ctx.forbidden) {
+      return fail("无权限执行该操作：" + (ctx.need || action), "FORBIDDEN");
+    }
+    // 供 writeLog 记录操作人角色
+    event.__role = ctx.role || "";
   }
 
   try {
     switch (action) {
+      case "admin_list": return await actionAdminList(event);
+      case "admin_create": return await actionAdminCreate(event);
+      case "admin_update": return await actionAdminUpdate(event);
+      case "admin_delete": return await actionAdminDelete(event);
+      case "role_list": return await actionRoleList(event);
+      case "role_save": return await actionRoleSave(event);
       case "list": return await actionList(event);
       case "get": return await actionGet(event);
+      case "post_phone": return await actionPostPhone(event);
       case "create": return await actionCreate(event);
       case "update": return await actionUpdate(event);
       case "delete": return await actionDelete(event);
       case "audit": return await actionAudit(event);
+      case "reject": return await actionReject(event);
+      case "offline": return await actionOffline(event);
+      case "online": return await actionOnline(event);
       case "list_tops": return await actionListTops(event);
       case "top": return await actionTop(event);
       case "users": return await actionUsers(event);
@@ -818,6 +2197,33 @@ exports.main = async (event = {}) => {
       case "stats": return await actionStats(event);
       case "user_ban": return await actionUserBan(event);
       case "logs": return await actionLogs(event);
+      case "ad_list": return await actionAdList(event);
+      case "ad_create": return await actionAdCreate(event);
+      case "ad_update": return await actionAdUpdate(event);
+      case "ad_delete": return await actionAdDelete(event);
+      case "ad_toggle": return await actionAdToggle(event);
+      case "ad_slot_list": return await actionAdSlotList(event);
+      case "ad_slot_create": return await actionAdSlotCreate(event);
+      case "ad_slot_update": return await actionAdSlotUpdate(event);
+      case "ad_slot_delete": return await actionAdSlotDelete(event);
+      case "ad_slot_toggle": return await actionAdSlotToggle(event);
+      case "pay_orders": return await actionPayOrders(event);
+      case "pay_records": return await actionPayRecords(event);
+      case "pay_stats": return await actionPayStats(event);
+      case "user_role": return await actionUserRole(event);
+      // 包友群管理
+      case "group_list": return await actionGroupList(event);
+      case "group_create": return await actionGroupCreate(event);
+      case "group_update": return await actionGroupUpdate(event);
+      case "group_delete": return await actionGroupDelete(event);
+      case "group_toggle": return await actionGroupToggle(event);
+      // 包友圈商家管理
+      case "merchant_list": return await actionMerchantList(event);
+      case "merchant_get": return await actionMerchantGet(event);
+      case "merchant_create": return await actionMerchantCreate(event);
+      case "merchant_update": return await actionMerchantUpdate(event);
+      case "merchant_audit": return await actionMerchantAudit(event);
+      case "merchant_delete": return await actionMerchantDelete(event);
       default: return fail("未知操作: " + action, "UNKNOWN_ACTION");
     }
   }

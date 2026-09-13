@@ -1,0 +1,11 @@
+{
+  "navigationBarTitleText": "包友群",
+  "usingComponents": {
+    "t-button": "/miniprogram_npm/tdesign-miniprogram/button/button",
+    "t-icon": "/miniprogram_npm/tdesign-miniprogram/icon/icon",
+    "t-tag": "/miniprogram_npm/tdesign-miniprogram/tag/tag",
+    "t-skeleton": "/miniprogram_npm/tdesign-miniprogram/skeleton/skeleton",
+    "t-popup": "/miniprogram_npm/tdesign-miniprogram/popup/popup",
+    "t-loading": "/miniprogram_npm/tdesign-miniprogram/loading/loading"
+  }
+}

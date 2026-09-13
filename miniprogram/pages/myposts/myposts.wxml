@@ -20,6 +20,16 @@
 
   <!-- 列表 -->
   <view class="list" wx:else>
+    <!-- 顶部：发布信息按钮（点击弹出发布类型选择弹层） -->
+    <view class="publish-bar">
+      <t-button
+        class="publish-bar-btn"
+        theme="primary"
+        size="medium"
+        block
+        bind:tap="goPublish"
+      >点击发布信息</t-button>
+    </view>
     <view class="card" wx:for="{{list}}" wx:key="id">
       <!-- 主体：点进详情 -->
       <view class="card-main" data-id="{{item.id}}" bindtap="onTap">
@@ -31,13 +41,39 @@
         <view class="card-price">{{item.priceText}}</view>
         <view class="card-meta">{{item.meta}}</view>
       </view>
-      <!-- 操作：编辑 / 删除（catchtap 防止冒泡到卡片详情） -->
+      <!-- 状态行：已下架则显示「已下架」标记 -->
+      <view class="card-status" wx:if="{{item.status === 'offline'}}">
+        <t-tag theme="danger" variant="light" size="small">已下架</t-tag>
+      </view>
+      <!-- 操作：刷新/置顶/编辑/下架/删除（catchtap 防止冒泡到卡片详情） -->
       <view class="card-actions">
+        <t-button
+          theme="default" size="small" variant="outline"
+          data-id="{{item.id}}"
+          catch:tap="onRefresh"
+        >刷新</t-button>
+        <t-button
+          theme="default" size="small" variant="outline"
+          data-id="{{item.id}}"
+          catch:tap="onTop"
+        >置顶</t-button>
         <t-button
           theme="default" size="small" variant="outline"
           data-id="{{item.id}}" data-type="{{item.data_type}}"
           catch:tap="onEdit"
         >编辑</t-button>
+        <t-button
+          wx:if="{{item.status === 'offline'}}"
+          theme="success" size="small" variant="outline"
+          data-id="{{item.id}}"
+          catch:tap="onOnline"
+        >上架</t-button>
+        <t-button
+          wx:else
+          theme="warning" size="small" variant="outline"
+          data-id="{{item.id}}"
+          catch:tap="onOffline"
+        >下架</t-button>
         <t-button
           theme="danger" size="small" variant="outline"
           data-id="{{item.id}}"
@@ -58,5 +94,39 @@
     bind:cancel="onDeleteDialogClose"
     bind:close="onDeleteDialogClose"
   />
+
+  <!-- 底部 TabBar（同 demo/mine，不做 VIP 图标判断、不拉未读红点，省资源） -->
+  <t-tab-bar
+    class="myposts-tabbar"
+    value="{{activeBar}}"
+    bindchange="onTabBar"
+    theme="normal"
+    fixed="{{true}}"
+    placeholder="{{true}}"
+    split="{{false}}"
+  >
+    <t-tab-bar-item wx:for="{{tabbar}}" wx:key="id" value="{{item.id}}"
+      icon="{{item.icon}}">{{item.label}}</t-tab-bar-item>
+  </t-tab-bar>
+
+  <!-- 发布类型选择弹层（点 tabbar「发布」触发；样式与 demo 一致） -->
+  <t-popup
+    visible="{{publishSheetVisible}}"
+    placement="bottom"
+    bind:visible-change="onPublishSheetClose"
+  >
+    <view class="pub-sheet">
+      <view class="pub-sheet-title">选择发布类型</view>
+      <t-grid class="pub-grid" column="{{4}}" hover>
+        <t-grid-item
+          wx:for="{{publishTypes}}" wx:key="id"
+          data-item="{{item}}" bind:click="onPickPublishType"
+        >
+          <view class="pub-icon" style="background: {{item.light}};">{{item.emoji}}</view>
+          <view class="pub-name">{{item.name}}</view>
+        </t-grid-item>
+      </t-grid>
+    </view>
+  </t-popup>
 
 </view>

@@ -41,6 +41,11 @@ Component({
     onTabChange(e) {
       const key = e.detail.value;
       const cur = this.properties.current;
+      // 发布：跳转「我的发布」列表页（与首页 demo 点发布一致）
+      if (key === 'publish') {
+        wx.navigateTo({ url: '/pages/myposts/myposts' });
+        return;
+      }
       if (key === cur) return; // 已在当前页
       const urlMap = {
         home: '/pages/demo/demo',
@@ -48,11 +53,6 @@ Component({
         message: '/pages/message/message',
         me: '/pages/mine/mine',
       };
-      // 发布：非首页页无发布弹层，回首页由用户点发布
-      if (key === 'publish') {
-        wx.reLaunch({ url: '/pages/demo/demo' });
-        return;
-      }
       const url = urlMap[key];
       if (url) wx.reLaunch({ url });
     },

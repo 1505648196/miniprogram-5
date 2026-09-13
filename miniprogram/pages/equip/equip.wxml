@@ -15,6 +15,9 @@
     />
   </view>
 
+  <!-- 广告区块：搜索栏下方第一栏（轮播图 + 双卡 + 全局弹窗） -->
+  <ad-block page="equip" />
+
   <!-- 模块 2:筛选条(成色 / 区域 / 价格) · t-sticky 吸顶 -->
   <t-sticky
     offset-top="{{stickyTop}}"
@@ -234,6 +237,6 @@
   />
 
   <!-- 底部导航 -->
-  <comp-tabbar current="home" />
+  <comp-tabbar current="" />
 
 </view>

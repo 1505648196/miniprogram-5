@@ -1,5 +1,5 @@
 <!-- pages/vip/vip.wxml -->
-<!-- 开通会员（模拟支付） -->
+<!-- 开通会员（真实微信支付） -->
 <view class="page">
 
   <!-- VIP 顶部横幅 -->
@@ -45,7 +45,7 @@
     <t-button theme="primary" block="{{true}}" size="large" loading="{{paying}}" bind:tap="onPay">
       {{ isVip ? '续费会员' : '立即开通' }}
     </t-button>
-    <view class="pay-note">当前为模拟支付演示，不产生真实扣款</view>
+    <view class="pay-note">微信支付 · 支付完成后自动开通</view>
   </view>
 
 </view>

@@ -1,0 +1,40 @@
+<!-- pages/news-detail/news-detail.wxml -->
+<!-- 包子行业信息平台 · 快讯详情页 -->
+<view class="page" wx:if="{{n}}">
+  <view class="article">
+    <view class="article-head">
+      <view class="article-title">{{n.title}}</view>
+      <view class="article-meta">
+        <t-tag size="small" variant="light" theme="warning">{{n.category}}</t-tag>
+        <text class="article-time">{{n.timeText}}</text>
+      </view>
+    </view>
+
+    <!-- 封面图 -->
+    <image wx:if="{{n.image}}" class="article-cover" src="{{n.image}}" mode="widthFix" />
+
+    <view class="article-tags" wx:if="{{n.tags.length}}">
+      <t-tag wx:for="{{n.tags}}" wx:key="*this" size="small" variant="light" theme="default">{{item}}</t-tag>
+    </view>
+
+    <view class="article-body" user-select>{{n.content}}</view>
+
+    <!-- 来源 -->
+    <view class="article-source" wx:if="{{n.source_name || n.source_url}}">
+      <text wx:if="{{n.source_name}}" class="article-source-name">来源：{{n.source_name}}</text>
+      <text wx:if="{{n.source_url}}" class="article-source-link" data-url="{{n.source_url}}" catch:tap="onOpenSource">查看原文</text>
+    </view>
+
+    <view class="article-tip">内容由 AI 生成，仅供参考</view>
+  </view>
+</view>
+
+<!-- 加载中 -->
+<view class="state" wx:elif="{{loading}}">
+  <t-loading theme="dots" size="60rpx" text="加载中…" />
+</view>
+
+<!-- 空态/出错 -->
+<view class="state" wx:else>
+  <t-empty icon="info-circle" description="{{loadError || '快讯不存在'}}" />
+</view>

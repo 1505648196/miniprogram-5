@@ -1,0 +1,534 @@
+/* pages/chat/chat.wxss */
+/* 管理员 AI 对话页：自定义消息列表 + 结构化卡片 */
+
+.chat-page {
+  height: 100vh;
+  background: #F6F6F6;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ============ 消息滚动区 ============ */
+.chat-scroll {
+  flex: 1;
+  overflow: hidden;
+  padding: 24rpx 24rpx 8rpx;
+  box-sizing: border-box;
+}
+
+/* ============ 消息行 ============ */
+.msg-list {
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+}
+
+.msg-row--user {
+  display: flex;
+  justify-content: flex-end;
+}
+.msg-row--assistant {
+  display: flex;
+  align-items: flex-start;
+  gap: 16rpx;
+}
+
+/* 用户气泡（右侧，蓝色） */
+.msg-bubble--user {
+  max-width: 76%;
+  background: #0052D9;
+  color: #FFFFFF;
+  padding: 20rpx 24rpx;
+  border-radius: 16rpx 4rpx 16rpx 16rpx;
+  font-size: 28rpx;
+  line-height: 1.6;
+  word-break: break-word;
+  box-shadow: 0 2rpx 8rpx rgba(0, 82, 217, 0.25);
+}
+
+/* 助手头像 */
+.msg-avatar {
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 8rpx;
+}
+/* 深度思考模式下的助手头像：用 system-sum 图标 + 蓝色渐变圆底 */
+.msg-avatar--think {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #0052D9 0%, #3662E3 100%);
+  color: #FFFFFF;
+  box-shadow: 0 4rpx 12rpx rgba(0, 82, 217, 0.3);
+}
+
+/* 助手主区 */
+.msg-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+.msg-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 12rpx;
+}
+.msg-name {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #666666;
+}
+.msg-time {
+  font-size: 20rpx;
+  color: #999999;
+}
+
+/* ============ 消息卡片（结构化内容容器） ============ */
+.msg-card {
+  background: #FFFFFF;
+  border: 1rpx solid #EEEEEE;
+  border-radius: 4rpx 20rpx 20rpx 20rpx;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.05);
+  padding: 24rpx;
+  overflow: hidden;
+}
+.msg-card--loading {
+  display: flex;
+  justify-content: center;
+  padding: 32rpx;
+}
+/* 深度思考：思考过程卡片（内边距留白，chat-thinking 自带背景块） */
+.msg-card--thinking {
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+/* 思考中：纯文字 + dots 加载，避免和深度思考按钮图标撞脸 */
+.thinking-pending {
+  display: flex;
+  align-items: center;
+  background: #FFFFFF;
+  border-radius: 4rpx 20rpx 20rpx 20rpx;
+  padding: 20rpx 24rpx;
+  font-size: 26rpx;
+  color: #666666;
+}
+
+/* 卡片主标题 */
+.card-title {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #1A1A1A;
+  padding-bottom: 20rpx;
+  border-bottom: 1rpx solid #F0F0F0;
+  margin-bottom: 20rpx;
+}
+
+/* KPI 数字卡（网格） */
+.kpi-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+  margin-bottom: 8rpx;
+}
+.kpi-item {
+  flex: 1 1 28%;
+  min-width: 140rpx;
+  background: #FAFAFA;
+  border-radius: 16rpx;
+  padding: 20rpx 16rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4rpx;
+}
+.kpi-value {
+  font-size: 40rpx;
+  font-weight: 800;
+  line-height: 1.2;
+}
+.kpi-unit {
+  font-size: 20rpx;
+  color: #999999;
+}
+.kpi-label {
+  font-size: 22rpx;
+  color: #666666;
+  margin-top: 4rpx;
+}
+
+/* 小节标题 */
+.card-section {
+  font-size: 26rpx;
+  font-weight: 700;
+  color: #1A1A1A;
+  margin: 20rpx 0 12rpx;
+}
+
+/* 列表 */
+.card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+.card-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  background: #FAFAFA;
+  border-radius: 12rpx;
+  padding: 16rpx 20rpx;
+}
+.card-list-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+.card-list-text {
+  font-size: 26rpx;
+  color: #1A1A1A;
+  line-height: 1.4;
+  word-break: break-all;
+}
+.card-list-sub {
+  font-size: 22rpx;
+  color: #999999;
+}
+
+/* 列表右侧（tag + 审核按钮） */
+.card-list-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12rpx;
+  flex-shrink: 0;
+}
+
+/* tag + 复制按钮 同行 */
+.tag-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+.copy-btn {
+  font-size: 22rpx;
+  line-height: 1;
+  color: #666666;
+  background: #F5F5F5;
+  padding: 10rpx 20rpx;
+  border-radius: 999rpx;
+  white-space: nowrap;
+}
+
+/* 审核按钮组 */
+.audit-btns {
+  display: flex;
+  gap: 12rpx;
+}
+.audit-btn {
+  font-size: 22rpx;
+  line-height: 1;
+  padding: 10rpx 24rpx;
+  border-radius: 999rpx;
+  white-space: nowrap;
+}
+.audit-btn--pass {
+  color: #FFFFFF;
+  background: #00A870;
+}
+.audit-btn--edit {
+  color: #FFFFFF;
+  background: #0052D9;
+}
+.audit-btn--delete {
+  color: #FFFFFF;
+  background: #E34D59;
+}
+.audit-btn--offline {
+  color: #FFFFFF;
+  background: #FA8C16;
+}
+.audit-btn--top {
+  color: #FFFFFF;
+  background: #9254DE;
+}
+.audit-btn--untop {
+  color: #9254DE;
+  background: #F3EEFF;
+}
+
+/* 分页器 */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24rpx;
+  padding: 20rpx 0 4rpx;
+}
+.pager-btn {
+  font-size: 24rpx;
+  color: #FF7A45;
+  background: #FFF1E8;
+  padding: 10rpx 24rpx;
+  border-radius: 999rpx;
+  line-height: 1;
+}
+.pager-btn.is-disabled {
+  color: #BBBBBB;
+  background: #F5F5F5;
+  pointer-events: none;
+}
+.pager-info {
+  font-size: 24rpx;
+  color: #999999;
+}
+
+/* 纯文本 */
+.card-text {
+  font-size: 28rpx;
+  color: #333333;
+  line-height: 1.7;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+/* 空态 */
+.card-empty {
+  display: flex;
+  justify-content: center;
+  padding: 20rpx 0;
+}
+
+/* ============ 底部输入区 ============ */
+.chat-footer {
+  flex-shrink: 0;
+  background: #FFFFFF;
+  border-top: 1rpx solid #F0F0F0;
+}
+/* 压缩 t-chat-sender 整体 margin + textarea 容器 min-height，底部不留空 */
+.chat-footer .t-chat-sender {
+  margin: 16rpx 16rpx 8rpx 16rpx !important;
+  padding: 12rpx 0 !important;
+}
+.chat-footer .t-chat-sender__textarea {
+  min-height: 0 !important;
+  padding-bottom: 4rpx !important;
+}
+.chat-footer .t-chat-sender__textarea--control {
+  min-height: 0 !important;
+  padding-bottom: 0 !important;
+}
+.chat-tip {
+  padding: 4rpx 24rpx calc(4rpx + env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6rpx;
+  font-size: 20rpx;
+  color: #BBBBBB;
+}
+
+/* 深度思考开启时的提示高亮 */
+.chat-tip--active {
+  color: #0052D9;
+  font-weight: 600;
+}
+
+/* footer-prefix 统一容器：内部 flex 排列多个按钮，避免多 slot 兄弟节点渲染问题 */
+.footer-prefix-bar {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+/* 深度思考开关（仅图标） */
+.deep-think-block {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 60rpx;
+  height: 60rpx;
+  margin-right: 16rpx;
+  border-radius: 50%;
+  border: 2rpx solid var(--td-component-border, #e7e7e7);
+  color: var(--td-text-color-primary, #333333);
+  background: transparent;
+  flex-shrink: 0;
+}
+.deep-think-block.active {
+  border-color: var(--td-brand-color-light-active, #e0e7ff);
+  color: var(--td-brand-color, #0052d9);
+  background-color: var(--td-brand-color-light, #f2f3ff);
+}
+
+/* 上下文开关（圆形图标按钮，仅深度思考开启时显示） */
+.context-btn {
+  width: 60rpx;
+  height: 60rpx;
+  margin-right: 16rpx;
+  border-radius: 50%;
+  border: 2rpx solid var(--td-component-border, #e7e7e7);
+  color: var(--td-text-color-primary, #333333);
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.context-btn.active {
+  border-color: var(--td-brand-color, #0052d9);
+  color: var(--td-brand-color, #0052d9);
+  background-color: var(--td-brand-color-light, #f2f3ff);
+}
+
+/* 语音输入：按住说话按钮（speech 插槽里 t-chat-record 的 speechInput 渲染） */
+.speech-input {
+  width: 100%;
+  height: 72rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28rpx;
+  color: #333333;
+  background: #FFFFFF;
+  border-radius: 36rpx;
+  letter-spacing: 4rpx;
+  border: 2rpx solid var(--td-component-border, #e7e7e7);
+}
+.speech-input.speech-no-auth {
+  color: #999999;
+}
+
+/* 清除按钮（行内小按钮，不占额外空间） */
+.clear-btn {
+  margin-left: 12rpx;
+  font-size: 20rpx;
+  color: #999999;
+  padding: 2rpx 16rpx;
+  border: 1rpx solid #E0E0E0;
+  border-radius: 999rpx;
+  line-height: 1.4;
+}
+
+/* ============ 空态欢迎区 ============ */
+.chat-welcome {
+  padding: 80rpx 40rpx 40rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.welcome-avatar {
+  width: 140rpx;
+  height: 140rpx;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #FF7A45 0%, #FF9E6B 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 12rpx 32rpx rgba(255, 122, 69, 0.35);
+}
+.welcome-title {
+  margin-top: 28rpx;
+  font-size: 44rpx;
+  font-weight: 800;
+  color: #1A1A1A;
+}
+.welcome-sub {
+  margin-top: 12rpx;
+  font-size: 26rpx;
+  color: #999999;
+  text-align: center;
+  line-height: 1.6;
+}
+.welcome-questions {
+  width: 100%;
+  margin-top: 40rpx;
+}
+.welcome-questions .t-cell-group {
+  border-radius: 20rpx;
+  overflow: hidden;
+}
+.welcome-questions .t-cell {
+  --td-cell-left-icon-color: #FF7A45;
+  --td-cell-title-font-size: 28rpx;
+}
+.welcome-caps {
+  margin-top: 32rpx;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 16rpx;
+}
+
+/* ============ 深度思考模式 · 深邃紫蓝主题（点击「深度思考」整页变色） ============ */
+/* 主色 #7C3AED / 渐变 #5B21B6 → #2563EB，营造「AI 高级感」视觉 */
+.chat-page--deep {
+  background: linear-gradient(180deg, #F4F0FF 0%, #F6F6F6 100%);
+}
+
+/* 顶部问候区头像：橙色 → 紫蓝渐变 */
+.chat-page--deep .welcome-avatar {
+  background: linear-gradient(135deg, #5B21B6 0%, #2563EB 100%);
+  box-shadow: 0 12rpx 32rpx rgba(91, 33, 182, 0.35);
+}
+/* 问候区示例问题左侧图标：橙色 → 紫 */
+.chat-page--deep .welcome-questions .t-cell {
+  --td-cell-left-icon-color: #7C3AED;
+}
+/* 能力标签：warning 橙色 → 紫色系 */
+.chat-page--deep .welcome-caps .t-tag {
+  --td-tag-warning-color: #7C3AED;
+  --td-tag-warning-bg: #F3EEFF;
+}
+
+/* 聊天区深度思考头像：蓝 → 紫蓝渐变 */
+.chat-page--deep .msg-avatar--think {
+  background: linear-gradient(135deg, #5B21B6 0%, #2563EB 100%);
+  box-shadow: 0 4rpx 12rpx rgba(91, 33, 182, 0.35);
+}
+/* 用户气泡：蓝 → 紫蓝 */
+.chat-page--deep .msg-bubble--user {
+  background: linear-gradient(135deg, #5B21B6 0%, #2563EB 100%);
+  box-shadow: 0 2rpx 8rpx rgba(91, 33, 182, 0.3);
+}
+
+/* 分页器：橙色 → 紫 */
+.chat-page--deep .pager-btn {
+  color: #7C3AED;
+  background: #F3EEFF;
+}
+
+/* 底部提示高亮：蓝 → 紫 */
+.chat-page--deep .chat-tip--active {
+  color: #7C3AED;
+}
+
+/* 深度思考/上下文 按钮激活态：TDesign 蓝 → 紫蓝 */
+.chat-page--deep .deep-think-block.active {
+  border-color: #7C3AED;
+  color: #7C3AED;
+  background-color: #F3EEFF;
+}
+.chat-page--deep .context-btn.active {
+  border-color: #7C3AED;
+  color: #7C3AED;
+  background-color: #F3EEFF;
+}
+
+/* 审核按钮：编辑(蓝)→紫蓝、置顶(紫)保持、下架(橙)保持（仅编辑按钮改色，其余语义色不变） */
+.chat-page--deep .audit-btn--edit {
+  background: linear-gradient(135deg, #5B21B6 0%, #2563EB 100%);
+}

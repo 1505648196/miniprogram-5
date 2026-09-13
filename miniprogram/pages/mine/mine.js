@@ -45,10 +45,10 @@ Page({
     tradeBadge: '今日曝 904',
     // 订单 4 项
     orderList: [
-      { key: 'sell',     label: '我发布的', count: 12 },
+      { key: 'sell',     label: '我发布的', count: 0 }, // onShow 会覆盖为真实发布数
       { key: 'space',    label: '我的认证', count: 0  },
-      { key: 'sold',     label: '付款记录', count: 115 },
-      { key: 'service',  label: '客服',     count: 0 },
+      { key: 'sold',     label: '付款记录', count: 0 }, // onShow 会覆盖为真实付款记录数
+      { key: 'service',  label: '客服',     count: '人工客服' },
     ],
     // 工具宫格（4 列）
     toolGrid: [
@@ -146,8 +146,12 @@ Page({
       postsCount: posts,
       historyCount: history,
       favCount: favs,
-      // 付款记录条数用真实值（付费查看电话的订单数），覆盖占位数字
-      orderList: this.data.orderList.map((o) => (o.key === 'sold' ? Object.assign({}, o, { count: pays }) : o)),
+      // 复用已查到的 posts/pays，不额外发请求：覆盖「我发布的」「付款记录」两个占位数字
+      orderList: this.data.orderList.map((o) => {
+        if (o.key === 'sell') return Object.assign({}, o, { count: posts });
+        if (o.key === 'sold') return Object.assign({}, o, { count: pays });
+        return o;
+      }),
       loading: false,
     });
   },
@@ -230,7 +234,21 @@ Page({
     if (key === 'sell') { this.goMyPosts(); return; }
     // 付款记录：查看历史付费(查看电话)订单，可点进对应信息详情
     if (key === 'sold') { wx.navigateTo({ url: '/pages/payrecords/payrecords' }); return; }
+    // 客服：弹出「联系一哥」并支持直接拨打
+    if (key === 'service') { this.contactService(); return; }
     wx.showToast({ title: '该功能待接入', icon: 'none' });
+  },
+
+  // 客服：弹出联系电话，可一键拨打
+  contactService() {
+    wx.showActionSheet({
+      itemList: ['拨打 15026893448'],
+      success: (res) => {
+        if (res.tapIndex === 0) {
+          wx.makePhoneCall({ phoneNumber: '15026893448' }).catch(() => {});
+        }
+      },
+    });
   },
 
   // 付款记录数量（付费查看电话的订单条数）
@@ -270,7 +288,8 @@ Page({
 
   onHeaderRightTap(e) {
     const { what } = e.currentTarget.dataset;
-    if (what === 'help') { wx.showToast({ title: '帮助与客服待接入', icon: 'none' }); return; }
+    // 帮助与客服：复用「客服」的弹出（联系一哥）
+    if (what === 'help') { this.contactService(); return; }
     // 设置：进个人资料页，可修改头像 / 昵称 / 绑定手机号
     if (what === 'settings') { wx.navigateTo({ url: '/pages/settings/settings' }); return; }
   },
@@ -279,8 +298,8 @@ Page({
   onTabBar(e) {
     const key = e.detail.value;
     if (key === 'me') return; // 已在当前页
-    // 发布：在本页弹出发布类型选择（同 demo）
-    if (key === 'publish') { this.openPublishSheet(); return; }
+    // 发布：跳转「我的发布」列表页（与首页 demo 点发布一致）
+    if (key === 'publish') { wx.navigateTo({ url: '/pages/myposts/myposts' }); return; }
     // 附近：独立附近页
     if (key === 'nearby') {
       wx.reLaunch({ url: '/pages/nearby/nearby' });

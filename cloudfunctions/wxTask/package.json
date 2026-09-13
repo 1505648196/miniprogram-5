@@ -1,0 +1,10 @@
+{
+  "name": "wxTask",
+  "version": "1.0.0",
+  "description": "微信朋友圈转发任务中心：create/pull/report/list/retry",
+  "main": "index.js",
+  "dependencies": {
+    "@cloudbase/node-sdk": "^2.9.0",
+    "wx-server-sdk": "~2.6.3"
+  }
+}

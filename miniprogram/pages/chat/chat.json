@@ -1,0 +1,15 @@
+{
+  "navigationBarTitleText": "管理助手",
+  "usingComponents": {
+    "t-chat-sender": "/miniprogram_npm/tdesign-miniprogram/chat-sender/chat-sender",
+    "t-tag": "/miniprogram_npm/tdesign-miniprogram/tag/tag",
+    "t-icon": "/miniprogram_npm/tdesign-miniprogram/icon/icon",
+    "t-cell": "/miniprogram_npm/tdesign-miniprogram/cell/cell",
+    "t-cell-group": "/miniprogram_npm/tdesign-miniprogram/cell-group/cell-group",
+    "t-loading": "/miniprogram_npm/tdesign-miniprogram/loading/loading",
+    "t-empty": "/miniprogram_npm/tdesign-miniprogram/empty/empty",
+    "t-chat-loading": "/miniprogram_npm/tdesign-miniprogram/chat-loading/chat-loading",
+    "t-chat-thinking": "/miniprogram_npm/tdesign-miniprogram/chat-thinking/chat-thinking",
+    "t-chat-record": "/miniprogram_npm/tdesign-miniprogram/chat-record/chat-record"
+  }
+}
