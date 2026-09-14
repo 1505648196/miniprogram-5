@@ -17,25 +17,29 @@ const privacy = require('../../utils/privacy.js');
 //   roleId —— 稳定的"角色 ID"数字映射（1-14），入库时写进帖子 role_id 字段，
 //             筛选时用 role_id 精确匹配数据库（比中文名稳定，改名不失效）
 //   name   —— 师傅类型中文名（展示用，同时写进帖子 role 字段）
+//   icon   —— TDesign 内置图标名（替代原 emoji：各机型渲染一致、可着色、与全站风格统一）
+//   bg     —— 图标容器浅色底；iconColor —— 图标主色（比 bg 深一档，保证对比度）
 //   kw     —— 兜底关键词：命中 role 或 raw_text 任一关键词即算该品类；空数组 = 不筛选
+// 图标选型原则：面点品类用餐饮类图标（包子/面条/饼/油炸…），工种角色用人物/工具类图标，
+//             保证 14 格并排时能一眼区分（曾用 emoji 时同质化严重）。
 // 历史脏数据兼容：售卖→售卖员(roleId 4)、二把刀→二把手(roleId 12)，迁移时归并到正确 role_id
 // TODO: 后续改为从数据库读取品类表，届时只需替换 SUB_CATS 的数据来源
 const SUB_CATS = [
-  { id: 'master',     roleId: 1,  name: '大师傅',       emoji: '👨‍🍳', bg: '#FFF1E8', kw: ['大师傅'] },
-  { id: 'relief',     roleId: 2,  name: '短期顶班',     emoji: '⏱️',   bg: '#FFF7E6', kw: ['顶班', '短期'] },
-  { id: 'couple',     roleId: 3,  name: '夫妻工',       emoji: '👫',   bg: '#FFE9E9', kw: ['夫妻工', '夫妻'] },
-  { id: 'seller',     roleId: 4,  name: '售卖员',       emoji: '🛎️',   bg: '#E6FFFB', kw: ['售卖', '收银', '服务员'] },
-  { id: 'apprentice', roleId: 5,  name: '学徒工',       emoji: '🙋',   bg: '#F9F0FF', kw: ['学徒'] },
-  { id: 'xiaolong',   roleId: 6,  name: '小笼包师傅',   emoji: '🥟',   bg: '#E8F6FF', kw: ['小笼包', '灌汤包'] },
-  { id: 'bing',       roleId: 7,  name: '饼类师傅',     emoji: '🥞',   bg: '#F6FFED', kw: ['饼类', '酱香饼', '千层饼'] },
-  { id: 'zha',        roleId: 8,  name: '油炸类师傅',   emoji: '🍤',   bg: '#FFFBE6', kw: ['油炸', '麻球', '油条'] },
-  { id: 'zhong',      roleId: 9,  name: '中工',         emoji: '🔪',   bg: '#F0F5FF', kw: ['中工', '擀皮'] },
-  { id: 'shengjian',  roleId: 10, name: '生煎类师傅',   emoji: '🥠',   bg: '#FAFAFA', kw: ['生煎'] },
+  { id: 'master',     roleId: 1,  name: '大师傅',       icon: 'bread',        iconColor: '#D4621A', bg: '#FFF1E8', kw: ['大师傅'] },
+  { id: 'relief',     roleId: 2,  name: '短期顶班',     icon: 'calendar-event', iconColor: '#E8A33D', bg: '#FFF7E6', kw: ['顶班', '短期'] },
+  { id: 'couple',     roleId: 3,  name: '夫妻工',       icon: 'usergroup',    iconColor: '#D4527A', bg: '#FFE9E9', kw: ['夫妻工', '夫妻'] },
+  { id: 'seller',     roleId: 4,  name: '售卖员',       icon: 'user-business', iconColor: '#1FA89A', bg: '#E6FFFB', kw: ['售卖', '收银', '服务员'] },
+  { id: 'apprentice', roleId: 5,  name: '学徒工',       icon: 'user-add',     iconColor: '#7B4FD1', bg: '#F9F0FF', kw: ['学徒'] },
+  { id: 'xiaolong',   roleId: 6,  name: '小笼包师傅',   icon: 'rice-ball',    iconColor: '#2B7FE0', bg: '#E8F6FF', kw: ['小笼包', '灌汤包'] },
+  { id: 'bing',       roleId: 7,  name: '饼类师傅',     icon: 'cake',         iconColor: '#4CA32E', bg: '#F6FFED', kw: ['饼类', '酱香饼', '千层饼'] },
+  { id: 'zha',        roleId: 8,  name: '油炸类师傅',   icon: 'meat-pepper',  iconColor: '#D99A16', bg: '#FFFBE6', kw: ['油炸', '麻球', '油条'] },
+  { id: 'zhong',      roleId: 9,  name: '中工',         icon: 'cut',          iconColor: '#4866D4', bg: '#F0F5FF', kw: ['中工', '擀皮'] },
+  { id: 'shengjian',  roleId: 10, name: '生煎类师傅',   icon: 'saving-pot',   iconColor: '#5A6570', bg: '#F5F7FA', kw: ['生煎'] },
   // —— 以下为数据库实际存在但前端原缺的类型，金刚位"展开全部"后可见 ——
-  { id: 'master_all', roleId: 11, name: '全能面点大师', emoji: '🌟',   bg: '#FFF1E8', kw: ['全能面点', '全能'] },
-  { id: 'erba',       roleId: 12, name: '二把手',       emoji: '🪜',   bg: '#FFF7E6', kw: ['二把手', '二把刀'] },
-  { id: 'factory',    roleId: 13, name: '工厂',         emoji: '🏭',   bg: '#E6FFFB', kw: ['工厂'] },
-  { id: 'other',      roleId: 14, name: '其他类型',     emoji: '📦',   bg: '#FAFAFA', kw: [] },
+  { id: 'master_all', roleId: 11, name: '全能面点大师', icon: 'star',         iconColor: '#D4881A', bg: '#FFF1E8', kw: ['全能面点', '全能'] },
+  { id: 'erba',       roleId: 12, name: '二把手',       icon: 'tools',        iconColor: '#D48A33', bg: '#FFF7E6', kw: ['二把手', '二把刀'] },
+  { id: 'factory',    roleId: 13, name: '工厂',         icon: 'building-2',   iconColor: '#1FA89A', bg: '#E6FFFB', kw: ['工厂'] },
+  { id: 'other',      roleId: 14, name: '其他类型',     icon: 'layers',       iconColor: '#7A7A7A', bg: '#FAFAFA', kw: [] },
 ];
 
 // 金刚位默认露出的数量（column=5，前 9 个 + 第 10 格"更多"按钮 = 共 10 格 = 两行）
@@ -353,7 +357,6 @@ Page({
     const typeName = isJobseek ? '求职' : '招工';
     const color = isJobseek ? '#9254DE' : '#597EF7';
     const light = isJobseek ? '#F9F0FF' : '#F0F5FF';
-    const emoji = isJobseek ? '🙋' : '👨';
 
     // 标题：展示用脱敏后的原文(过长截断)；无原文时用"地区+角色"兜底，语义区分招/求职
     const roleName = p.role || (isJobseek ? '师傅' : '招师傅');
@@ -412,7 +415,6 @@ Page({
       // 品类筛选检索串
       haystack: `${p.role || ''} ${raw}`,
       // 卡片视觉
-      emoji,
       image: p.image || '',   // 有图才渲染图片区
       color,
       light,
@@ -662,8 +664,17 @@ Page({
     this.renderList();
   },
 
+  // 发布：按当前勾选的信息类别分流到对应发布页
+  //   勾了「求职」→ 通用发布页（type=jobseek）；
+  //   勾了「招聘」或全不勾（默认混排）→ 招工专用发布页（publish_recruit，含置顶推广）。
   onPublish() {
-    wx.showToast({ title: '发布招工表单待接入', icon: 'none' });
+    const sel = Array.isArray(this.data.selectedTypes) ? this.data.selectedTypes : [];
+    const onlyJobseek = sel.length > 0 && sel.every((t) => t === 'jobseek');
+    if (onlyJobseek) {
+      wx.navigateTo({ url: '/pages/publish/publish?type=jobseek' });
+      return;
+    }
+    wx.navigateTo({ url: '/pages/publish_recruit/publish_recruit' });
   },
 
   // 点击帖子卡片 → 进入详情页。

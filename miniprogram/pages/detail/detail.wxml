@@ -218,7 +218,11 @@
     </view>
     <!-- 非本人：收藏 + 查看联系方式 -->
     <block wx:else>
-      <view class="contact-hint">温馨提示：联系时请核实对方身份</view>
+      <view class="contact-hint">
+        <text>温馨提示：联系时请核实对方身份</text>
+        <!-- 举报入口：进入举报页（?type=report 带帖子 id/类型） -->
+        <text class="report-link" bindtap="onReport">举报</text>
+      </view>
       <view class="footer-actions">
         <t-button
           class="fav-btn {{isFav ? 'on' : ''}}"

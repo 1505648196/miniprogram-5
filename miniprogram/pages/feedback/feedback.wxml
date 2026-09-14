@@ -1,0 +1,77 @@
+<!-- pages/feedback/feedback.wxml -->
+<!-- 举报 / 意见反馈（TDesign） -->
+<view class="page">
+
+  <!-- 举报：顶部提示条（说明当前正在举报哪条信息） -->
+  <view wx:if="{{isReport}}" class="tip-bar">
+    <t-icon name="info-circle" size="32rpx" color="#FA8C16" />
+    <text class="tip-text">请如实填写举报理由，我们会尽快核实处理</text>
+  </view>
+
+  <!-- 理由 / 分类（单选标签） -->
+  <t-cell-group theme="card" title="{{isReport ? '举报理由' : '反馈分类'}}">
+    <view class="reason-wrap">
+      <view
+        wx:for="{{reasons}}" wx:key="*this"
+        class="reason-item {{reason === item ? 'is-on' : ''}}"
+        data-value="{{item}}"
+        bindtap="onReasonTap"
+      >{{item}}</view>
+    </view>
+  </t-cell-group>
+
+  <!-- 补充说明 -->
+  <t-cell-group theme="card" title="{{isReport ? '补充说明' : '详细描述'}}">
+    <t-textarea
+      class="fb-textarea"
+      value="{{content}}"
+      placeholder="{{isReport ? '可补充具体情况、发生时间等（选填）' : '请描述你遇到的问题或建议'}}"
+      maxlength="{{maxContent}}"
+      indicator
+      autosize
+      bind:change="onContentInput"
+    />
+  </t-cell-group>
+
+  <!-- 截图（选填，最多 3 张） -->
+  <t-cell-group theme="card" title="上传截图（选填，最多3张）">
+    <view class="upload-wrap">
+      <t-upload
+        media-type="{{['image']}}"
+        files="{{imageFiles}}"
+        max="{{maxImages}}"
+        grid-config="{{uploadGrid}}"
+        bind:add="onUploadChange"
+        bind:remove="onUploadRemove"
+      />
+    </view>
+  </t-cell-group>
+
+  <!-- 联系方式（选填） -->
+  <t-cell-group theme="card" title="联系方式（选填）">
+    <t-cell title="手机/微信" description="便于我们就此问题与你联系">
+      <t-input
+        slot="note"
+        class="fb-input"
+        value="{{contact}}"
+        placeholder="选填"
+        borderless
+        bind:change="onContactInput"
+      />
+    </t-cell>
+  </t-cell-group>
+
+  <!-- 提交 -->
+  <view class="submit-wrap">
+    <t-button
+      class="submit-btn"
+      theme="primary"
+      size="large"
+      block
+      loading="{{submitting}}"
+      bind:tap="onSubmit"
+    >{{submitting ? '提交中…' : '提交'}}</t-button>
+    <view class="submit-hint">我们会在 1-3 个工作日内核实处理</view>
+  </view>
+
+</view>

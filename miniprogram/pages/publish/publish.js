@@ -5,6 +5,9 @@
 // 提交统一走 publishPost 云函数（云端按 data_type 分字段入库）
 
 const regionData = require('../../utils/regionData.js');
+const { preRequestAuditSubscribe } = require('../../utils/subscribe.js');
+// 置顶套餐与支付链路走公共模块（三页共用，避免价格/逻辑三处维护）
+const { TOP_OPTIONS, getTopIntro, payForTop } = require('../../utils/topPromotion.js');
 
 // 店铺类型（转让/求店共用，role_id 1-5；与 dicts category='shop_type' 一致）
 const SHOP_TYPES = [
@@ -165,6 +168,13 @@ Page({
     isEdit: false,
     editId: '',
     isAdmin: false, // 管理员模式（从管理员对话进入，绕过归属校验，走 adminAuth）
+
+    // ---------- 置顶推广（付费增值，套餐与支付逻辑见 utils/topPromotion.js） ----------
+    // topDays：0=暂不开通（默认，不默认勾选付费项，避免诱导付费）
+    topDays: 0,
+    topOptions: TOP_OPTIONS,
+    topIntro: '',   // 说明文案（onLoad 按当前 data_type 取，各业务措辞不同）
+    topPriceText: '',
   },
 
   onLoad(options) {
@@ -191,6 +201,8 @@ Page({
       isEdit: !!editId,
       editId,
       isAdmin,
+      // 置顶说明文案随当前发布分类变化（转让/求店/设备/求职 各自的措辞不同）
+      topIntro: getTopIntro(cfg.dataType),
     });
     if (cfg.navTitle) {
       wx.setNavigationBarTitle({ title: editId ? (isAdmin ? `编辑${cfg.mainTag}(管理员)` : `编辑${cfg.mainTag}`) : cfg.navTitle });
@@ -202,8 +214,9 @@ Page({
   // 编辑态预填：管理员走 adminAuth.get，普通用户走 managePost.get
   loadForEdit(id, cfg) {
     wx.showLoading({ title: '加载中…', mask: true });
+    // 管理员走 adminAuth.get（鉴权走 openid 通道，不传账密，避免小程序包泄露口令）
     const call = this.data.isAdmin
-      ? { name: 'adminAuth', data: { action: 'get', _id: id, user: 'admin', pass: 'admin' } }
+      ? { name: 'adminAuth', data: { action: 'get', _id: id } }
       : { name: 'managePost', data: { action: 'get', _id: id } };
     wx.cloud
       .callFunction(Object.assign({ config: { timeout: 10000 } }, call))
@@ -432,6 +445,11 @@ Page({
       wx.showToast({ title: '请选择区域(城市)', icon: 'none' });
       return;
     }
+    // 必填：详细地址（须点击「获取定位」地图选点，同时得到经纬度）
+    if (!String(form.address || '').trim()) {
+      wx.showToast({ title: '请点击「获取定位」选择详细地址', icon: 'none' });
+      return;
+    }
     const phone = String(form.phone || '').trim();
     if (!/^1\d{10}$/.test(phone)) {
       wx.showToast({ title: '请输入 11 位手机号', icon: 'none' });
@@ -556,7 +574,28 @@ Page({
     }
   },
 
+  // ---------- 置顶推广（与 publish_recruit 同一套交互） ----------
+  // 选择置顶套餐：再点已选项 = 取消（回到"暂不开通"）
+  onTopTap(e) {
+    const days = Number(e.currentTarget.dataset.days) || 0;
+    const next = this.data.topDays === days ? 0 : days;
+    const opt = this.data.topOptions.find((o) => o.days === next);
+    this.setData({
+      topDays: next,
+      topPriceText: next === 0 ? '' : `${(opt.price / 100) || 0}元`,
+    });
+  },
+
+  // 「暂不开通，直接免费发布」：显式清空置顶选择
+  onTopSkip() {
+    this.setData({ topDays: 0, topPriceText: '' });
+  },
+
   callCreate(payloadForm) {
+    // 先请求「审核结果通知」订阅授权（必须在此刻手势栈内调用，不 await、不阻塞发布）
+    const subP = preRequestAuditSubscribe();
+    void subP;
+
     wx.showLoading({ title: '发布中…', mask: true });
     wx.cloud
       .callFunction({ name: 'publishPost', data: { form: payloadForm }, config: { timeout: 10000 } })
@@ -565,8 +604,28 @@ Page({
         wx.hideLoading();
         this.setData({ submitting: false });
         if (r.success) {
-          wx.showToast({ title: r.needs_review ? '已提交待审核' : '发布成功', icon: 'success' });
-          setTimeout(() => wx.navigateBack(), 1200);
+          const postId = r._id;
+          const done = () => setTimeout(() => wx.navigateBack(), 1200);
+          // 选了置顶 → 发布成功后立即拉起置顶支付（走公共模块，与招聘页同一链路）
+          if (this.data.topDays > 0 && postId) {
+            payForTop(postId, this.data.topDays)
+              .then(() => {
+                wx.showToast({ title: `发布成功，已置顶 ${this.data.topDays} 天`, icon: 'success' });
+                done();
+              })
+              .catch((err) => {
+                // 支付取消/失败：帖子已发布，只是未置顶
+                const msg = String((err && (err.errMsg || err.message)) || '');
+                wx.showToast({
+                  title: msg.indexOf('cancel') >= 0 ? '已取消置顶，可在我的发布中重新置顶' : '发布成功，置顶支付未完成',
+                  icon: 'none',
+                });
+                done();
+              });
+          } else {
+            wx.showToast({ title: r.needs_review ? '已提交待审核' : '发布成功', icon: 'success' });
+            done();
+          }
         } else {
           wx.showToast({ title: r.error || '发布失败', icon: 'none' });
         }
@@ -582,8 +641,9 @@ Page({
   callUpdate(updateForm) {
     wx.showLoading({ title: '保存中…', mask: true });
     // 管理员走 adminAuth.update（data 字段），普通用户走 managePost.update（form 字段）
+    // 管理员走 adminAuth.update（鉴权走 openid 通道，不传账密）
     const call = this.data.isAdmin
-      ? { name: 'adminAuth', data: { action: 'update', _id: this.data.editId, data: updateForm, user: 'admin', pass: 'admin' } }
+      ? { name: 'adminAuth', data: { action: 'update', _id: this.data.editId, data: updateForm } }
       : { name: 'managePost', data: { action: 'update', _id: this.data.editId, form: updateForm } };
     wx.cloud
       .callFunction(Object.assign({ config: { timeout: 10000 } }, call))

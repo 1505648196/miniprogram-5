@@ -122,7 +122,9 @@
           wx:for="{{publishTypes}}" wx:key="id"
           data-item="{{item}}" bind:click="onPickPublishType"
         >
-          <view class="pub-icon" style="background: {{item.light}};">{{item.emoji}}</view>
+          <view class="pub-icon" style="background: {{item.light}};">
+            <t-icon name="{{item.icon}}" size="44rpx" color="{{item.color}}" />
+          </view>
           <view class="pub-name">{{item.name}}</view>
         </t-grid-item>
       </t-grid>

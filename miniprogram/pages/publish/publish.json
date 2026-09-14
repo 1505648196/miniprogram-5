@@ -13,6 +13,7 @@
     "t-grid-item": "/miniprogram_npm/tdesign-miniprogram/grid-item/grid-item",
     "t-upload": "/miniprogram_npm/tdesign-miniprogram/upload/upload",
     "t-radio": "/miniprogram_npm/tdesign-miniprogram/radio/radio",
-    "t-radio-group": "/miniprogram_npm/tdesign-miniprogram/radio-group/radio-group"
+    "t-radio-group": "/miniprogram_npm/tdesign-miniprogram/radio-group/radio-group",
+    "t-icon": "/miniprogram_npm/tdesign-miniprogram/icon/icon"
   }
 }

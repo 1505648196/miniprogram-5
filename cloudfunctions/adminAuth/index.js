@@ -69,6 +69,7 @@ const ADS = "advertisements"; // §2.9 广告运营位（广告内容）
 const AD_SLOTS = "ad_slots"; // §2.9 广告位定义（方案 C：数据驱动）
 const GROUPS = "baozi_groups"; // 包友群（C 端只读，管理端增删改）
 const MERCHANTS = "baozi_merchants"; // 包友圈商家（C 端提交/浏览，管理端审核）
+const MESSAGES = "baozi_messages"; // 站内通知 / 平台公告（与 notifyMsg 同集合）
 
 // ---- RBAC：管理员账号 / 角色（多人分级权限）----
 const ADMIN_ACCOUNTS = "admin_accounts"; // 管理员账号表（username 唯一）
@@ -131,6 +132,16 @@ const ACTION_PERM = {
   merchant_update: "merchant.manage",
   merchant_delete: "merchant.manage",
   merchant_audit: "merchant.manage", // 审核通过 / 驳回
+  // 举报 / 意见反馈管理（baozi_feedback）
+  feedback_list: "feedback.manage",
+  feedback_handle: "feedback.manage",
+  feedback_count: "feedback.manage",
+  // 平台公告管理（baozi_messages 中 type=global）
+  notice_list: "notice.manage",
+  notice_create: "notice.manage",
+  notice_update: "notice.manage",
+  notice_delete: "notice.manage",
+  notice_toggle: "notice.manage",
   // 日志 / 概览
   logs: "log.view",
   stats: "log.view",
@@ -834,6 +845,58 @@ async function actionDelete(event) {
   }
 }
 
+// ---------- 审核结果 → 订阅消息（微信服务通知）----------
+// 审核结果通知模板（与 sendSubscribeMsg 中 TMPL_CFG 的 key 保持一致）
+const SUB_TMPL_AUDIT = "iYAWAJR4UEG2XUjlCjs8-9eiatRAmAGQJlDL9BMIjag";
+
+/**
+ * 审核通过/退回后，给发帖人推一条微信订阅消息。
+ * 设计要点（保证不影响审核主流程）：
+ *   ① 全程 try/catch，任何异常只打日志，绝不向上抛（审核结果已入库，不能被推送失败回滚）
+ *   ② 用户未授权/次数用尽（43101）属正常业务结果，仅 warn 不报错
+ *   ③ 需要发起人自己授权过「审核结果通知」模板（小程序端发布/查看我的发布时请求）
+ * @param {string} toOpenid  接收人 openid
+ * @param {boolean} passed   true=通过 / false=退回
+ * @param {object} post      帖子快照（取内容做通知正文）
+ * @param {object} event     原始事件（取 note 备注）
+ */
+async function pushReviewSubscribe(toOpenid, passed, post, event) {
+  if (!toOpenid) return;
+  try {
+    // 取通知正文：优先原文摘要，其次"地区+角色"，最后兜底
+    const raw = String((post && post.raw_text) || "").trim();
+    const loc = [post && post.province, post && post.city].filter(Boolean).join("");
+    const content = (raw || `${loc}${(post && post.role) || ""}信息`).slice(0, 20);
+    const note = passed
+      ? (event.note ? `审核备注：${event.note}` : "已公开展示，感谢发布")
+      : (event.note ? `原因：${event.note}` : "请修改后重新提交");
+
+    const res = await cloud.callFunction({
+      name: "sendSubscribeMsg",
+      data: {
+        templateId: SUB_TMPL_AUDIT,
+        toOpenid,
+        result: passed ? "通过" : "驳回",
+        content,
+        remark: note.slice(0, 30),
+        // 点击通知 → 详情页（退回的帖子可能不公开展示，仍跳详情，由详情页兜底提示）
+        page: post && post._id ? `pages/detail/detail?id=${post._id}` : "pages/demo/demo",
+      },
+    });
+    const r = (res && res.result) || {};
+    if (r.success) {
+      console.log("[adminAuth] 审核订阅消息已发送:", passed ? "通过" : "退回");
+    } else if (r.errCode === 43101) {
+      // 用户未订阅 → 正常情况（一次性订阅需用户每次授权），忽略
+      console.log("[adminAuth] 审核订阅消息跳过（用户未订阅）");
+    } else {
+      console.warn("[adminAuth] 审核订阅消息发送失败:", r.errCode, r.error);
+    }
+  } catch (e) {
+    console.error("[adminAuth] pushReviewSubscribe 异常:", e && (e.errMsg || e.message));
+  }
+}
+
 /** 审核通过 */
 async function actionAudit(event) {
   if (!event._id) return fail("缺少 _id");
@@ -878,6 +941,9 @@ async function actionAudit(event) {
       catch (e) {
         console.error("adminAuth 推送 review 通知失败:", e && e.errMsg);
       }
+      // 审核通过 → 订阅消息（微信服务通知，真实推送）
+      // 与站内通知独立：任一步失败互不影响；用户未授权(43101)属正常，静默跳过
+      await pushReviewSubscribe(toOpenid, true, post, event);
     }
 
     await writeLog(event, "post_audit", event._id, event.note || "");
@@ -932,6 +998,8 @@ async function actionReject(event) {
       catch (e) {
         console.error("adminAuth 推送退回通知失败:", e && e.errMsg);
       }
+      // 退回 → 订阅消息（真实推送）
+      await pushReviewSubscribe(toOpenid, false, post, event);
     }
 
     await writeLog(event, "post_reject", event._id, event.note || "退回");
@@ -2128,6 +2196,219 @@ async function actionMerchantDelete(event) {
   }
 }
 
+// ---------- 举报 / 意见反馈管理（baozi_feedback）----------
+// C 端提交走独立云函数 feedback(action=submit)；管理侧查询/处理在此统一入口，复用 RBAC。
+const FEEDBACK = "baozi_feedback";
+
+/** 反馈列表（分页 + kind/status/关键词筛选） */
+async function actionFeedbackList(event) {
+  try {
+    const page = Math.max(parseInt(event.page, 10) || 1, 1);
+    const pageSize = Math.min(Math.max(parseInt(event.pageSize, 10) || 20, 1), 100);
+    const and = [];
+    const kind = String(event.kind || "").trim();
+    if (kind === "report" || kind === "feedback") and.push({ kind });
+    const status = String(event.status || "").trim();
+    if (status) and.push({ status });
+    const kw = String(event.keyword || "").trim();
+    if (kw) {
+      and.push(_.or([
+        { content: db.RegExp({ regexp: kw, options: "i" }) },
+        { reason: db.RegExp({ regexp: kw, options: "i" }) },
+        { contact: db.RegExp({ regexp: kw, options: "i" }) },
+      ]));
+    }
+    const query = and.length ? _.and(and) : {};
+    const coll = db.collection(FEEDBACK);
+    const countRes = await coll.where(query).count();
+    const total = countRes.total;
+    const res = await coll
+      .where(query)
+      .orderBy("created_at", "desc")
+      .skip((page - 1) * pageSize)
+      .limit(pageSize)
+      .get();
+    return ok({ list: res.data || [], total, page, pageSize, hasMore: page * pageSize < total });
+  } catch (e) {
+    return fail(String(e && e.message ? e.message : e));
+  }
+}
+
+/** 标记反馈处理结果：op=handled 已处理 / ignored 忽略 */
+async function actionFeedbackHandle(event) {
+  if (!event._id) return fail("缺少 _id");
+  const op = event.op === "ignored" ? "ignored" : "handled";
+  try {
+    await db.collection(FEEDBACK).doc(event._id).update({
+      data: {
+        status: op,
+        handle_note: String(event.note || "").slice(0, 200),
+        // 记录处理人：后台账密账号名；小程序 openid 管理员（无 user）记为 mp_admin
+        handled_by: String(event.user || event.__role || "admin"),
+        handled_at: Date.now(),
+      },
+    });
+    await writeLog(event, `feedback_${op}`, event._id, event.note || "");
+    return ok({ status: op });
+  } catch (e) {
+    return fail(String(e && e.message ? e.message : e));
+  }
+}
+
+/** 待处理反馈数量（后台红点） */
+async function actionFeedbackCount() {
+  try {
+    const res = await db.collection(FEEDBACK).where({ status: "pending" }).count();
+    return ok({ pending: res.total });
+  } catch (e) {
+    return fail(String(e && e.message ? e.message : e));
+  }
+}
+
+// ---------- 平台公告管理（baozi_messages 中 type=global）----------
+// C 端读取走 notifyMsg（notice_latest / notice_list_c）；本组 action 是管理侧增删改查。
+// 公告与站内通知共用集合：后台发一条公告，「消息」页与「公告」页同时可见、未读红点自然生效。
+
+/** 公告字段清洗（只允许这几个字段入库，防脏字段） */
+function cleanNotice(input = {}) {
+  const out = {};
+  if (input.title !== undefined) out.title = String(input.title || "").trim().slice(0, 60);
+  if (input.content !== undefined) out.content = String(input.content || "").trim().slice(0, 2000);
+  if (input.sort !== undefined) {
+    const n = Number(input.sort);
+    if (!isNaN(n)) out.sort = n;
+  }
+  if (input.status !== undefined) {
+    out.status = input.status === "offline" ? "offline" : "online";
+  }
+  return out;
+}
+
+/** 公告管理列表：支持关键词 / 状态筛选 + 分页（含已下线） */
+async function actionNoticeList(event) {
+  try {
+    const page = Math.max(parseInt(event.page, 10) || 1, 1);
+    const pageSize = Math.min(Math.max(parseInt(event.pageSize, 10) || 20, 1), 100);
+    const coll = db.collection(MESSAGES);
+
+    const conds = [{ type: "global" }];
+    const status = String(event.status || "").trim();
+    if (status === "online") conds.push({ status: _.neq("offline") });
+    else if (status === "offline") conds.push({ status: "offline" });
+
+    const kw = String(event.keyword || "").trim();
+    if (kw) {
+      const reg = db.RegExp({ regexp: escapeRegExp(kw), options: "i" });
+      conds.push(_.or([{ title: reg }, { content: reg }]));
+    }
+    const where = conds.length === 1 ? conds[0] : _.and(conds);
+
+    const total = (await coll.where(where).count()).total;
+    let res;
+    try {
+      res = await coll
+        .where(where)
+        .orderBy("sort", "desc")
+        .orderBy("created_at", "desc")
+        .skip((page - 1) * pageSize)
+        .limit(pageSize)
+        .get();
+    } catch (e) {
+      res = await coll
+        .where(where)
+        .orderBy("created_at", "desc")
+        .skip((page - 1) * pageSize)
+        .limit(pageSize)
+        .get();
+    }
+
+    const list = (res.data || []).map((m) => ({
+      _id: m._id,
+      title: m.title || "",
+      content: m.content || "",
+      // 兼容旧公告：无 status 字段视为已上线
+      status: m.status === "offline" ? "offline" : "online",
+      sort: Number(m.sort) || 0,
+      created_at: m.created_at || 0,
+      updated_at: m.updated_at || 0,
+    }));
+    return ok({ list, total, page, pageSize });
+  } catch (e) {
+    return fail(String(e && e.message ? e.message : e));
+  }
+}
+
+/** 新建公告（type 固定 global，read_by 空数组） */
+async function actionNoticeCreate(event) {
+  const data = cleanNotice(event.data || {});
+  if (!data.title && !data.content) return fail("公告需要标题或内容");
+  try {
+    const now = Date.now();
+    const res = await db.collection(MESSAGES).add({
+      data: Object.assign(
+        {
+          type: "global",
+          to_openid: "",
+          post_id: "",
+          read_by: [],
+          sender: String(event.user || "admin"),
+          status: "online",
+          sort: 0,
+          created_at: now,
+          updated_at: now,
+        },
+        data,
+      ),
+    });
+    await writeLog(event, "notice_create", res._id, data.title || "");
+    return ok({ _id: res._id });
+  } catch (e) {
+    return fail(String(e && e.message ? e.message : e));
+  }
+}
+
+/** 编辑公告 */
+async function actionNoticeUpdate(event) {
+  if (!event._id) return fail("缺少 _id");
+  const data = cleanNotice(event.data || {});
+  if (!Object.keys(data).length) return fail("没有可更新的字段");
+  try {
+    data.updated_at = Date.now();
+    await db.collection(MESSAGES).doc(event._id).update({ data });
+    await writeLog(event, "notice_update", event._id, data.title || "");
+    return ok({ updated: true });
+  } catch (e) {
+    return fail(String(e && e.message ? e.message : e));
+  }
+}
+
+/** 删除公告（物理删除） */
+async function actionNoticeDelete(event) {
+  if (!event._id) return fail("缺少 _id");
+  try {
+    await db.collection(MESSAGES).doc(event._id).remove();
+    await writeLog(event, "notice_delete", event._id, "");
+    return ok();
+  } catch (e) {
+    return fail(String(e && e.message ? e.message : e));
+  }
+}
+
+/** 公告上线 / 下线（软控制，不删数据） */
+async function actionNoticeToggle(event) {
+  if (!event._id) return fail("缺少 _id");
+  const status = event.status === "offline" ? "offline" : "online";
+  try {
+    await db.collection(MESSAGES).doc(event._id).update({
+      data: { status, updated_at: Date.now() },
+    });
+    await writeLog(event, status === "offline" ? "notice_offline" : "notice_online", event._id, "");
+    return ok({ status });
+  } catch (e) {
+    return fail(String(e && e.message ? e.message : e));
+  }
+}
+
 // ---------- 入口 ----------
 exports.main = async (event = {}) => {
   const action = event.action || "list";
@@ -2224,6 +2505,16 @@ exports.main = async (event = {}) => {
       case "merchant_update": return await actionMerchantUpdate(event);
       case "merchant_audit": return await actionMerchantAudit(event);
       case "merchant_delete": return await actionMerchantDelete(event);
+      // 举报 / 意见反馈管理
+      case "feedback_list": return await actionFeedbackList(event);
+      case "feedback_handle": return await actionFeedbackHandle(event);
+      case "feedback_count": return await actionFeedbackCount(event);
+      // 平台公告管理
+      case "notice_list": return await actionNoticeList(event);
+      case "notice_create": return await actionNoticeCreate(event);
+      case "notice_update": return await actionNoticeUpdate(event);
+      case "notice_delete": return await actionNoticeDelete(event);
+      case "notice_toggle": return await actionNoticeToggle(event);
       default: return fail("未知操作: " + action, "UNKNOWN_ACTION");
     }
   }

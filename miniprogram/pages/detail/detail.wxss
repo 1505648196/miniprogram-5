@@ -283,10 +283,20 @@
 }
 
 .contact-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20rpx;
   font-size: 20rpx;
   color: #b6b6b6;
   text-align: center;
   margin-bottom: 12rpx;
+}
+/* 举报入口：低调文字链，与提示同行右侧 */
+.report-link {
+  color: #999999;
+  text-decoration: underline;
+  padding: 4rpx 8rpx;
 }
 
 .contact-btn {

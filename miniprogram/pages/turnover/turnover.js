@@ -505,8 +505,14 @@ Page({
     this.renderList();
   },
 
+  // 发布：跳通用发布页，按当前勾选的信息类别预选类型
+  //   selectedTypes 可能含 transfer / want_shop（多选）→ 取第一个勾选项；
+  //   全不勾/空数组 → 默认「转让」（该频道最主流的发布诉求）。
   onPublish() {
-    wx.showToast({ title: '发布转让求店表单待接入', icon: 'none' });
+    const sel = Array.isArray(this.data.selectedTypes) ? this.data.selectedTypes : [];
+    const first = sel.filter((t) => t === 'transfer' || t === 'want_shop')[0];
+    const type = first || 'transfer';
+    wx.navigateTo({ url: `/pages/publish/publish?type=${type}` });
   },
 
   // 点击帖子卡片 → 详情页（与招聘求职同链路：detail_pool 缓存命中零二次请求）

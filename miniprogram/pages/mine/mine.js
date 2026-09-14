@@ -6,16 +6,16 @@
 //   - 我的发布数量：managePost(action=list_mine) 云函数（按 _openid 归属，全部分类）
 //   - 浏览历史数量：本地缓存 detail_pool（列表/详情浏览时写入的帖子快照池）
 
-// 发布类型（与 demo 首页一致）
+// 发布类型（与 demo 首页一致；icon 为 TDesign 内置图标名，取代旧 emoji 方案）
 const PUBLISH_TYPES = [
-  { id: 'recruit',    name: '招工',     emoji: '👨', bg: '#F0F5FF', color: '#597EF7', light: '#F0F5FF' },
-  { id: 'transfer',   name: '转让',     emoji: '🥟', bg: '#FFF1E8', color: '#FF7A45', light: '#FFF1E8' },
-  { id: 'equip_sell', name: '设备出售', emoji: '🛒', bg: '#FFF7E6', color: '#FA8C16', light: '#FFF7E6' },
-  { id: 'want_shop',  name: '求店',     emoji: '🔎', bg: '#E6FFFB', color: '#36CFC9', light: '#E6FFFB' },
-  { id: 'jobseek',    name: '求职',     emoji: '🙋', bg: '#F9F0FF', color: '#9254DE', light: '#F9F0FF' },
-  { id: 'equip_buy',  name: '设备求购', emoji: '🧰', bg: '#F6FFED', color: '#73D13D', light: '#F6FFED' },
-  { id: 'carpool',    name: '顺风车',   emoji: '🚗', bg: '#E6FFFB', color: '#36CFC9', light: '#E6FFFB' },
-  { id: 'other',      name: '其他',     emoji: '📦', bg: '#FAFAFA', color: '#8C8C8C', light: '#FAFAFA' },
+  { id: 'recruit',    name: '招工',     icon: 'user-search', bg: '#F0F5FF', color: '#597EF7', light: '#F0F5FF' },
+  { id: 'transfer',   name: '转让',     icon: 'store',       bg: '#FFF1E8', color: '#FF7A45', light: '#FFF1E8' },
+  { id: 'equip_sell', name: '设备出售', icon: 'cart',        bg: '#FFF7E6', color: '#FA8C16', light: '#FFF7E6' },
+  { id: 'want_shop',  name: '求店',     icon: 'map-search',  bg: '#E6FFFB', color: '#36CFC9', light: '#E6FFFB' },
+  { id: 'jobseek',    name: '求职',     icon: 'user-vip',    bg: '#F9F0FF', color: '#9254DE', light: '#F9F0FF' },
+  { id: 'equip_buy',  name: '设备求购', icon: 'tools',       bg: '#F6FFED', color: '#73D13D', light: '#F6FFED' },
+  { id: 'carpool',    name: '顺风车',   icon: 'vehicle',     bg: '#E6FFFB', color: '#36CFC9', light: '#E6FFFB' },
+  { id: 'other',      name: '其他',     icon: 'layers',      bg: '#FAFAFA', color: '#8C8C8C', light: '#FAFAFA' },
 ];
 
 Page({
@@ -57,8 +57,8 @@ Page({
       { key: 'promotion', label: '曝光推广' },
       { key: 'marketing', label: '营销工具' },
     ],
-    // 公告/常见问题
-    notice: '15号用户 已开通VIP',
+    // 公告（来自 notifyMsg.notice_latest 的最新一条；无公告时显示「暂无公告」）
+    notice: '暂无公告',
     // 鱼力回收（招回/卖等）
     recycleGrid: [
       { key: 'clean',   label: '超强擦亮' },
@@ -96,6 +96,7 @@ Page({
     this.loadUser();
     this.loadVip();
     this.refreshUnread();
+    this.loadNotice();
   },
 
   onPullDownRefresh() {
@@ -112,6 +113,22 @@ Page({
         if (unread !== this.data.unread) this.setData({ unread });
       })
       .catch(() => {});
+  },
+
+  // 取最新一条已上线公告（公告条展示）；无公告则显示「暂无公告」
+  loadNotice() {
+    wx.cloud
+      .callFunction({ name: 'notifyMsg', data: { action: 'notice_latest' }, config: { timeout: 10000 } })
+      .then((res) => {
+        const r = res.result || {};
+        const n = r.success ? r.notice : null;
+        // 公告条只展示标题；无公告或空标题 → 兜底文案
+        const text = n && n.title ? n.title : (n && n.content ? n.content : '暂无公告');
+        if (text !== this.data.notice) this.setData({ notice: text });
+      })
+      .catch(() => {
+        // 拉取失败：保持「暂无公告」兜底，不打断页面
+      });
   },
 
   // 读当前登录用户(openid 建号/查用户)的真实信息，填充头部
@@ -279,7 +296,7 @@ Page({
   },
 
   onNoticeTap() {
-    wx.showToast({ title: '公告待接入', icon: 'none' });
+    wx.navigateTo({ url: '/pages/notice/notice' });
   },
 
   onBannerTap() {
@@ -354,6 +371,21 @@ Page({
 
   onAboutTap() {
     this.setData({ aboutDialogVisible: true });
+  },
+
+  // 意见反馈：进反馈页（type=feedback，可提交功能建议/使用问题/投诉等）
+  onFeedbackTap() {
+    wx.navigateTo({ url: '/pages/feedback/feedback?type=feedback' });
+  },
+
+  // 隐私政策（?type=privacy 为默认，可省略）
+  onPrivacyTap() {
+    wx.navigateTo({ url: '/pages/privacy/privacy?type=privacy' });
+  },
+
+  // 用户协议
+  onTermsTap() {
+    wx.navigateTo({ url: '/pages/privacy/privacy?type=terms' });
   },
   onAboutDialogClose() {
     this.setData({ aboutDialogVisible: false });

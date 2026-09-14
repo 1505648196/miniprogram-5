@@ -1,0 +1,8 @@
+{
+  "navigationBarTitleText": "平台公告",
+  "usingComponents": {
+    "t-skeleton": "/miniprogram_npm/tdesign-miniprogram/skeleton/skeleton",
+    "t-empty": "/miniprogram_npm/tdesign-miniprogram/empty/empty",
+    "t-loading": "/miniprogram_npm/tdesign-miniprogram/loading/loading"
+  }
+}

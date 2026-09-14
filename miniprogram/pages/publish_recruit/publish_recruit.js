@@ -3,7 +3,11 @@
 // 提交走 publishPost 云函数（data_type=recruit 入库）。字段与云函数一一对应。
 
 const regionData = require('../../utils/regionData.js');
+// callPayCommon / pickPayment：本页「查看联系方式」支付流程仍在使用
 const { callPayCommon, pickPayment } = require('../../utils/pay.js');
+const { preRequestAuditSubscribe } = require('../../utils/subscribe.js');
+// 置顶套餐与支付链路走公共模块（三页共用，避免价格/逻辑三处维护）
+const { TOP_OPTIONS, getTopIntro, payForTop } = require('../../utils/topPromotion.js');
 
 // 师傅类型（roleId 稳定映射 1-14，与招聘筛选 SUB_CATS 一致）
 const SUB_CATS = [
@@ -30,12 +34,15 @@ Page({
     // 表单
     form: {
       salary: '',        // 薪资(元/月)，空=面议
-      address: '',       // 详细地址
+      address: '',       // 详细地址（由地图选点回填）
       phone: '',         // 联系电话
       contact: '',       // 联系人
       username: '',      // 发布人昵称(已在表单隐藏，留空)
       desc: '',          // 描述
     },
+    // 详细地址经纬度（点击地图选点后写入，提交时一并入库）
+    latitude: null,
+    longitude: null,
     // 图片：单图，上传到云存储后存 fileID（云存储 fileID 可直接用于 <image> src）
     image: '',
     // t-upload 受控展示文件列表（用于回显/删除）
@@ -59,15 +66,12 @@ Page({
     recommendSubtitle: '',
     recommendList: [],
     recommendCalling: false, // 拨打电话进行中（防重复点击）
-    // 置顶推广：0=不置顶，1/3/7=置顶天数
+    // ---------- 置顶推广（付费增值，套餐与支付逻辑见 utils/topPromotion.js） ----------
+    // topDays：0=暂不开通（默认，不默认勾选付费项，避免诱导付费）
     topDays: 0,
-    topOptions: [
-      { days: 0, label: '不置顶', price: 0, priceText: '' },
-      { days: 1, label: '置顶1天', price: 5000, priceText: '50元' },
-      { days: 3, label: '置顶3天', price: 15000, priceText: '150元' },
-      { days: 7, label: '置顶7天', price: 35000, priceText: '350元' },
-    ],
-    topPriceText: '', // 当前选中置顶的价格文案
+    topOptions: TOP_OPTIONS,
+    topIntro: getTopIntro('recruit'), // 说明文案（按业务类型定制）
+    topPriceText: '',                 // 当前选中的价格文案（如"150元"，供底部提示拼接）
   },
 
   onLoad(options) {
@@ -84,8 +88,9 @@ Page({
   // 编辑态：拉本人原帖预填（管理员模式走 adminAuth.get，绕过归属校验）
   loadForEdit(id) {
     wx.showLoading({ title: '加载中…', mask: true });
+    // 管理员走 adminAuth.get（鉴权走 openid 通道，不传账密，避免小程序包泄露口令）
     const call = this.data.isAdmin
-      ? { name: 'adminAuth', data: { action: 'get', _id: id, user: 'admin', pass: 'admin' } }
+      ? { name: 'adminAuth', data: { action: 'get', _id: id } }
       : { name: 'managePost', data: { action: 'get', _id: id } };
     wx.cloud
       .callFunction(Object.assign({ config: { timeout: 10000 } }, call))
@@ -122,7 +127,17 @@ Page({
           image = p.image;
           imageFiles = [{ url: p.image, status: 'done', type: 'image', name: '封面' }];
         }
-        this.setData({ form, subIdx: subIdx >= 0 ? subIdx : -1, region, regionPick, image, imageFiles });
+        this.setData({
+          form,
+          subIdx: subIdx >= 0 ? subIdx : -1,
+          region,
+          regionPick,
+          image,
+          imageFiles,
+          // 编辑回填经纬度（老数据可能为空，为空时用户需重新选点）
+          latitude: p.latitude != null ? Number(p.latitude) : null,
+          longitude: p.longitude != null ? Number(p.longitude) : null,
+        });
       })
       .catch((err) => {
         wx.hideLoading();
@@ -136,19 +151,49 @@ Page({
     this.setData({ subIdx: Number(idx) });
   },
 
-  // 选择置顶天数
+  // 选择置顶套餐。再点已选项 = 取消（回到"暂不开通"），符合单选卡的通用交互直觉。
   onTopTap(e) {
     const days = Number(e.currentTarget.dataset.days) || 0;
-    const opt = this.data.topOptions.find((o) => o.days === days);
+    const next = this.data.topDays === days ? 0 : days;
+    const opt = this.data.topOptions.find((o) => o.days === next);
     this.setData({
-      topDays: days,
-      topPriceText: (opt && opt.priceText) || '',
+      topDays: next,
+      // 文案用"X元"（不含 ¥ 符号），与提交按钮/提示语拼接时可读性更好
+      topPriceText: next === 0 ? '' : `${(opt.price / 100) || 0}元`,
     });
+  },
+
+  // 「暂不开通，直接免费发布」：显式清空置顶选择
+  onTopSkip() {
+    this.setData({ topDays: 0, topPriceText: '' });
   },
 
   onInput(e) {
     const field = e.currentTarget.dataset.field;
     this.setData({ [`form.${field}`]: e.detail.value });
+  },
+
+  // 详细地址：wx.chooseLocation 打开微信内置地图选点，
+  // 回填「详细地址」文本，并保存 latitude/longitude（提交时入库，供「附近」使用）
+  onChooseLocation() {
+    wx.chooseLocation({
+      success: (res) => {
+        if (!res || res.latitude == null) return;
+        const name = (res.name || '').trim();
+        const addr = (res.address || '').trim();
+        const text = name ? (addr && addr.indexOf(name) < 0 ? `${addr} ${name}` : addr) : addr;
+        this.setData({
+          latitude: Number(res.latitude),
+          longitude: Number(res.longitude),
+          'form.address': text,
+        });
+      },
+      fail: (err) => {
+        const msg = (err && err.errMsg) || '';
+        if (msg.indexOf('cancel') >= 0) return; // 用户取消，不提示
+        wx.showToast({ title: '需授权定位才能选择地址', icon: 'none' });
+      },
+    });
   },
 
   // 打开省市区选择
@@ -287,6 +332,9 @@ Page({
       'form.desc': desc,
       region,
       regionPick,
+      // 测试数据也补经纬度（中国境内随机点；仅用于联调，不代表真实地址）
+      latitude: Number((18 + Math.random() * 35).toFixed(6)),
+      longitude: Number((73 + Math.random() * 62).toFixed(6)),
     });
     wx.showToast({ title: '已填充测试数据', icon: 'none' });
   },
@@ -294,7 +342,7 @@ Page({
   // 校验并提交
   onSubmit() {
     if (this.data.submitting) return;
-    const { form, subIdx, region, image } = this.data;
+    const { form, subIdx, region, image, latitude, longitude } = this.data;
     const sub = subIdx >= 0 ? SUB_CATS[subIdx] : null;
     if (!sub) {
       wx.showToast({ title: '请选择师傅类型', icon: 'none' });
@@ -302,6 +350,11 @@ Page({
     }
     if (!region || !region.city_code) {
       wx.showToast({ title: '请选择区域(城市)', icon: 'none' });
+      return;
+    }
+    // 必填：详细地址（须点击地图选点，同时得到经纬度）
+    if (!String(form.address || '').trim()) {
+      wx.showToast({ title: '请点击「详细地址」在地图上选点', icon: 'none' });
       return;
     }
     const phone = String(form.phone || '').trim();
@@ -328,6 +381,8 @@ Page({
       district: region.district,
       district_code: region.district_code,
       address: String(form.address || '').trim(),
+      latitude: latitude != null ? Number(latitude) : null,
+      longitude: longitude != null ? Number(longitude) : null,
       phone,
       contact: String(form.contact || '').trim(),
       image: String(image || '').trim(),
@@ -337,8 +392,9 @@ Page({
       // 编辑保存：管理员走 adminAuth.update，普通用户走 managePost.update
       wx.showLoading({ title: '保存中…', mask: true });
       const updateForm = Object.assign({}, base, { raw_text: desc });
+      // 管理员走 adminAuth.update（鉴权走 openid 通道，不传账密）
       const call = this.data.isAdmin
-        ? { name: 'adminAuth', data: { action: 'update', _id: this.data.editId, data: updateForm, user: 'admin', pass: 'admin' } }
+        ? { name: 'adminAuth', data: { action: 'update', _id: this.data.editId, data: updateForm } }
         : { name: 'managePost', data: { action: 'update', _id: this.data.editId, form: updateForm } };
       wx.cloud
         .callFunction(Object.assign({ config: { timeout: 10000 } }, call))
@@ -363,6 +419,11 @@ Page({
     }
 
     // 新建：publishPost
+    // 先请求「审核结果通知」订阅授权：必须在此刻（用户点击的同步手势栈内）调用，
+    // 否则微信报 "can only be invoked by user TAP gesture"。不 await → 不阻塞发布。
+    const subP = preRequestAuditSubscribe();
+    void subP;
+
     wx.showLoading({ title: '正在发布', mask: true });
     const payload = {
       form: Object.assign({}, base, {
@@ -380,9 +441,9 @@ Page({
         this.setData({ submitting: false });
         if (r.success) {
           const postId = r._id;
-          // 选了置顶 → 发布成功后立即拉起置顶支付
+          // 选了置顶 → 发布成功后立即拉起置顶支付（走公共模块）
           if (this.data.topDays > 0 && postId) {
-            this.payForTop(postId, this.data.topDays)
+            payForTop(postId, this.data.topDays)
               .then(() => {
                 wx.showToast({ title: `发布成功，已置顶 ${this.data.topDays} 天`, icon: 'success' });
                 this.recommendAndShow(base.city_code);
@@ -410,64 +471,6 @@ Page({
         wx.showToast({ title: '网络异常，请重试', icon: 'none' });
         console.error('[publish_recruit] 发布失败:', err && err.errMsg);
       });
-  },
-
-  // 置顶支付：发布成功后调用，biz_type=top + days（1/3/7）
-  // 流程：create 建单（服务端定价）→ wxpay_order → requestPayment → verify 履约
-  async payForTop(postId, days) {
-    wx.showLoading({ title: '发起置顶支付…', mask: true });
-    try {
-      // 1) 建单（服务端按 days 定价）
-      const createRes = await wx.cloud.callFunction({
-        name: 'payForPhone',
-        data: { action: 'create', biz_type: 'top', post_id: postId, days },
-        config: { timeout: 10000 },
-      });
-      const cr = (createRes && createRes.result) || {};
-      if (!cr.success) throw new Error(cr.message || '下单失败');
-      const outTradeNo = cr.out_trade_no;
-      const amount = Number(cr.amount) || 0;
-      if (!outTradeNo) throw new Error('下单参数异常');
-
-      // 2) 集成支付下单
-      const order = await callPayCommon('wxpay_order', {
-        description: cr.title || `信息置顶 ${days} 天`,
-        out_trade_no: outTradeNo,
-        amount: { total: amount, currency: 'CNY' },
-      });
-      if (order && order.code !== undefined && order.code !== null && order.code !== 0) {
-        throw new Error(order.msg || '下单失败');
-      }
-      const p = pickPayment(order);
-      if (!p || !p.package) throw new Error('下单失败：未获取到 package');
-
-      // 3) 拉起支付（先隐藏 loading，避免遮挡系统支付面板）
-      wx.hideLoading();
-      await new Promise((resolve, reject) => {
-        wx.requestPayment({
-          timeStamp: String(p.timeStamp || ''),
-          nonceStr: p.nonceStr || '',
-          package: p.package,
-          signType: p.signType || 'RSA',
-          paySign: p.paySign || '',
-          success: resolve,
-          fail: reject,
-        });
-      });
-
-      // 4) 核销（履约写入置顶记录）
-      const verifyRes = await wx.cloud.callFunction({
-        name: 'payForPhone',
-        data: { action: 'verify', out_trade_no: outTradeNo },
-        config: { timeout: 10000 },
-      });
-      const vr = (verifyRes && verifyRes.result) || {};
-      if (!vr.success) throw new Error(vr.message || '支付核销失败');
-      wx.hideLoading();
-    } catch (err) {
-      wx.hideLoading();
-      throw err;
-    }
   },
 
   // 发布成功后：按类型+城市推荐互补信息并弹窗

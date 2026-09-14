@@ -52,6 +52,12 @@
       </t-button>
     </view>
 
+    <!-- 协议与政策（便于用户随时查阅我们收集了哪些信息） -->
+    <t-cell-group theme="card" title="协议与政策">
+      <t-cell title="隐私政策" left-icon="lock-on" arrow hover bind:click="onPrivacyTap" />
+      <t-cell title="用户协议" left-icon="file" arrow hover bind:click="onTermsTap" />
+    </t-cell-group>
+
   </block>
 
 </view>

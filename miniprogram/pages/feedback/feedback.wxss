@@ -1,0 +1,77 @@
+/* pages/feedback/feedback.wxss */
+page {
+  background: #F6F6F6;
+}
+
+.page {
+  padding-bottom: 40rpx;
+}
+
+/* 顶部提示条 */
+.tip-bar {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin: 20rpx 24rpx 0;
+  padding: 20rpx 24rpx;
+  background: #FFF7E6;
+  border-radius: 12rpx;
+}
+.tip-text {
+  font-size: 26rpx;
+  color: #FA8C16;
+  line-height: 1.5;
+}
+
+/* 理由标签 */
+.reason-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+  padding: 24rpx;
+}
+.reason-item {
+  padding: 14rpx 28rpx;
+  font-size: 28rpx;
+  color: #333;
+  background: #F5F5F5;
+  border-radius: 32rpx;
+  transition: all 0.15s;
+}
+.reason-item.is-on {
+  color: #1A1A1A;
+  background: #FFE60A;
+  font-weight: 600;
+}
+
+/* 文本域 */
+.fb-textarea {
+  padding: 0 8rpx;
+}
+
+/* 上传区 */
+.upload-wrap {
+  padding: 24rpx;
+}
+
+/* 输入 */
+.fb-input {
+  text-align: right;
+}
+
+/* 提交 */
+.submit-wrap {
+  padding: 40rpx 24rpx 0;
+}
+.submit-btn {
+  --td-button-primary-bg-color: #FFE60A;
+  --td-button-primary-color: #1A1A1A;
+  --td-button-primary-border-color: #FFE60A;
+  font-weight: 600;
+}
+.submit-hint {
+  margin-top: 20rpx;
+  text-align: center;
+  font-size: 24rpx;
+  color: #999;
+}

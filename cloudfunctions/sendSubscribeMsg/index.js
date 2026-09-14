@@ -16,10 +16,17 @@
 //     result: "通过/驳回",       // 仅"审核结果通知"用（审核结果）
 //     time: "2026-09-02 12:00",  // time(date 同用此值，如 2026-09-02)
 //     remark: "备注",            // 两个模板都用
+//     page: "pages/detail/detail?id=xxx", // 可选，点击通知跳转页（默认首页）
 //     toOpenid: ""              // 可选，默认发给当前调用者 OPENID
+//     miniprogramState: ""      // 可选，formal(默认)/trial/developer
 //   }
 // 返回：
 //   { success: true, ...res } | { success: false, errCode, error }
+//
+// ⚠️ 订阅消息为「一次性订阅」：用户每授权一次只能发一条。发失败常见 errCode：
+//   43101 = 用户未订阅/已用完（属正常，不代表代码错误，静默跳过即可）
+//   47003 = 模板字段名/类型不符
+//   40003 = openid 非法
 const cloud = require("wx-server-sdk");
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
@@ -45,8 +52,8 @@ const TMPL_CFG = {
       return {
         审核结果: { value: cut(event.result || "审核通过", 5) }, // phrase 一般很短
         审核内容: { value: cut(event.content || "您提交的信息", 20) }, // thing 有字数上限
-        审核时间: { value: event.time || now },
-        备注: { value: cut(event.remark || "", 30) },
+        审核时间: { value: cut(event.time || now, 20) },
+        备注: { value: cut(event.remark || "点击查看详情", 30) },
       };
     },
   },
@@ -78,24 +85,30 @@ exports.main = async (event) => {
 
   const now = formatNow();
   const data = cfg.data(event, now);
+  // 跳转页：可指定具体帖子详情 / 消息页；不传回首页
+  const page = event.page || "pages/demo/demo";
+  // 运行环境：默认正式版；开发自测可在调用时传 "trial"
+  const miniprogramState = event.miniprogramState || "formal";
 
   try {
     const res = await cloud.openapi.subscribeMessage.send({
       touser: to,
       templateId,
-      page: "pages/demo/demo", // 点击通知跳首页（后续可指向具体帖/审核详情）
+      page,
       lang: "zh_CN",
-      miniprogramState: "formal", // developer/trial 开发自测可临时改 trial
+      miniprogramState,
       data,
     });
     console.log("[sendSubscribeMsg] send ok, kind:", cfg.kind, "errCode:", res.errCode, res.errMsg);
     return { success: true, ...res };
   } catch (e) {
     console.error("[sendSubscribeMsg] send failed:", e.errCode, e.errMsg || e.message || e);
-    return {
-      success: false,
-      errCode: e.errCode,
-      error: (e.errMsg || e.message || e) + "（检查模板字段名或 openapi 权限）",
-    };
+    // 43101 = 用户未订阅/次数用尽：属正常业务结果，不是异常，调用方无需重试
+    const errCode = e.errCode;
+    let error = e.errMsg || e.message || String(e);
+    if (errCode === 43101) error = "用户未订阅或订阅次数已用尽（一次性订阅），跳过本次推送";
+    else if (errCode === 47003) error = "模板字段名/类型不符（检查 TMPL_CFG 关键词）";
+    else if (errCode === 40003) error = "openid 非法";
+    return { success: false, errCode, error };
   }
 };

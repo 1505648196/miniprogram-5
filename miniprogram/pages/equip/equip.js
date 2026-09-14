@@ -448,8 +448,14 @@ Page({
     this.renderList();
   },
 
+  // 发布：跳通用发布页，按当前勾选的信息类别预选类型
+  //   selectedTypes 可能含 equip_sell / equip_buy（多选）→ 取第一个勾选项；
+  //   全不勾/空数组 → 默认「设备出售」。
   onPublish() {
-    wx.showToast({ title: '发布二手设备表单待接入', icon: 'none' });
+    const sel = Array.isArray(this.data.selectedTypes) ? this.data.selectedTypes : [];
+    const first = sel.filter((t) => t === 'equip_sell' || t === 'equip_buy')[0];
+    const type = first || 'equip_sell';
+    wx.navigateTo({ url: `/pages/publish/publish?type=${type}` });
   },
 
   onTap(e) {

@@ -1,0 +1,33 @@
+<!-- pages/notice/notice.wxml -->
+<!-- 平台公告列表页 -->
+<view class="page">
+
+  <!-- 加载骨架 -->
+  <view class="skeleton" wx:if="{{loading}}">
+    <t-skeleton theme="paragraph" animation="gradient" row-col="{{skeletonRows}}" />
+  </view>
+
+  <!-- 空态 -->
+  <view class="empty" wx:elif="{{firstLoaded && !list.length}}">
+    <t-empty icon="notification" description="暂无公告" />
+  </view>
+
+  <!-- 公告列表 -->
+  <view class="list" wx:else>
+    <view class="notice-card" wx:for="{{list}}" wx:key="_id">
+      <view class="notice-head">
+        <view class="notice-tag">公告</view>
+        <text class="notice-time">{{item.timeText}}</text>
+      </view>
+      <view class="notice-title">{{item.title}}</view>
+      <view class="notice-content" wx:if="{{item.content}}">{{item.content}}</view>
+    </view>
+
+    <!-- 触底加载 -->
+    <view class="footer">
+      <t-loading wx:if="{{loadingMore}}" theme="circular" size="32rpx" text="加载更多…" layout="vertical" />
+      <text wx:elif="{{firstLoaded && !hasMore && list.length}}" class="end-text">— 没有更多了 —</text>
+    </view>
+  </view>
+
+</view>

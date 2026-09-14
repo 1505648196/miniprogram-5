@@ -40,16 +40,16 @@ function fmtMoney(n) {
   return String(num);
 }
 
-// 发布类型（与 demo 首页一致）
+// 发布类型（与 demo 首页一致；icon 为 TDesign 内置图标名，取代旧 emoji 方案）
 const PUBLISH_TYPES = [
-  { id: 'recruit',    name: '招工',     emoji: '👨', image: '', bg: '#F0F5FF', color: '#597EF7', light: '#F0F5FF' },
-  { id: 'transfer',   name: '转让',     emoji: '🥟', image: '', bg: '#FFF1E8', color: '#FF7A45', light: '#FFF1E8' },
-  { id: 'equip_sell', name: '设备出售', emoji: '🛒', image: '', bg: '#FFF7E6', color: '#FA8C16', light: '#FFF7E6' },
-  { id: 'want_shop',  name: '求店',     emoji: '🔎', image: '', bg: '#E6FFFB', color: '#36CFC9', light: '#E6FFFB' },
-  { id: 'jobseek',    name: '求职',     emoji: '🙋', image: '', bg: '#F9F0FF', color: '#9254DE', light: '#F9F0FF' },
-  { id: 'equip_buy',  name: '设备求购', emoji: '🧰', image: '', bg: '#F6FFED', color: '#73D13D', light: '#F6FFED' },
-  { id: 'carpool',    name: '顺风车',   emoji: '🚗', image: '', bg: '#E6FFFB', color: '#36CFC9', light: '#E6FFFB' },
-  { id: 'other',      name: '其他',     emoji: '📦', image: '', bg: '#FAFAFA', color: '#8C8C8C', light: '#FAFAFA' },
+  { id: 'recruit',    name: '招工',     icon: 'user-search', image: '', bg: '#F0F5FF', color: '#597EF7', light: '#F0F5FF' },
+  { id: 'transfer',   name: '转让',     icon: 'store',       image: '', bg: '#FFF1E8', color: '#FF7A45', light: '#FFF1E8' },
+  { id: 'equip_sell', name: '设备出售', icon: 'cart',        image: '', bg: '#FFF7E6', color: '#FA8C16', light: '#FFF7E6' },
+  { id: 'want_shop',  name: '求店',     icon: 'map-search',  image: '', bg: '#E6FFFB', color: '#36CFC9', light: '#E6FFFB' },
+  { id: 'jobseek',    name: '求职',     icon: 'user-vip',    image: '', bg: '#F9F0FF', color: '#9254DE', light: '#F9F0FF' },
+  { id: 'equip_buy',  name: '设备求购', icon: 'tools',       image: '', bg: '#F6FFED', color: '#73D13D', light: '#F6FFED' },
+  { id: 'carpool',    name: '顺风车',   icon: 'vehicle',     image: '', bg: '#E6FFFB', color: '#36CFC9', light: '#E6FFFB' },
+  { id: 'other',      name: '其他',     icon: 'layers',      image: '', bg: '#FAFAFA', color: '#8C8C8C', light: '#FAFAFA' },
 ];
 
 Page({

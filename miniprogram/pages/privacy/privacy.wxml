@@ -1,0 +1,43 @@
+<!-- pages/privacy/privacy.wxml -->
+<!-- 隐私政策 / 用户协议（文本展示页；内容由 js 的 sections 数组驱动） -->
+<view class="page">
+
+  <!-- 页头 -->
+  <view class="doc-head">
+    <view class="doc-title">{{title}}</view>
+    <view class="doc-meta">更新日期：{{updatedAt}}</view>
+  </view>
+
+  <!-- 正文：每个 section = 一个标题 + 若干段落 + 可选列表 -->
+  <view class="doc-body">
+    <view class="sec" wx:for="{{sections}}" wx:key="h">
+      <view class="sec-h">{{item.h}}</view>
+      <view class="sec-p" wx:for="{{item.p}}" wx:for-item="para" wx:key="*this">{{para}}</view>
+
+      <!-- 可选：无损列表（用于"收集了哪些信息"这类并列条目） -->
+      <view class="sec-list" wx:if="{{item.list}}">
+        <view class="sec-li" wx:for="{{item.list}}" wx:for-item="li" wx:key="*this">
+          <view class="sec-li-dot"></view>
+          <view class="sec-li-text">{{li}}</view>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 页脚：联系方式快捷操作 -->
+  <view class="doc-foot">
+    <view class="foot-title">联系我们</view>
+    <view class="foot-row" data-val="{{contact.phone}}" bindtap="onCall">
+      <t-icon name="call" size="32rpx" color="#597EF7" />
+      <text class="foot-text">客服电话：{{contact.phone}}</text>
+    </view>
+    <view class="foot-row" data-val="{{contact.email}}" bindtap="onCopyContact">
+      <t-icon name="mail" size="32rpx" color="#597EF7" />
+      <text class="foot-text">电子邮箱：{{contact.email}}</text>
+    </view>
+    <view class="foot-tip">点击可拨打 / 复制</view>
+  </view>
+
+  <view class="doc-end">— 以上内容自 {{updatedAt}} 起生效 —</view>
+
+</view>

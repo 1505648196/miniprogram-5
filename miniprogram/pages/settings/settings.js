@@ -229,4 +229,14 @@ Page({
         wx.showToast({ title: '绑定失败，请重试', icon: 'none' });
       });
   },
+
+  // 隐私政策
+  onPrivacyTap() {
+    wx.navigateTo({ url: '/pages/privacy/privacy?type=privacy' });
+  },
+
+  // 用户协议
+  onTermsTap() {
+    wx.navigateTo({ url: '/pages/privacy/privacy?type=terms' });
+  },
 });

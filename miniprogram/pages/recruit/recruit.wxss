@@ -85,15 +85,16 @@
   --td-grid-item-padding: 20rpx 0;
 }
 
+/* 师傅类型图标容器：浅色圆角底 + 该品类主色 TDesign 图标（取代旧 emoji）
+   border 预留 4rpx transparent，选中态换黄色边框时不产生位移 */
 .kk-icon {
   width: 84rpx;
   height: 84rpx;
-  border-radius: 20rpx;
+  border-radius: 22rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 42rpx;
-  box-shadow: 0 4rpx 10rpx rgba(0, 0, 0, 0.06);
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.05);
   transition: all 0.2s ease;
   box-sizing: border-box;
   border: 4rpx solid transparent;

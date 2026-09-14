@@ -70,9 +70,9 @@
         value="{{form.phone}}" data-field="phone" bind:change="onInput" />
       <t-input label="联系人" placeholder="如 王老板（可空）"
         value="{{form.contact}}" data-field="contact" bind:change="onInput" />
-      <!-- 获取定位：选点回填经纬度 + 地址文本 -->
-      <t-cell title="获取定位" arrow hover bind:click="onChooseLocation">
-        <text slot="note" class="{{form.address ? 'loc-val' : 'loc-ph'}}">{{form.address || '点击定位门店位置'}}</text>
+      <!-- 详细地址（必填）：点开地图选点，回填详细地址 + 经纬度 -->
+      <t-cell title="详细地址" required arrow hover bind:click="onChooseLocation">
+        <text slot="note" class="{{form.address ? 'loc-val' : 'loc-ph'}}">{{form.address || '点击在地图上选点'}}</text>
       </t-cell>
     </t-cell-group>
   </view>
@@ -98,10 +98,55 @@
     <view class="upload-tip">有实拍/图片能显著提升信息可信度</view>
   </view>
 
+  <!-- 置顶推广（选填，付费增值）：竖向套餐卡列表，默认「暂不开通」 -->
+  <view class="sec top-sec">
+    <view class="top-head">
+      <t-icon name="user-vip-filled" size="36rpx" color="#E8A33D" />
+      <text class="top-head-title">置顶推广</text>
+      <text class="top-head-sub">（付费增值）</text>
+    </view>
+    <view class="top-intro">{{topIntro}}</view>
+
+    <!-- 套餐卡：点击即选中，再点一次可取消 -->
+    <view
+      wx:for="{{topOptions}}" wx:key="days"
+      class="top-card {{topDays === item.days ? 'is-on' : ''}}"
+      data-days="{{item.days}}"
+      bindtap="onTopTap"
+    >
+      <view class="top-radio {{topDays === item.days ? 'is-on' : ''}}">
+        <t-icon wx:if="{{topDays === item.days}}" name="check" size="28rpx" color="#FFFFFF" />
+      </view>
+
+      <view class="top-body">
+        <view class="top-title-row">
+          <text class="top-title">{{item.label}}</text>
+          <text wx:if="{{item.tag}}" class="top-tag">{{item.tag}}</text>
+        </view>
+        <view class="top-desc">{{item.desc}}</view>
+      </view>
+
+      <view class="top-price-wrap">
+        <text class="top-price">{{item.priceText}}</text>
+        <text wx:if="{{item.originText}}" class="top-origin">{{item.originText}}</text>
+      </view>
+    </view>
+
+    <!-- 暂不开通：默认态，显式说明"免费也能发" -->
+    <view class="top-skip {{topDays === 0 ? 'is-on' : ''}}" bindtap="onTopSkip">
+      <view class="top-skip-icon">—</view>
+      <text class="top-skip-text">暂不开通，直接免费发布</text>
+    </view>
+
+    <view class="top-tip" wx:if="{{topDays > 0}}">
+      已选：置顶 {{topDays}} 天，费用 {{topPriceText}}，支付成功后置顶生效
+    </view>
+  </view>
+
   <!-- 提交 -->
   <view class="submit-bar">
     <t-button theme="primary" block="{{true}}" loading="{{submitting}}" bind:tap="onSubmit">
-      确认发布
+      {{isEdit ? '确认修改' : (topDays > 0 ? '确认发布并支付置顶' : '确认发布')}}
     </t-button>
     <view class="submit-tip">发布需经内容安全审核，违规信息将被拦截</view>
   </view>

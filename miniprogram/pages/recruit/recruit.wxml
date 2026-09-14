@@ -29,7 +29,9 @@
         wx:for="{{visibleSubCats}}" wx:key="id"
         data-item="{{item}}" bind:click="onSubCat"
       >
-        <view class="kk-icon {{activeSub === item.id ? 'is-active' : ''}}" style="background: {{item.bg}};">{{item.emoji}}</view>
+        <view class="kk-icon {{activeSub === item.id ? 'is-active' : ''}}" style="background: {{item.bg}};">
+          <t-icon name="{{item.icon}}" size="44rpx" color="{{item.iconColor}}" />
+        </view>
         <view class="kk-name">{{item.name}}</view>
       </t-grid-item>
       <!-- 第 10 格：更多类型/收起 入口（占用"生煎类师傅"的格子；向下箭头=更多，展开后向上箭头=收起） -->
@@ -47,7 +49,9 @@
         wx:for="{{extraSubCats}}" wx:key="id"
         data-item="{{item}}" bind:click="onSubCat"
       >
-        <view class="kk-icon {{activeSub === item.id ? 'is-active' : ''}}" style="background: {{item.bg}};">{{item.emoji}}</view>
+        <view class="kk-icon {{activeSub === item.id ? 'is-active' : ''}}" style="background: {{item.bg}};">
+          <t-icon name="{{item.icon}}" size="44rpx" color="{{item.iconColor}}" />
+        </view>
         <view class="kk-name">{{item.name}}</view>
       </t-grid-item>
     </t-grid>

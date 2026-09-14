@@ -23,6 +23,9 @@
     "pages/merchant-apply/merchant-apply",
     "pages/merchant-detail/merchant-detail",
     "pages/group/group",
+    "pages/feedback/feedback",
+    "pages/notice/notice",
+    "pages/privacy/privacy",
     "pages/chat/chat",
     "pages/news/news",
     "pages/news-detail/news-detail"

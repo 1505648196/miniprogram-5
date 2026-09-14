@@ -3,15 +3,18 @@
 // 数据源：feedPosts 云函数（七大类型各拉 20 条，失败自动回退本地 mock）
 
 // 七大类型（六大板块 + 其他兜底）
+// icon：TDesign 内置图标名（tdesign-miniprogram/icon）。统一取代此前 emoji 方案，
+//   理由：emoji 在各机型渲染差异大、风格不统一、与平台调性不符；t-icon 是矢量字体图标，
+//   颜色可控（取该类型业务色 color），与全站其他图标（tabbar/悬浮按钮等）风格一致。
 const PUBLISH_TYPES = [
-  { id: 'recruit',    name: '招工',     emoji: '👨', image: '', bg: '#F0F5FF', color: '#597EF7', light: '#F0F5FF' },
-  { id: 'transfer',   name: '转让',     emoji: '🥟', image: '', bg: '#FFF1E8', color: '#FF7A45', light: '#FFF1E8' },
-  { id: 'equip_sell', name: '设备出售', emoji: '🛒', image: '', bg: '#FFF7E6', color: '#FA8C16', light: '#FFF7E6' },
-  { id: 'want_shop',  name: '求店',     emoji: '🔎', image: '', bg: '#E6FFFB', color: '#36CFC9', light: '#E6FFFB' },
-  { id: 'jobseek',    name: '求职',     emoji: '🙋', image: '', bg: '#F9F0FF', color: '#9254DE', light: '#F9F0FF' },
-  { id: 'equip_buy',  name: '设备求购', emoji: '🧰', image: '', bg: '#F6FFED', color: '#73D13D', light: '#F6FFED' },
-  { id: 'carpool',    name: '顺风车',   emoji: '🚗', image: '', bg: '#E6FFFB', color: '#36CFC9', light: '#E6FFFB' },
-  { id: 'other',      name: '其他',     emoji: '📦', image: '', bg: '#FAFAFA', color: '#8C8C8C', light: '#FAFAFA' },
+  { id: 'recruit',    name: '招工',     icon: 'user-search', image: '', bg: '#F0F5FF', color: '#597EF7', light: '#F0F5FF' },
+  { id: 'transfer',   name: '转让',     icon: 'store',       image: '', bg: '#FFF1E8', color: '#FF7A45', light: '#FFF1E8' },
+  { id: 'equip_sell', name: '设备出售', icon: 'cart',        image: '', bg: '#FFF7E6', color: '#FA8C16', light: '#FFF7E6' },
+  { id: 'want_shop',  name: '求店',     icon: 'map-search',  image: '', bg: '#E6FFFB', color: '#36CFC9', light: '#E6FFFB' },
+  { id: 'jobseek',    name: '求职',     icon: 'user-vip',    image: '', bg: '#F9F0FF', color: '#9254DE', light: '#F9F0FF' },
+  { id: 'equip_buy',  name: '设备求购', icon: 'tools',       image: '', bg: '#F6FFED', color: '#73D13D', light: '#F6FFED' },
+  { id: 'carpool',    name: '顺风车',   icon: 'vehicle',     image: '', bg: '#E6FFFB', color: '#36CFC9', light: '#E6FFFB' },
+  { id: 'other',      name: '其他',     icon: 'layers',      image: '', bg: '#FAFAFA', color: '#8C8C8C', light: '#FAFAFA' },
 ];
 
 // 金刚位宫格
@@ -563,12 +566,12 @@ Page({
     const itemName = KEY_LABELS[key] || '该卡片';
     wx.showLoading({ title: nextStatus ? '上线中…' : '下线中…', mask: true });
     try {
+      // 鉴权走 openid 通道（adminAuth 会读服务端 getWXContext().OPENID 判定管理员），
+      // 不再传账密：小程序包可被反编译，硬编码口令等于公开后台密码。
       const res = await wx.cloud.callFunction({
         name: 'adminAuth',
         data: {
           action: 'ad_toggle',
-          user: 'admin',
-          pass: 'admin', // 走环境变量兜底口令
           _id: ad._id,
           status: nextStatus ? 'online' : 'offline',
         },

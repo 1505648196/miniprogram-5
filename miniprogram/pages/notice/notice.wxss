@@ -1,0 +1,80 @@
+/* pages/notice/notice.wxss */
+page {
+  background: #F6F6F6;
+}
+
+.page {
+  min-height: 100vh;
+  padding: 24rpx;
+  box-sizing: border-box;
+}
+
+.skeleton {
+  padding: 8rpx 0;
+}
+
+.empty {
+  padding: 160rpx 0;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+}
+
+/* 公告卡片 */
+.notice-card {
+  background: #FFFFFF;
+  border-radius: 20rpx;
+  padding: 28rpx 24rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
+}
+
+.notice-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16rpx;
+}
+
+.notice-tag {
+  font-size: 22rpx;
+  line-height: 1;
+  color: #FFFFFF;
+  background: #FF7A45;
+  padding: 6rpx 16rpx;
+  border-radius: 999rpx;
+}
+
+.notice-time {
+  font-size: 22rpx;
+  color: #BBBBBB;
+}
+
+.notice-title {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #1A1A1A;
+  line-height: 1.5;
+}
+
+.notice-content {
+  margin-top: 12rpx;
+  font-size: 26rpx;
+  color: #666666;
+  line-height: 1.7;
+  /* 正文可选中复制 */
+  user-select: text;
+}
+
+/* 触底 */
+.footer {
+  padding: 24rpx 0 40rpx;
+  display: flex;
+  justify-content: center;
+}
+.end-text {
+  font-size: 22rpx;
+  color: #BBBBBB;
+}

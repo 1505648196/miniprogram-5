@@ -24,8 +24,10 @@
       <t-cell title="所在地区" arrow hover bind:click="openRegion">
         <text slot="note" class="{{regionPick ? 'cell-val' : 'cell-ph'}}">{{regionPick || '请选择省市区'}}</text>
       </t-cell>
-      <t-input label="详细地址" placeholder="街道/门店/楼栋（可空）"
-        value="{{form.address}}" data-field="address" bind:change="onInput" />
+      <!-- 详细地址（必填）：点开地图选点，回填地址 + 经纬度 -->
+      <t-cell title="详细地址" required arrow hover bind:click="onChooseLocation">
+        <text slot="note" class="{{form.address ? 'cell-val' : 'cell-ph'}}">{{form.address || '点击在地图上选点'}}</text>
+      </t-cell>
     </t-cell-group>
   </view>
 
@@ -71,22 +73,53 @@
     <view class="upload-tip">建议上传店铺环境 / 产品实拍，提升招聘效果</view>
   </view>
 
-  <!-- 置顶推广（选填）：付费置顶 1/3/7 天 -->
-  <view class="sec">
-    <view class="sec-title">6. 置顶推广（选填，付费）</view>
-    <t-grid class="top-grid" column="{{4}}" hover>
-      <t-grid-item
-        wx:for="{{topOptions}}" wx:key="days"
-        data-days="{{item.days}}" bind:click="onTopTap"
-      >
-        <view class="top-item {{topDays === item.days ? 'is-on' : ''}}">
-          <text class="top-item-days">{{item.label}}</text>
-          <text class="top-item-price" wx:if="{{item.price > 0}}">{{item.priceText}}</text>
-          <text class="top-item-price" wx:else>免费</text>
+  <!-- 6. 置顶推广（选填，付费增值）：竖向套餐卡列表，默认「暂不开通」 -->
+  <view class="sec top-sec">
+    <view class="top-head">
+      <t-icon name="user-vip-filled" size="36rpx" color="#E8A33D" />
+      <text class="top-head-title">置顶推广</text>
+      <text class="top-head-sub">（付费增值）</text>
+    </view>
+    <view class="top-intro">{{topIntro}}</view>
+
+    <!-- 套餐卡：点击即选中，再点一次可取消 -->
+    <view
+      wx:for="{{topOptions}}" wx:key="days"
+      class="top-card {{topDays === item.days ? 'is-on' : ''}}"
+      data-days="{{item.days}}"
+      bindtap="onTopTap"
+    >
+      <!-- 左侧选择圆点（选中=实心勾） -->
+      <view class="top-radio {{topDays === item.days ? 'is-on' : ''}}">
+        <t-icon wx:if="{{topDays === item.days}}" name="check" size="28rpx" color="#FFFFFF" />
+      </view>
+
+      <view class="top-body">
+        <view class="top-title-row">
+          <text class="top-title">{{item.label}}</text>
+          <text wx:if="{{item.tag}}" class="top-tag">{{item.tag}}</text>
         </view>
-      </t-grid-item>
-    </t-grid>
-    <view class="upload-tip" wx:if="{{topDays > 0}}">置顶 {{topDays}} 天，费用 {{topPriceText}}，支付成功后置顶生效</view>
+        <view class="top-desc">{{item.desc}}</view>
+      </view>
+
+      <view class="top-price-wrap">
+        <text class="top-price">{{item.priceText}}</text>
+        <text wx:if="{{item.originText}}" class="top-origin">{{item.originText}}</text>
+      </view>
+    </view>
+
+    <!-- 暂不开通：默认态，显式说明"免费也能发" -->
+    <view
+      class="top-skip {{topDays === 0 ? 'is-on' : ''}}"
+      bindtap="onTopSkip"
+    >
+      <view class="top-skip-icon">—</view>
+      <text class="top-skip-text">暂不开通，直接免费发布</text>
+    </view>
+
+    <view class="top-tip" wx:if="{{topDays > 0}}">
+      已选：置顶 {{topDays}} 天，费用 {{topPriceText}}，支付成功后置顶生效
+    </view>
   </view>
 
   <!-- 提交 -->

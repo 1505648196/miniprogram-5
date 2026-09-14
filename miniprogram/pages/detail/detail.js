@@ -864,6 +864,18 @@ Page({
     if (!this._id) return;
     this.setData({ deleteDialogVisible: true });
   },
+
+  // ---------- 举报（非本人帖子） ----------
+  // 进举报页并带上帖子 id / 类型，便于后台定位；提交由 feedback 云函数校验身份
+  onReport() {
+    const d = this.data.d;
+    const id = this._id;
+    if (!id) return;
+    const type = (d && d.data_type) || '';
+    wx.navigateTo({
+      url: `/pages/feedback/feedback?type=report&post_id=${id}&post_type=${type}`,
+    });
+  },
   onDeleteDialogClose() {
     this.setData({ deleteDialogVisible: false });
   },

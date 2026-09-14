@@ -1,0 +1,6 @@
+{
+  "navigationBarTitleText": "隐私政策",
+  "usingComponents": {
+    "t-icon": "/miniprogram_npm/tdesign-miniprogram/icon/icon"
+  }
+}

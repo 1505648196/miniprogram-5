@@ -131,10 +131,17 @@
     </view>
   </view> -->
 
-  <!-- 关于 / 清除缓存 -->
+  <!-- 关于 / 意见反馈 / 清除缓存 -->
   <t-cell-group theme="card" title="通用">
+    <t-cell title="意见反馈" description="功能建议 / 使用问题 / 举报投诉" left-icon="chat" arrow hover bind:click="onFeedbackTap" />
     <t-cell title="清除浏览缓存" description="清除本地浏览历史缓存" left-icon="delete" arrow hover bind:click="onClearCacheTap" />
     <t-cell title="关于我们" left-icon="info-circle" arrow hover bind:click="onAboutTap" />
+  </t-cell-group>
+
+  <!-- 协议与政策 -->
+  <t-cell-group theme="card" title="协议与政策">
+    <t-cell title="隐私政策" left-icon="lock-on" arrow hover bind:click="onPrivacyTap" />
+    <t-cell title="用户协议" left-icon="file" arrow hover bind:click="onTermsTap" />
   </t-cell-group>
 
   <!-- 底部真实 TabBar（同 demo；mine 独立页，点击用 reLaunch 切换） -->
@@ -187,7 +194,9 @@
           wx:for="{{publishTypes}}" wx:key="id"
           data-item="{{item}}" bind:click="onPickPublishType"
         >
-          <view class="pub-icon" style="background: {{item.light}};">{{item.emoji}}</view>
+          <view class="pub-icon" style="background: {{item.light}};">
+            <t-icon name="{{item.icon}}" size="44rpx" color="{{item.color}}" />
+          </view>
           <view class="pub-name">{{item.name}}</view>
         </t-grid-item>
       </t-grid>
