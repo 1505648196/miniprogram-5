@@ -40,6 +40,9 @@ const LOGS = "admin_logs";
 const AI_MEMORY = "admin_ai_memory"; // 管理员 AI 共享记忆（偏好/纠正/别名）
 const AI_LEARNING_LOG = "admin_ai_learning_log"; // 管理员 AI 学习流水（每次学习动作一条，便于审计/debug）
 const ADS = "advertisements"; // 广告运营位（首页轮播图/Banner/信息流/弹窗）
+const AI_RESULT_SETS = "admin_ai_result_sets"; // AI 多轮「结果集记忆」（支持“这里面/这些”指代上一轮结果做二次统计）
+const AI_SESSIONS = "admin_ai_sessions"; // AI 会话记忆（页面打开期间的连续对话：条件累积 + 结果集链 + 最近轮次）
+const AI_MISTAKES = "admin_ai_mistakes"; // AI 错误库（记录意图识别误判 + 正确做法，注入 prompt 让 AI 越用越聪明）
 
 // 广告位中文名映射（供 AI 总结和列表展示）
 const AD_SLOT_NAMES = {
@@ -52,10 +55,18 @@ const AD_SLOT_NAMES = {
 };
 
 const DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions";
-const DEEPSEEK_MODEL = "deepseek-chat";
+const DEEPSEEK_MODEL = "deepseek-flash";
 
 const ADMIN_USER = process.env.ADMIN_USER || "admin";
 const ADMIN_PASS = process.env.ADMIN_PASS || "admin";
+
+// ==================== 条数/分页统一约定（AI 模式与规则模式共用） ====================
+// 默认条数 5；AI 意图识别若明确给出 limit，则按 AI 给的来（后端兜底封顶 MAX_LIMIT）。
+const DEFAULT_LIMIT = 5;
+const MAX_LIMIT = 200;      // AI 模式下允许的最大条数（防 token 打爆）
+const SINGLE_QUERY_MAX = 100; // 单次查询可返回的最大条数（云开发单次 limit 上限内，稳妥取 100）
+// 聚合分析：每批喂给分析 AI 的条目数（分批摘要 → 二次汇总）
+const ANALYZE_BATCH = 25;
 
 /**
  * 统一「小程序端」管理员判定（C 端 openid 通道），与 adminAuth.check_admin / wxTask 口径一致：
@@ -98,6 +109,217 @@ function escapeReg(s) {
   return String(s || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+// ==================== 工具注册表（唯一事实来源） ====================
+// 原则：AI 看到的「工具说明书」和 后端实际能执行的 handler 必须来自同一份定义。
+// 每个工具的 desc/params 会被自动拼成喂给 DeepSeek 的能力文档，handler 用于后端分发。
+// 新增工具时只改这里，避免「AI 说得出、代码做不到」的错位。
+//
+// 字段说明：
+//   desc    : 一句话用途（喂给 AI）
+//   args    : 参数说明对象 { 参数名: "说明（含枚举/默认值）" }（喂给 AI）
+//   ret     : 返回值说明（喂给 AI）
+//   handler : 后端执行函数名（字符串，运行时从当前模块取）
+//   pageable: 是否支持翻页（前端 onPageChange / handleDeepThinkPage 用）
+const TOOLS = {
+  stats: {
+    desc: "平台数据概览",
+    args: {},
+    ret: "帖子总数/待审核数/已下架数/用户总数/今日新增/会员数/订单数/商家数，及各类型帖子数量分布",
+    handler: "handleStats",
+    pageable: false,
+  },
+  pending: {
+    desc: "待审核帖子列表",
+    args: { page: "页码，默认1" },
+    ret: "待审核帖子（每页5条），每条含标题/类型/地区/价格/脱敏电话/审核状态",
+    handler: "handlePending",
+    pageable: true,
+  },
+  offline: {
+    desc: "已下架帖子列表",
+    args: { page: "页码，默认1" },
+    ret: "已下架帖子（每页5条）",
+    handler: "handleOffline",
+    pageable: true,
+  },
+  search: {
+    desc: "按条件搜帖子列表（查列表用这个；查「平均值/最高/最低/总数」等聚合指标请用 aggregate）",
+    args: {
+      dataType: "信息类型，枚举见下方【信息类型 dataType 枚举】",
+      city: '中文城市名不带"市"字，如"深圳"',
+      keyword: "关键词，匹配标题/岗位/联系人/用户名/地址",
+      salaryMin: "薪资下限（元）",
+      salaryMax: "薪资上限（元）",
+      priceMin: "转让费/价格下限（元）",
+      priceMax: "转让费/价格上限（元）",
+      rentMin: "月租下限（元/月）",
+      rentMax: "月租上限（元/月）",
+      timeWithinDays: "最近多少天内发布（整数天数）",
+      auditState: "审核状态：approved=已过审/pending=待审/offline=已下架",
+      limit: `返回条数，默认 ${DEFAULT_LIMIT}，用户说"100条/200条/全部"时填对应数字（上限 ${MAX_LIMIT}）`,
+      page: "页码，默认1（翻页用）",
+    },
+    ret: "帖子列表（含标题/类型/地区/价格/脱敏电话/完整信息），带分页",
+    handler: "handleSearch",
+    pageable: true,
+  },
+  phone: {
+    desc: "按手机号反查帖子",
+    args: { phone: "11位手机号" },
+    ret: "该号码发布的帖子（含待审/已过审/已下架）",
+    handler: "handlePhone",
+    pageable: true,
+  },
+  users: {
+    desc: "最近注册用户",
+    args: { page: "页码，默认1" },
+    ret: "昵称/脱敏手机号/会员状态(会员/普通/已封禁)",
+    handler: "handleUsers",
+    pageable: true,
+  },
+  orders: {
+    desc: "支付订单",
+    args: { page: "页码，默认1" },
+    ret: "业务类型(查看电话/开会员/擦亮/置顶/商家入驻)/金额/状态/付款人/订单号/关联帖子",
+    handler: "handleOrders",
+    pageable: true,
+  },
+  merchants: {
+    desc: "商家入驻申请",
+    args: { page: "页码，默认1" },
+    ret: "名称/套餐/是否已付费",
+    handler: "handleMerchants",
+    pageable: true,
+  },
+  tops: {
+    desc: "置顶帖子",
+    args: { dataType: "信息类型（可选，只查某类型的置顶）", page: "页码，默认1" },
+    ret: "标题/类型/到期时间",
+    handler: "handleTops",
+    pageable: true,
+  },
+  logs: {
+    desc: "操作日志",
+    args: { page: "页码，默认1" },
+    ret: "操作类型/详情/时间",
+    handler: "handleLogs",
+    pageable: true,
+  },
+  ads: {
+    desc: "广告列表",
+    args: { slot: "广告位（见下方【广告位 slot 枚举】）", status: "online=已上线/offline=已下线", page: "页码，默认1" },
+    ret: "每条的标题/广告位/类型/上下线状态/是否在有效期",
+    handler: "handleAds",
+    pageable: true,
+  },
+  adToggle: {
+    desc: "广告上下线",
+    args: {
+      op: '必填，"offline"下线 / "online"上线',
+      adId: "精确ID（优先级最高）",
+      adTitle: "广告标题关键词（用户说具体广告名时填这里）",
+      slot: "广告位（用户说广告位时才填）",
+    },
+    ret: "已上下线的广告列表",
+    handler: "handleAdToggle",
+    pageable: false,
+  },
+  aggregate: {
+    desc: "聚合统计（算指标：平均值/最高/最低/总和/计数/分组）。用户问「平均……是多少」「最高的……」「一共……」「各城市/各类型分布」时用这个；用户说「这里面/这些/刚才那些/其中」（指代上一轮结果）时也用这个并设 onPrevious=true",
+    args: {
+      dataType: "信息类型，枚举见下方【信息类型 dataType 枚举】（可选）",
+      field: `要统计的数值字段，枚举：salary=工资/薪资, price=转让费/价格, monthly_rent=月租, area_sqm=面积（默认 salary）。仅在算 avg/min/max/sum 或「其中多少条有X」时才填；op=count 纯计数时不用填`,
+      op: `算子，枚举：avg=平均值, min=最低, max=最高, sum=总和, count=总数, group=分组统计, list=列出明细（用户说「列出来/看看」时用）（默认 avg）`,
+      groupBy: `op=group 时按什么分组，枚举：city=城市, data_type=信息类型（默认 city）`,
+      city: "限定城市（可选）",
+      timeWithinDays: "限定最近多少天内发布（可选，整数天数）",
+      limit: `取最近多少条参与统计，默认 ${DEFAULT_LIMIT}，用户说"最近100条"时填 100（上限 ${MAX_LIMIT}）。⚠️ 若同时给了 timeWithinDays（如"最近7天"），表示统计该时间范围内全部数据，此时不必填 limit`,
+      salaryMin: "薪资下限（元，可选）",
+      salaryMax: "薪资上限（元，可选）",
+      excludeZero: "是否排除该字段为 0 的记录（面议/未填），默认 true",
+      onPrevious: `布尔。当用户用「这里面/这些/刚才那些/其中/上面这些」指代【上一轮查询结果】、要在这批结果内做二次统计时，必须设为 true（此时不要再填 limit，系统用上一轮的结果集）；若用户在问全新的全库统计则不填`,
+      stackIndex: `数值（可选）。仅当 onPrevious=true 时生效：0=指【最早那批】结果集（用户说"最开始那批/最早那个"时填 0）；不填=最新那批（"上一轮/这里面"）`,
+      keyword: `关键词（可选）。在结果集内做包含匹配，用于「里面含XXX的」「其中包吃住的」「里面招大师傅的」`,
+    },
+    ret: "精确统计值（由代码计算，如 {op,field,value,count,min,max} 或分组结果），不是列表",
+    handler: "handleAggregate",
+    pageable: false,
+  },
+  // ============ 操作类工具（有动词=操作；只定位目标，由前端弹确认框执行） ============
+  audit_pass: {
+    desc: "【操作】审核通过某条帖子（用户说『审核通过/通过审核/把X通过』时用这个，不要用 pending）",
+    args: {
+      keyword: "用于定位帖子标题/描述的关键词（用户描述的那条帖子）",
+      postId: "精确帖子ID（若有则优先，一般不用填）",
+      phone: "发布者手机号（可选，用于定位）",
+      dataType: "信息类型（可选，辅助定位）",
+      city: "城市（可选，辅助定位）",
+    },
+    ret: "{needConfirm:true, action:'audit', target:{id,title,sub}}（前端会弹确认框）",
+    handler: "handleOpLocate",
+    pageable: false,
+  },
+  audit_offline: {
+    desc: "【操作】下架某条帖子（用户说『下架/下线X』时用这个，不要用 offline 查询）",
+    args: {
+      keyword: "用于定位帖子标题/描述的关键词",
+      postId: "精确帖子ID（可选）",
+      phone: "发布者手机号（可选）",
+      dataType: "信息类型（可选）",
+      city: "城市（可选）",
+    },
+    ret: "{needConfirm:true, action:'offline', target:{id,title,sub}}（前端会弹确认框）",
+    handler: "handleOpLocate",
+    pageable: false,
+  },
+  top_post: {
+    desc: "【操作】置顶某条帖子（用户说『置顶X』时用这个，不要用 tops 查询）",
+    args: {
+      keyword: "用于定位帖子标题/描述的关键词",
+      postId: "精确帖子ID（可选）",
+      phone: "发布者手机号（可选）",
+      dataType: "信息类型（可选）",
+      city: "城市（可选）",
+      days: "置顶天数，可填 1/3/7/30（用户说『置顶3天』就填 3），不填默认 7",
+    },
+    ret: "{needConfirm:true, action:'top', days, target:{id,title,sub}}（前端会弹确认框）",
+    handler: "handleOpLocate",
+    pageable: false,
+  },
+  forward_post: {
+    desc: "【操作】转发某条帖子到朋友圈（用户说『转发X到朋友圈』时用这个）",
+    args: {
+      keyword: "用于定位帖子标题/描述的关键词",
+      postId: "精确帖子ID（可选）",
+      phone: "发布者手机号（可选）",
+      dataType: "信息类型（可选）",
+      city: "城市（可选）",
+    },
+    ret: "{needConfirm:true, action:'forward', target:{id,title,sub,content}}（前端会弹确认框选发送账号）",
+    handler: "handleOpLocate",
+    pageable: false,
+  },
+  answer: {
+    desc: "纯文本回复（不查库）。用于闲聊/解释/给建议",
+    args: { text: "直接回复的中文内容" },
+    ret: "无",
+    handler: null,
+    pageable: false,
+  },
+};
+
+// 从 TOOLS 自动生成「工具清单」段落（保证 AI 看到的与后端能执行的永远一致）
+function buildToolDoc() {
+  const lines = ["【你拥有的工具（一次只能选一个）】"];
+  let i = 0;
+  for (const [name, t] of Object.entries(TOOLS)) {
+    i += 1;
+    const argParts = Object.entries(t.args || {}).map(([k, v]) => `${k}(${v})`).join("，");
+    lines.push(`${i}. ${name}  ${t.desc}。入参 {${argParts || "无"}}。返回：${t.ret}`);
+  }
+  return lines.join("\n");
+}
+
 // ==================== AI 接管模式：系统能力文档 ====================
 // 喂给 DeepSeek 的"能力说明书"，让它理解整个后台系统能查什么、怎么调用、返回什么。
 // 每次新增查询能力时，务必同步更新此文档（也有一份给人看的 docs/adminChat-能力文档.md）。
@@ -114,20 +336,57 @@ const SYSTEM_CAPABILITY_DOC = `你是「包子一哥传媒」微信小程序的�
 3. 数据为空时如实说「暂无数据」，不要硬凑。
 4. 用中文回复。
 
-【你拥有的工具（一次只能选一个）】
-1. stats    平台数据概览。入参 {}。返回：帖子总数/待审核数/已下架数/用户总数/今日新增/会员数/订单数/商家数，及各类型帖子数量分布。
-2. pending  待审核帖子列表。入参 {page:1}。返回待审核帖子（每页5条），每条含标题/类型/地区/价格/脱敏电话/审核状态。
-3. offline  已下架帖子列表。入参 {page:1}。
-4. search   按条件搜帖子。入参 {dataType,city,keyword,salaryMin,salaryMax,priceMin,priceMax,rentMin,rentMax,timeWithinDays,auditState,limit,page} 都可选。dataType见下方枚举；city为中文城市名不带"市"字；keyword匹配标题/岗位/联系人/用户名/地址；salaryMin/salaryMax为薪资范围（元）；priceMin/priceMax为转让费/价格范围（元）；rentMin/rentMax为月租范围（元/月）；timeWithinDays为最近多少天内发布（整数天数）；auditState为审核状态（approved=已过审/pending=待审/offline=已下架）。
-5. phone    按手机号反查。入参 {phone:"11位手机号"}。返回该号码发布的帖子（含待审/已过审/已下架）。
-6. users    最近注册用户。入参 {}。返回昵称/脱敏手机号/会员状态(会员/普通/已封禁)。
-7. orders   支付订单。入参 {page:1}。返回业务类型(查看电话/开会员/擦亮/置顶/商家入驻)/金额/状态(待支付/已支付/已履约)/付款人/订单号/关联帖子。
-8. merchants 商家入驻申请。入参 {}。返回名称/套餐/是否已付费。
-9. tops     置顶帖子。入参 {dataType,page} 都可选。dataType为信息类型（见下方枚举），可只查某类型的置顶（如"招工的置顶"→dataType="recruit"）；不传则查全部置顶。返回标题/类型/到期时间。
-10. logs    操作日志。入参 {}。返回操作类型/详情/时间。
-11. ads     广告列表。入参 {slot,status,page} 都可选。slot为广告位（见下方枚举）；status为 online(已上线)/offline(已下线)。返回每条的标题/广告位/类型/上下线状态/是否在有效期。
-12. adToggle 广告上下线。入参 {op,adTitle,slot,adId}。op="offline"下线 / op="online"上线。定位广告的方式（按优先级）：① adId（精确ID）；② adTitle（广告标题关键词，如"包子快讯"）；③ slot（广告位）。**重要**：用户说的具体广告名字（如"包子快讯""包友群"）是【标题】→ 填 adTitle；只有用户明确说"首页轮播图""全局弹窗"这类【广告位】时才填 slot。例：{"tool":"adToggle","args":{"op":"offline","adTitle":"包子快讯"}}。
-13. answer  纯文本回复（不查库）。入参 {text:"直接回复的中文内容"}。用于闲聊/解释/给建议。
+【⚠️ 最高优先级：先判断是「查询」还是「操作」】
+- 如果用户的话里含【动词】（要平台去做某件事）—— 如「审核通过 / 通过 / 下架 / 置顶 / 转发到朋友圈」，
+  这是【操作】，必须选对应的操作工具：audit_pass / audit_offline / top_post / forward_post，**绝不要用 search/pending**。
+- 如果用户只是【问/看】（如「有多少待审核」「查深圳招工」「待审核列表」），那才是查询，用 search/pending。
+- 判别口诀：**有动词=操作；只有名词/数量=查询。**
+  - "把 X 审核通过" → audit_pass ✅（不是 pending）
+  - "审核通过 X" → audit_pass ✅
+  - "下架 X" → audit_offline ✅
+  - "置顶 X 3天" → top_post(days=3) ✅
+  - "把 X 转发到朋友圈" → forward_post ✅
+  - "有多少待审核" → pending（查询）
+  - "深圳的招工" → search（查询）
+
+${buildToolDoc()}
+
+【条数（limit）规则】
+- 列表类查询默认返回 ${DEFAULT_LIMIT} 条；用户若明确说"查100条""最近100条""全部""前50条"等，就把 limit 设为对应数字（最大 ${MAX_LIMIT}）。
+- 用户没提条数时，不要自己填 limit，让后端用默认值。
+
+【聚合统计（aggregate）用法（重要）】
+- 用户在问「平均值 / 均值 / 最高 / 最低 / 一共多少 / 总数 / 各城市多少 / 各类型多少」这类【指标】时，必须用 aggregate，不要用 search（search 只返回列表）。
+- 例："最近100条数据里平均招聘工资是多少" → {"tool":"aggregate","args":{"dataType":"recruit","field":"salary","op":"avg","limit":100}}
+- 例："深圳最高的转让费是多少" → {"tool":"aggregate","args":{"dataType":"transfer","field":"price","op":"max","city":"深圳"}}
+- 例："各城市的招聘帖分布" → {"tool":"aggregate","args":{"dataType":"recruit","op":"group","groupBy":"city"}}
+
+【在「上一轮结果」内做二次统计 / 列出明细（重要，一定要用 onPrevious）】
+- 当用户用【指代词】——「这里面 / 这些 / 刚才那些 / 其中 / 上面这些 / 这批」——来指代【上一轮查询返回的那批结果】时，
+  必须用 aggregate 并设 "onPrevious": true（不要再填 limit，系统会自动用上一轮的结果集）。
+- 此时可叠加本轮的新条件（如 dataType/city），含义是「在这批结果里再筛出满足新条件的部分」。
+- 例（上一轮查了"最近50条信息"，本轮问）："这里面有多少转让信息" → {"tool":"aggregate","args":{"onPrevious":true,"dataType":"transfer","op":"count"}}
+- 例："这些里面深圳的有几条" → {"tool":"aggregate","args":{"onPrevious":true,"city":"深圳","op":"count"}}
+- 例："刚才那些的平均工资是多少" → {"tool":"aggregate","args":{"onPrevious":true,"field":"salary","op":"avg"}}
+- 【列出明细】用户说「列出来 / 看看 / 显示出来 / 详细列一下 / 是哪几条 / 都有哪些」时，
+  用 aggregate 且 "op":"list"（列出这批明细），同样带 onPrevious=true（若是针对上一轮/上一统计结果）。
+  - 例："列出来看看" → {"tool":"aggregate","args":{"onPrevious":true,"op":"list"}}
+  - 例（上一轮数出8条转让后）："把这8条列出来" → {"tool":"aggregate","args":{"onPrevious":true,"op":"list"}}
+  - 例："这些里面深圳的列出来" → {"tool":"aggregate","args":{"onPrevious":true,"city":"深圳","op":"list"}}
+- ⚠️ 判断口诀：**含「这里面/这些/刚才那些/列出来/看看」= 在上一轮结果内操作（onPrevious=true，统计用 count/avg…、列明细用 list）；说「最近N条/全库」= 全库查询（不填 onPrevious，用 limit）。**
+- ⚠️ 若上一轮没有结果集，onPrevious 会返回"结果集失效"的提示，你如实转达即可。
+- ⚠️ 「列出来」是【查询明细】，不是操作工具；不要误选 audit/offline 等操作类工具。
+
+【操作类工具（audit_pass / audit_offline / top_post / forward_post）用法（重要）】
+- 用户说「审核通过 / 通过审核」「下架」「置顶」「转发到朋友圈」这类【要改动数据】的话时，用对应操作工具。
+- 这类工具【只定位目标】，不会真正执行；后端会返回待确认信息，由小程序弹出确认框、管理员点确认后才真正执行。
+- ⚠️ 你【绝不能】在回复里声称"已通过 / 已下架 / 已置顶 / 已转发"，因为还没执行。定位成功后，后端会直接把「待确认卡片 + 确认按钮」返回给用户，你的总结只需简短说明"已定位到这条信息，请确认后执行"即可。
+- keyword 填【用户描述里最有辨识度的一个连续词】，不要拼多个词、不要加空格（如用户说"深圳宝安那个大师傅"→ keyword 填 "宝安" 或 "大师傅"，二选一，别填"深圳宝安 大师傅"）；若用户说了手机号则填 phone。
+- 例："把深圳福田招大师傅那条审核通过" → {"tool":"audit_pass","args":{"keyword":"深圳福田招大师傅"}}
+- 例："下架这条：南山科技园招售卖员" → {"tool":"audit_offline","args":{"keyword":"南山科技园招售卖员"}}
+- 例："把广州天河招夫妻工置顶7天" → {"tool":"top_post","args":{"keyword":"广州天河招夫妻工","days":7}}
+- 例："把这条转发到朋友圈：成都招学徒工" → {"tool":"forward_post","args":{"keyword":"成都招学徒工"}}
+- 【定位不到唯一一条时不要猜】：若目标有多条（如只说"下架这条"但没描述），后端会返回候选让你追问，你如实告知用户"请说清楚是哪一条"。
 
 【广告位 slot 枚举】
 home_banner=首页轮播图, home_banner_card=首页Banner卡, recruit_banner=招工频道轮播图, recruit_feed=招工频道信息流广告, home_feed=首页信息流广告, global_popup=全局弹窗
@@ -165,8 +424,9 @@ recruit=招工, jobseek=求职, transfer=转让, want_shop=求店, equip_sell=�
    - 数字是查询条件，不要当成 keyword 关键词
    - 若同一句里同时有薪资和转让费，分别填 salary* 和 price*，不要混淆
 
-【判断优先级】
-手机号→phone；统计概览→stats；待审→pending；下架→offline；订单收入→orders；用户会员→users；商家→merchants；置顶→tops；日志→logs；看广告/查广告列表→ads；下线广告/上线广告/开关广告→adToggle；按城市/类型/关键词找帖子→search；闲聊解释建议→answer；拿不准→stats。
+【判断优先级（务必先分查询/操作）】
+① 有动词=操作：审核通过→audit_pass；下架某条→audit_offline；置顶某条→top_post；转发某条→forward_post。
+② 无动词=查询：手机号→phone；统计概览→stats；查待审列表→pending；查已下架列表→offline；订单收入→orders；用户会员→users；商家→merchants；查置顶列表→tops；日志→logs；看广告/查广告列表→ads；广告上下线→adToggle；按城市/类型/关键词找帖子→search；闲聊解释建议→answer；拿不准→stats。
 
 【纠正识别（越用越懂，必须遵守）】
 管理员的话如果是在【纠正你 / 教你长期规则】（即定义"某个说法以后该怎么理解"），
@@ -185,6 +445,24 @@ recruit=招工, jobseek=求职, transfer=转让, want_shop=求店, equip_sell=�
 - 完整示例（注意 tool 和 correction 同时出现）：
   输入"以后收店就是求店"
   输出 {"tool":"answer","args":{"text":"已记住：收店=求店"},"correction":{"isRule":true,"alias":{"from":"收店","to":"want_shop"}}}
+
+【管理员反馈「你答错了」→ 必须输出 correction.isMistake（越用越聪明）】
+- 当管理员指出【上一轮你的回答错了 / 理解错了 / 应该用另一种方式】，即话里含
+  「不对」「错了」「答错了」「应该是…」「不是这样」「你理解错了」「我要的是…不是…」「重新查，应该…」等语义时，
+  你必须【同时】做两件事：① 选一个 tool 按【正确的理解】重新回答；② 在 JSON 里带 correction 字段，且 isMistake=true。
+- correction 结构（isMistake 版）：
+  {"isMistake": true, "lesson": "一句话说清错在哪、正确应该怎么理解", "expectTool": "正确的工具名", "expectArgs": {"正确参数": "..."}}
+- 字段说明：
+  lesson：必填。用管理员的口吻总结这次教训（后端会写入错误库，注入后续 prompt）。
+  expectTool / expectArgs：你这次"正确的理解"（也就是你 ① 里实际选的 tool 和 args），便于后端对照学习。
+- 示例：
+  输入"不对，我要的是深圳不是广州"
+  输出 {"tool":"search","args":{"dataType":"recruit","city":"深圳","limit":5},"correction":{"isMistake":true,"lesson":"用户要的是深圳，上一轮误按广州查询了","expectTool":"search","expectArgs":{"city":"深圳"}}}
+  输入"错了，这不是查询是要我下架它"
+  输出 {"tool":"audit_offline","args":{"keyword":"..."},"correction":{"isMistake":true,"lesson":"这是操作（下架）意图，不是查询，应选 audit_offline","expectTool":"audit_offline","expectArgs":{"keyword":"..."}}}
+- ⚠️ 区分两种纠正：
+  「教你一个说法/别名」（如"以后收店=求店"）→ 用 isRule（上文）。
+  「指出你上一轮答错/理解错」→ 用 isMistake（本段）。两者都不符合则【整个 correction 字段都不要输出】。
 
 【输出格式示例】
 {"tool":"search","args":{"dataType":"recruit","city":"深圳","limit":5}}
@@ -316,16 +594,44 @@ async function queryPosts(intent) {
     total = 0;
   }
 
-  // 分页：page 从 1 开始，pageSize 默认 5
+  // 分页：page 从 1 开始；pageSize 默认 5
+  // 兼容两种入参：pageSize（显式分页，规则模式沿用）优先；未给则取 limit（AI 模式给条数）；都没有用默认 5。
   const page = Math.max(1, parseInt(intent.page, 10) || 1);
-  const pageSize = Math.min(50, Math.max(1, parseInt(intent.pageSize, 10) || 5));
-  const res = await db.collection(COLLECTION)
-    .where(query)
-    .orderBy("published_at", "desc")
-    .skip((page - 1) * pageSize)
-    .limit(pageSize)
-    .get();
-  return { list: res.data || [], total, page, pageSize };
+  const rawSize = intent.pageSize != null ? intent.pageSize : intent.limit;
+  const pageSize = Math.min(MAX_LIMIT, Math.max(1, parseInt(rawSize, 10) || DEFAULT_LIMIT));
+
+  const list = await fetchPostsPage(query, page, pageSize);
+  return { list, total, page, pageSize };
+}
+
+// 拉取某页数据：pageSize 超过单次上限（100）时自动分批，跨过限制拼接，
+// 保证 AI 模式下"查 100/200 条"能真正拿到全部数据（而不是被截断）。
+async function fetchPostsPage(query, page, pageSize) {
+  const skipBase = (page - 1) * pageSize;
+  if (pageSize <= SINGLE_QUERY_MAX) {
+    const res = await db.collection(COLLECTION)
+      .where(query)
+      .orderBy("published_at", "desc")
+      .skip(skipBase)
+      .limit(pageSize)
+      .get();
+    return res.data || [];
+  }
+  // 分批拼接：每批最多 SINGLE_QUERY_MAX 条
+  const all = [];
+  while (all.length < pageSize) {
+    const want = Math.min(SINGLE_QUERY_MAX, pageSize - all.length);
+    const batch = await db.collection(COLLECTION)
+      .where(query)
+      .orderBy("published_at", "desc")
+      .skip(skipBase + all.length)
+      .limit(want)
+      .get();
+    const got = batch.data || [];
+    all.push(...got);
+    if (got.length < want) break; // 已到底，无需继续
+  }
+  return all;
 }
 
 // 帖子 → 列表行对象
@@ -455,6 +761,7 @@ async function handlePending(intent) {
   return {
     title: `待审核帖子`,
     blocks: [{ type: "list", items: list.map(postToItem), pagination: buildPagination(total, page, pageSize) }],
+    rawList: list, // 结果集记忆用（供「这里面…」二次统计）
   };
 }
 
@@ -466,6 +773,7 @@ async function handleOffline(intent) {
   return {
     title: `已下架帖子`,
     blocks: [{ type: "list", items: list.map(postToItem), pagination: buildPagination(total, page, pageSize) }],
+    rawList: list,
   };
 }
 
@@ -479,6 +787,7 @@ async function handleSearch(intent) {
   return {
     title: `${cityLabel}${typeLabel}信息`,
     blocks: [{ type: "list", items: list.map(postToItem), pagination: buildPagination(total, page, pageSize) }],
+    rawList: list, // 结果集记忆用（供「这里面…」二次统计）
   };
 }
 
@@ -715,6 +1024,776 @@ async function handlePhone(intent) {
   };
 }
 
+// ==================== 聚合统计（聚合计算工具） ====================
+// 关键原则：平均值/最高/最低等「精确数值」必须由代码计算，绝不让 LLM 心算。
+// 支持算子：avg/min/max/sum/count/group（分组统计）。
+// 字段枚举：salary/price/monthly_rent/area_sqm。
+const AGG_FIELDS = {
+  salary: "工资/薪资",
+  price: "转让费/价格",
+  monthly_rent: "月租",
+  area_sqm: "面积",
+};
+const AGG_FIELD_SET = Object.keys(AGG_FIELDS);
+const AGG_OPS = ["avg", "min", "max", "sum", "count", "group", "list"];
+const AGG_LIST_MAX = 50; // count/list 自动附明细的最大条数（超出只提示，不列出，防列表过长）
+const AGG_GROUP_BY = ["city", "data_type"];
+
+function round2(n) {
+  return Math.round(Number(n) * 100) / 100;
+}
+
+// ==================== 结果集记忆（支持「这里面/这些」二次统计） ====================
+// 背景：AI 多轮追问「这里面有多少转让」时，需要「上一轮结果集」这个实体来指代，
+// 而不能只靠 tool+args 重新查库（那就变成“全库最近N条”而非“上一次那 N 条”）。
+// 做法：每次列表类查询后把结果集快照落库，返回 resultSetId 给前端；下一轮 aggregate
+// 带 onPrevious=true 时，按 resultSetId 取回这批帖子 id，仅在该集合内做统计（数字仍由代码算）。
+const RESULT_SET_TTL = 24 * 3600 * 1000;   // 结果集有效期（24h，过期视为失效）
+const RESULT_SET_MAX_IDS = 500;            // 单个结果集最多保存的帖子 id（防文档过大）
+const RESULT_SET_KEEP_MAX = 10;            // 云端最多保留的结果集条数（超出按时间删最旧；收紧以防 onUnload 丢失）
+
+// 清理结果集：① 删除已过期记录 ② 若总条数超过 RESULT_SET_KEEP_MAX，删除最旧的若干条。
+// 说明：正常场景由前端「真正关闭页面（onUnload）时清理」负责；但 onUnload 里发请求不可靠
+//       （页面销毁时可能发不出），故这里是【关键兜底】，防止结果集无限堆积。
+// 全程静默失败，不影响主流程。
+async function pruneResultSets() {
+  try {
+    const now = Date.now();
+    // ① 清理过期
+    await db.collection(AI_RESULT_SETS)
+      .where({ created_at: _.lt(now - RESULT_SET_TTL) })
+      .remove();
+    // ② 超量清理：按 created_at 升序取「超出部分」的 _id 删掉
+    const totalRes = await db.collection(AI_RESULT_SETS).count();
+    const total = (totalRes && totalRes.total) || 0;
+    if (total > RESULT_SET_KEEP_MAX) {
+      const excess = total - RESULT_SET_KEEP_MAX;
+      const oldRes = await db.collection(AI_RESULT_SETS)
+        .orderBy("created_at", "asc")
+        .limit(Math.min(excess, 100))
+        .field({ _id: true })
+        .get();
+      const ids = (oldRes.data || []).map((d) => d._id).filter(Boolean);
+      if (ids.length) {
+        await db.collection(AI_RESULT_SETS).where({ _id: _.in(ids) }).remove();
+      }
+    }
+  } catch (e) {
+    console.error("[adminChat] pruneResultSets 失败:", e && e.errMsg);
+  }
+}
+
+// 保存一份结果集快照，返回 resultSetId（失败返回 null，不阻断主流程）
+async function saveResultSet(question, tool, args, list) {
+  try {
+    const posts = Array.isArray(list) ? list : [];
+    const ids = posts.map((p) => p && p._id).filter(Boolean).slice(0, RESULT_SET_MAX_IDS);
+    if (!ids.length) return null;
+    // 紧凑摘要（供 AI 在 Stage2 理解这批是什么，不含完整 detail，省 token）
+    const summary = posts.slice(0, 50).map((p) => ({
+      t: p.data_type || "",
+      c: p.city || p.province || "",
+      s: Number(p.salary) > 0 ? Number(p.salary) : (Number(p.price) > 0 ? Number(p.price) : 0),
+      k: String(p.raw_text || "").replace(/\s+/g, " ").trim().slice(0, 24),
+    }));
+    const res = await db.collection(AI_RESULT_SETS).add({
+      data: {
+        question: String(question || "").slice(0, 200),
+        tool: tool || "",
+        args: args || {},
+        ids,
+        count: ids.length,
+        summary,
+        created_at: Date.now(),
+      },
+    });
+    // 写入时顺手清理。必须 await：云函数在 return 后可能被立即冻结，
+    // 若 fire-and-forget 则清理很可能根本没执行（这层是 onUnload 请求丢失时的关键兜底）。
+    await pruneResultSets();
+    return res && res._id ? res._id : null;
+  } catch (e) {
+    console.error("[adminChat] saveResultSet 失败:", JSON.stringify({
+      errMsg: e && e.errMsg, errCode: e && e.errCode, message: e && e.message,
+    }));
+    return null;
+  }
+}
+
+// 读取一份结果集（过期返回 null 并顺手删除，避免遗留垃圾）
+async function loadResultSet(id) {
+  if (!id) return null;
+  const key = String(id);
+  try {
+    const r = await db.collection(AI_RESULT_SETS).doc(key).get();
+    const d = r && r.data;
+    if (!d || !Array.isArray(d.ids)) return null;
+    if (d.created_at && Date.now() - Number(d.created_at) > RESULT_SET_TTL) {
+      // 惰性删除：过期即物理删除（不 await，不阻断主流程）
+      db.collection(AI_RESULT_SETS).doc(key).remove().catch(() => {});
+      return null;
+    }
+    return d;
+  } catch (e) {
+    console.error("[adminChat] loadResultSet 失败:", e && e.errMsg);
+    return null;
+  }
+}
+
+// 按 id 数组查回帖子实体（分批 in 查询，跨过单次 in 数量限制）
+async function fetchPostsByIds(ids) {
+  const all = [];
+  const CHUNK = 80;
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const chunk = ids.slice(i, i + CHUNK);
+    try {
+      const r = await db.collection(COLLECTION).where({ _id: _.in(chunk) }).get();
+      all.push(...(r.data || []));
+    } catch (e) {
+      console.error("[adminChat] fetchPostsByIds 失败:", e && e.errMsg);
+    }
+  }
+  return all;
+}
+
+// ==================== 会话记忆（页面打开期间的连续对话） ====================
+// 目的：让「连续对话」真正连贯——条件可累积、结果集成链（可指代上一轮/上上轮）、
+//       保留最近若干轮问答，供 Stage1 理解指代与延续。
+// 生命周期：前端打开页面时生成 sessionId，每次提问带上；关闭页面时删除（再打开即新会话）。
+const SESSION_TTL = 2 * 3600 * 1000;        // 会话有效期（2h，兜底：前端未清理时自动失效）
+const SESSION_TURNS_MAX = 6;                // 只保留最近 N 轮问答（控 token）
+const SESSION_RESULT_STACK_MAX = 3;         // 结果集链最多保留最近 N 个（栈）
+const SESSION_KEEP_MAX = 30;                // 云端最多保留的会话数（超出删最旧）
+
+function emptySession(id) {
+  return {
+    _id: id,
+    condition: {},          // 累积筛选条件（合并，不覆盖）：city/dataType/salaryMax/...
+    resultStack: [],        // 结果集链（栈，最新在末尾）：[{ resultSetId, count, desc, at }]
+    turns: [],              // 最近若干轮：{ q, a, tool, at }
+    created_at: Date.now(),
+    updated_at: Date.now(),
+  };
+}
+
+// 读取会话（不存在/过期返回新建的空会话）
+async function loadSession(id) {
+  const key = String(id || "").trim();
+  if (!key) return emptySession("");
+  try {
+    const r = await db.collection(AI_SESSIONS).doc(key).get();
+    const d = r && r.data;
+    if (d && d._id) {
+      if (d.updated_at && Date.now() - Number(d.updated_at) > SESSION_TTL) {
+        // 过期即惰性删除
+        db.collection(AI_SESSIONS).doc(key).remove().catch(() => {});
+        return emptySession(key);
+      }
+      return Object.assign(emptySession(key), d);
+    }
+  } catch (e) { /* 不存在，视为新会话 */ }
+  return emptySession(key);
+}
+
+// 写入/更新会话（整体 set，简单可靠）
+async function saveSession(session) {
+  const key = String((session && session._id) || "").trim();
+  if (!key) return;
+  const data = Object.assign({}, session, { updated_at: Date.now() });
+  delete data._id;
+  try {
+    await db.collection(AI_SESSIONS).doc(key).set({ data });
+  } catch (e) {
+    console.error("[adminChat] saveSession 失败:", e && e.errMsg);
+  }
+}
+
+// 把会话拼成一段注入 Stage1 的说明（条件 + 结果集链 + 最近轮次）
+function buildSessionBlock(session) {
+  if (!session) return "";
+  const parts = [];
+  const cond = session.condition || {};
+  const condKeys = Object.keys(cond).filter((k) => cond[k] != null && cond[k] !== "");
+  const stack = Array.isArray(session.resultStack) ? session.resultStack : [];
+  const turns = Array.isArray(session.turns) ? session.turns : [];
+
+  if (!condKeys.length && !stack.length && !turns.length) return "";
+
+  parts.push("【多轮会话记忆（本页连续对话）】");
+  if (condKeys.length) {
+    parts.push(`已累积的筛选条件：${JSON.stringify(cond)}（若本轮未提及某条件，可沿用）`);
+  }
+  if (stack.length) {
+    parts.push(`结果集链（按时间顺序，共 ${stack.length} 个）：`);
+    stack.forEach((s, i) => {
+      const tag = i === stack.length - 1 ? " ← 最新（“这里面/这些/列出来”默认指它）" : (i === 0 ? " ← 最早（“最开始那批”指它）" : "");
+      parts.push(`  ${i + 1}. ${s.desc || "查询结果"}｜${s.count || 0} 条${tag}`);
+    });
+  }
+  if (turns.length) {
+    parts.push("最近几轮对话：");
+    turns.slice(-4).forEach((t, i) => {
+      parts.push(`  第${i + 1}轮：用户「${String(t.q || "").slice(0, 40)}」→ 工具 ${t.tool || ""}`);
+    });
+  }
+  parts.push("【指代规则（重要）】");
+  parts.push("A. 【在上一轮结果内操作】用户用「这里面/这些/刚才那些/其中/列出来/看看/只保留某类/平均多少」，" +
+    "→ 用 aggregate 并带 onPrevious=true（系统自动关联最新结果集）；列明细用 op=list 或 op=count。");
+  parts.push("B. 【指代更早的那批】用户说「最开始那批/最早那批/第一次查的」，→ 用 aggregate 并带 onPrevious=true + stackIndex=0（指最早的）。");
+  parts.push("C. 【换主题（全新查询）】出现「改成/换成/那…呢/另外/换个/不看这个了/重新查」+ 一个新的信息类型或城市，" +
+    "且与当前结果集主题明显不同 → 【不要】带 onPrevious，走全库查询（用 limit/条件）。");
+  parts.push("⚠️ 口诀：【这里面/这些/列出来】=在上一批内；【最开始那批】=最早一批；【改成/换成/另外/重新看】=换主题、走全库。");
+  return "\n\n" + parts.join("\n");
+}
+
+// 会话收尾：合并条件、push 结果集、追加轮次，并裁剪长度
+function updateSession(session, { question, answerText, tool, args, resultSet }) {
+  if (!session) return;
+  // ① 条件合并（本轮有的覆盖，没有的保留）
+  const a = args || {};
+  const cond = session.condition || {};
+  const COND_KEYS = ["city", "dataType", "salaryMin", "salaryMax", "priceMin", "priceMax", "rentMin", "rentMax", "auditState"];
+  COND_KEYS.forEach((k) => { if (a[k] != null && a[k] !== "") cond[k] = a[k]; });
+  session.condition = cond;
+  // ② 结果集链（push 新结果集）
+  if (resultSet && resultSet.resultSetId) {
+    const stack = Array.isArray(session.resultStack) ? session.resultStack : [];
+    stack.push({
+      resultSetId: resultSet.resultSetId,
+      count: resultSet.count || 0,
+      desc: resultSet.desc || question.slice(0, 30),
+      at: Date.now(),
+    });
+    session.resultStack = stack.slice(-SESSION_RESULT_STACK_MAX);
+  }
+  // ③ 轮次记录（截断）。同时记 args，供「用户反馈答错」时回填错误库。
+  const turns = Array.isArray(session.turns) ? session.turns : [];
+  turns.push({
+    q: String(question || "").slice(0, 100),
+    a: String(answerText || "").slice(0, 120),
+    tool: tool || "",
+    args: args || {},          // 本轮实际使用的参数（错误库回溯用）
+    at: Date.now(),
+  });
+  session.turns = turns.slice(-SESSION_TURNS_MAX);
+}
+
+// ==================== 错误库（越测越聪明：把误判沉淀成经验，注入 prompt） ====================
+// 目的：测试/使用中发现的「意图识别误判」，结构化记录（场景/错在哪/应该怎么理解），
+//       每次 Stage1 自动读取最近若干条注入 prompt，让 AI 下次遇到类似场景不再犯。
+// 与「纠正记忆(corrections)」互补：corrections 记用户教的别名，mistakes 记 AI 的典型误判。
+const MISTAKE_KEEP_MAX = 40;     // 错误库最多保留条数（超出删最旧）
+const MISTAKE_INJECT_MAX = 12;   // 每次注入 prompt 的最大条数（控 token）
+
+// 写一条错误经验（去重：同 question 场景覆盖式更新）
+async function saveMistake({ question, wrongTool, wrongArgs, expectTool, expectArgs, lesson, source }) {
+  try {
+    const q = String(question || "").slice(0, 120);
+    if (!q || !lesson) return null;
+    const doc = {
+      question: q,
+      wrongTool: String(wrongTool || "").slice(0, 40),
+      wrongArgs: wrongArgs ? JSON.stringify(wrongArgs).slice(0, 300) : "",
+      expectTool: String(expectTool || "").slice(0, 40),
+      expectArgs: expectArgs ? JSON.stringify(expectArgs).slice(0, 300) : "",
+      lesson: String(lesson).slice(0, 300),
+      source: String(source || "manual").slice(0, 30),
+      at: Date.now(),
+    };
+    // 同场景覆盖（避免重复条目堆积）
+    const exist = await db.collection(AI_MISTAKES).where({ question: q }).limit(1).get();
+    if (exist.data && exist.data.length) {
+      await db.collection(AI_MISTAKES).doc(exist.data[0]._id).set({ data: doc });
+      return exist.data[0]._id;
+    }
+    const r = await db.collection(AI_MISTAKES).add({ data: doc });
+    await pruneMistakes();   // 必须 await：云函数 return 后会被冻结，fire-and-forget 将导致清理不执行
+    return r && r._id ? r._id : null;
+  } catch (e) {
+    console.error("[adminChat] saveMistake 失败:", e && e.errMsg);
+    return null;
+  }
+}
+
+// 读取最近的错误经验（供注入 prompt）
+async function loadMistakes(limit) {
+  try {
+    const n = Math.min(Number(limit) || MISTAKE_INJECT_MAX, MISTAKE_INJECT_MAX);
+    const r = await db.collection(AI_MISTAKES)
+      .orderBy("at", "desc").limit(n).get();
+    return (r.data || []).reverse();  // 时间正序，便于阅读
+  } catch (e) {
+    return [];
+  }
+}
+
+// 超量清理（保留最近 MISTAKE_KEEP_MAX 条）
+async function pruneMistakes() {
+  try {
+    const totalRes = await db.collection(AI_MISTAKES).count();
+    const total = (totalRes && totalRes.total) || 0;
+    if (total > MISTAKE_KEEP_MAX) {
+      const excess = Math.min(total - MISTAKE_KEEP_MAX, 50);
+      const oldRes = await db.collection(AI_MISTAKES)
+        .orderBy("at", "asc").limit(excess).field({ _id: true }).get();
+      const ids = (oldRes.data || []).map((d) => d._id).filter(Boolean);
+      if (ids.length) await db.collection(AI_MISTAKES).where({ _id: _.in(ids) }).remove();
+    }
+  } catch (e) {
+    console.error("[adminChat] pruneMistakes 失败:", e && e.errMsg);
+  }
+}
+
+// 把错误库拼成注入 Stage1 的「经验教训」段落
+function buildMistakeBlock(mistakes) {
+  const list = Array.isArray(mistakes) ? mistakes.filter((m) => m && m.lesson) : [];
+  if (!list.length) return "";
+  const lines = ["【历史误判经验（务必避免重犯）】"];
+  list.forEach((m, i) => {
+    lines.push(`${i + 1}. 场景「${m.question}」：容易错成 ${m.wrongTool || "?"}(${m.wrongArgs || "-"})；正确应 ${m.expectTool || "?"}(${m.expectArgs || "-"})。教训：${m.lesson}`);
+  });
+  return "\n\n" + lines.join("\n");
+}
+
+// 会话超量清理（兜底：前端未清理时防止堆积）
+async function pruneSessions() {
+  try {
+    const now = Date.now();
+    await db.collection(AI_SESSIONS).where({ updated_at: _.lt(now - SESSION_TTL) }).remove();
+    const totalRes = await db.collection(AI_SESSIONS).count();
+    const total = (totalRes && totalRes.total) || 0;
+    if (total > SESSION_KEEP_MAX) {
+      const excess = Math.min(total - SESSION_KEEP_MAX, 100);
+      const oldRes = await db.collection(AI_SESSIONS)
+        .orderBy("updated_at", "asc").limit(excess).field({ _id: true }).get();
+      const ids = (oldRes.data || []).map((d) => d._id).filter(Boolean);
+      if (ids.length) await db.collection(AI_SESSIONS).where({ _id: _.in(ids) }).remove();
+    }
+  } catch (e) {
+    console.error("[adminChat] pruneSessions 失败:", e && e.errMsg);
+  }
+}
+
+// 组装聚合查询条件（复用 queryPosts 的过滤口径，构造一个 intent）
+function buildAggIntent(args) {
+  const a = args || {};
+  // 条数规则：
+  //   · 有【时间范围】(timeWithinDays) 时，统计应对「该时间范围内全部数据」进行，
+  //     不能被默认 limit=5 截断（否则「最近7天平均转让费」只算最近5条，结果失真）。
+  //   · 无时间范围时：默认 DEFAULT_LIMIT，AI 给了 limit 就用 AI 的（封顶 MAX_LIMIT）。
+  const hasTime = a.timeWithinDays != null && Number(a.timeWithinDays) > 0;
+  const limitVal = hasTime
+    ? Math.min(MAX_LIMIT, Math.max(1, parseInt(a.limit, 10) || MAX_LIMIT))
+    : Math.min(MAX_LIMIT, Math.max(1, parseInt(a.limit, 10) || DEFAULT_LIMIT));
+  const intent = {
+    type: "search",
+    dataType: a.dataType || null,
+    city: a.city || null,
+    cityCode: null,
+    isProvince: false,
+    keyword: a.keyword || "",
+    limit: limitVal,
+  };
+  if (a.city) {
+    const r = detectIntent(String(a.city), 1);
+    intent.cityCode = r.cityCode || null;
+    intent.isProvince = r.isProvince || false;
+  }
+  if (a.salaryMin != null) intent.salaryMin = Number(a.salaryMin);
+  if (a.salaryMax != null) intent.salaryMax = Number(a.salaryMax);
+  if (a.priceMin != null) intent.priceMin = Number(a.priceMin);
+  if (a.priceMax != null) intent.priceMax = Number(a.priceMax);
+  if (a.rentMin != null) intent.rentMin = Number(a.rentMin);
+  if (a.rentMax != null) intent.rentMax = Number(a.rentMax);
+  if (a.timeWithinDays != null) {
+    const d = Number(a.timeWithinDays);
+    if (d > 0) intent.timeMin = Date.now() - d * 86400000;
+  }
+  if (a.auditState) intent.auditState = a.auditState;
+  return intent;
+}
+
+async function handleAggregate(args) {
+  const a = args || {};
+  const field = AGG_FIELD_SET.indexOf(String(a.field)) >= 0 ? String(a.field) : "salary";
+  const op = AGG_OPS.indexOf(String(a.op)) >= 0 ? String(a.op) : "avg";
+  const groupBy = AGG_GROUP_BY.indexOf(String(a.groupBy)) >= 0 ? String(a.groupBy) : "city";
+  const excludeZero = a.excludeZero === false ? false : true;
+
+  // ===== 模式A：在「上一轮结果集」内统计（用户说“这里面/这些/刚才那些”） =====
+  // 用 resultSetId 取回上一轮那批帖子实体，仅在这批范围内做过滤与统计（不再全库重查）
+  if (a.onPrevious || a.resultSetId) {
+    return aggregateOnResultSet(a, { field, op, groupBy, excludeZero });
+  }
+
+  // ===== 模式B：全库统计（原有行为） =====
+  const intent = buildAggIntent(a);
+  const { list } = await queryPosts(intent);
+  const scanned = list.length;
+  const fieldName = AGG_FIELDS[field];
+  const typeName = intent.dataType ? (TYPE_NAMES[intent.dataType] || "") : "";
+  const cityName = intent.city || "";
+  // 样本范围文案：group 模式描述的是「帖子」，数值模式才带上字段名
+  const subject = op === "group" ? "帖子" : fieldName;
+  // 有时间范围时，文案说明时间；否则说明取最近 N 条
+  const rangeText = (a.timeWithinDays != null && Number(a.timeWithinDays) > 0)
+    ? `最近 ${Number(a.timeWithinDays)} 天内`
+    : `取最近 ${intent.limit} 条`;
+  const scopeLabel = `${cityName ? cityName + "的" : ""}${typeName || "全部"}${subject}（${rangeText}）`;
+
+  if (!scanned) {
+    return { title: `${fieldName}统计`, blocks: [{ type: "empty", text: `暂无数据可统计（${scopeLabel}）` }] };
+  }
+
+  const built = buildAggBlocks({ list, field, op, groupBy, excludeZero, scopeLabel, scanned });
+  if (built) return built;
+
+  return {
+    title: `${fieldName}统计`,
+    blocks: [{ type: "empty", text: `最近 ${scanned} 条中，没有可用于统计的${fieldName}数据（多为面议/未填）` }],
+  };
+}
+
+// 解析「要操作哪个结果集」：支持三种来源
+//   ① a.resultSetId 精确指定
+//   ② a.stackIndex：0=最早（“最开始那批”）、-1=最新（“上一轮/这里面”，默认）
+//   ③ 都没有 → 默认最新（栈顶）
+// 返回 { rs, label }（rs 为 loadResultSet 的文档）
+async function resolveResultSetRef(a) {
+  const args = a || {};
+  const sessionId = args.__sessionId;           // 由 handleDeepThink 注入
+  if (args.resultSetId) {
+    return { rs: await loadResultSet(args.resultSetId), label: "指定批次" };
+  }
+  if (sessionId) {
+    const session = await loadSession(sessionId);
+    const stack = (session && session.resultStack) || [];
+    if (stack.length) {
+      const idx = args.stackIndex === 0 ? 0 : (stack.length - 1);
+      const item = stack[idx];
+      const label = idx === 0 ? "最开始那批" : "上一轮";
+      return { rs: await loadResultSet(item.resultSetId), label };
+    }
+  }
+  if (args.resultSetId) return { rs: await loadResultSet(args.resultSetId), label: "指定批次" };
+  return { rs: null, label: "上一轮" };
+}
+
+// 在「上一轮结果集」内做二次统计：取回该 resultSet 的帖子实体，应用本轮新增过滤条件，再统计。
+// 数字仍由代码计算；若结果集不存在/过期，则明确告知而不是兜底重查（避免语义错位）。
+async function aggregateOnResultSet(a, { field, op, groupBy, excludeZero }) {
+  const fieldName = AGG_FIELDS[field];
+  const rsMeta = await resolveResultSetRef(a);   // 支持按 id / 按栈位置（最早/上一轮）
+  const rs = rsMeta && rsMeta.rs;
+  if (!rs) {
+    return {
+      title: `${fieldName}统计`,
+      blocks: [{ type: "empty", text: "上一轮的结果集已失效（可能过期或未开启上下文），请先重新查询那批数据，再追问「这里面…」。" }],
+      resultSetInvalid: true,
+    };
+  }
+  const refLabel = rsMeta.label || "上一轮";
+
+  // 取回帖子实体（保持上一轮的先后顺序）
+  const raw = await fetchPostsByIds(rs.ids);
+  const order = {};
+  rs.ids.forEach((id, i) => { order[id] = i; });
+  raw.sort((x, y) => (order[x._id] || 0) - (order[y._id] || 0));
+
+  // 代入本轮新增的过滤条件（在结果集内再筛，如「这里面深圳的有几条」）
+  let list = raw;
+  if (a.dataType) list = list.filter((p) => p.data_type === a.dataType);
+  if (a.city) {
+    const r = detectIntent(String(a.city), 1);
+    const code = r.cityCode;
+    list = list.filter((p) => (code && (p.city_code === code || p.district_code === code)) || p.city === a.city);
+  }
+  // 关键词过滤（如「其中包吃住的」「里面招大师傅的」）——在结果集内做包含匹配
+  if (a.keyword) {
+    const words = String(a.keyword).trim().split(/[\s,，、/]+/).map((s) => s.trim()).filter(Boolean);
+    if (words.length) {
+      list = list.filter((p) => {
+        const hay = [
+          p.raw_text, p.role, p.contact, p.username, p.address,
+          p.service_area, p.remark, p.availability, p.content,
+        ].filter(Boolean).join(" ").toLowerCase();
+        return words.some((w) => hay.indexOf(String(w).toLowerCase()) >= 0);
+      });
+    }
+  }
+  if (a.salaryMin != null) list = list.filter((p) => Number(p.salary) > 0 && Number(p.salary) >= Number(a.salaryMin));
+  if (a.salaryMax != null) list = list.filter((p) => Number(p.salary) > 0 && Number(p.salary) <= Number(a.salaryMax));
+  if (a.priceMin != null) list = list.filter((p) => Number(p.price) > 0 && Number(p.price) >= Number(a.priceMin));
+  if (a.priceMax != null) list = list.filter((p) => Number(p.price) > 0 && Number(p.price) <= Number(a.priceMax));
+
+  const scanned = list.length;
+  const prevCount = rs.count || rs.ids.length;
+  const scopeLabel = `${refLabel}的 ${prevCount} 条结果${a.dataType ? "中的" + (TYPE_NAMES[a.dataType] || "") : ""}${a.keyword ? `含「${a.keyword}」` : ""}（共匹配 ${scanned} 条）`;
+
+  const built = buildAggBlocks({ list, field, op, groupBy, excludeZero, scopeLabel, scanned, prevCount });
+  const result = built || { title: `${fieldName}统计`, blocks: [{ type: "empty", text: `上一轮结果中未匹配到可统计的数据（${scopeLabel}）` }] };
+
+  // ===== 结果集链：把本次「命中集合」固化为新结果集 =====
+  // 这样下一轮可继续指代（如「列出来看看」「这8条里深圳的几条」），实现 A→B→C 无限追问。
+  // 仅在有命中且为 count/list 类（明细可继续用）时落库，避免 avg 之类无意义快照。
+  try {
+    if (list.length && (op === "count" || op === "list" || op === "group")) {
+      const newId = await saveResultSet(`（上一轮${prevCount}条中）${TYPE_NAMES[a.dataType] || "筛选"}`, "aggregate", a, list);
+      if (newId) {
+        result.resultSetId = newId;
+        result.resultCount = list.length;
+        result.__derivedDesc = `上一轮${prevCount}条中的${a.dataType ? (TYPE_NAMES[a.dataType] || "") : "筛选结果"}`;
+      }
+    }
+  } catch (e) {
+    console.error("[adminChat] 结果集链落库失败:", e && e.message);
+  }
+  return result;
+}
+
+// 统计块构造（两种模式共用）：group 分组 / 数值统计
+// 返回 null 表示「无可统计数值」（交由调用方决定 empty 文案）
+function buildAggBlocks({ list, field, op, groupBy, excludeZero, scopeLabel, scanned, prevCount }) {
+  const fieldName = AGG_FIELDS[field];
+  const listLen = list.length;
+
+  // 分组统计：按 city / data_type 分组
+  if (op === "group") {
+    if (!listLen) return null;
+    const groups = {};
+    for (const p of list) {
+      const key = groupBy === "city"
+        ? ([p.city || p.province || "未知地区"]).join("")
+        : (TYPE_NAMES[p.data_type] || p.data_type || "其他");
+      groups[key] = (groups[key] || 0) + 1;
+    }
+    const entries = Object.entries(groups).sort((a2, b2) => b2[1] - a2[1]);
+    const items = entries.map(([k, v]) => ({
+      text: k,
+      sub: `${v} 条 · 占比 ${round2((v / listLen) * 100)}%`,
+      tag: String(v),
+      tagColor: "primary",
+    }));
+    return {
+      title: `按${groupBy === "city" ? "城市" : "类型"}分组统计`,
+      blocks: [
+        { type: "text", text: `样本范围：${scopeLabel}，共 ${listLen} 条。` },
+        { type: "section", title: "分组结果" },
+        { type: "list", items },
+      ],
+    };
+  }
+
+  // 数值统计：仅取该字段有效（>0，或按 excludeZero 决定）的记录
+  const nums = [];
+  for (const p of list) {
+    const v = Number(p[field]);
+    if (!isFinite(v)) continue;
+    if (excludeZero && !(v > 0)) continue;
+    nums.push(v);
+  }
+  // op=list：只列出命中明细（不统计），用于「列出来看看」
+  if (op === "list") {
+    if (!listLen) return null;
+    const shown = list.slice(0, AGG_LIST_MAX);
+    const blocks = [
+      { type: "text", text: `样本范围：${scopeLabel}，共 ${listLen} 条。` },
+      { type: "section", title: "明细" },
+      { type: "list", items: shown.map(postToItem) },
+    ];
+    if (listLen > shown.length) {
+      blocks.push({ type: "text", text: `（仅显示前 ${shown.length} 条，共 ${listLen} 条）` });
+    }
+    return { title: "明细列表", blocks };
+  }
+
+  // op=count：纯计数（数条数）。
+  // 若调用方明确给了 field（如“其中多少条有工资”），才附字段维度；否则只给总数，避免误导。
+  // 同时：命中数在阈值内时【附带明细列表】，让「有多少」能直接看到是哪些（无需再追问）。
+  if (op === "count") {
+    const withField = nums.length;
+    const items = [
+      { label: "总数", value: String(listLen), unit: "条", color: "#597EF7" },
+    ];
+    if (withField > 0) {
+      items.push({ label: `有明确${fieldName}`, value: String(withField), unit: "条", color: "#36CFC9" });
+      items.push({ label: "面议/未填", value: String(listLen - withField), unit: "条", color: "#FF7A45" });
+    }
+    const blocks = [
+      { type: "text", text: `样本范围：${scopeLabel}。` },
+      { type: "kpi", items },
+      { type: "text", text: `结论：${scopeLabel} → 共 ${listLen} 条。` },
+    ];
+    // 附带明细（阈值内）
+    if (listLen > 0 && listLen <= AGG_LIST_MAX) {
+      blocks.push({ type: "section", title: "明细" });
+      blocks.push({ type: "list", items: list.map(postToItem) });
+    } else if (listLen > AGG_LIST_MAX) {
+      blocks.push({ type: "text", text: `（命中 ${listLen} 条，超过 ${AGG_LIST_MAX} 条不自动列出；说「列出来看看」可查看前 ${AGG_LIST_MAX} 条）` });
+    }
+    return { title: `计数统计`, blocks };
+  }
+
+  if (!nums.length) return null;
+  const count = nums.length;
+  const sum = nums.reduce((s, n) => s + n, 0);
+  const min = Math.min(...nums);
+  const max = Math.max(...nums);
+  const avg = sum / count;
+  let value = avg;
+  let opLabel = "平均";
+  if (op === "min") { value = min; opLabel = "最低"; }
+  else if (op === "max") { value = max; opLabel = "最高"; }
+  else if (op === "sum") { value = sum; opLabel = "合计"; }
+
+  const unit = field === "area_sqm" ? "㎡" : "元";
+  const statText = `${opLabel}${fieldName} ${round2(value)} ${unit}`;
+  const pctText = prevCount ? `，占上一轮 ${prevCount} 条的 ${round2((listLen / prevCount) * 100)}%` : "";
+
+  return {
+    title: `${fieldName}${opLabel}统计`,
+    blocks: [
+      { type: "text", text: `样本范围：${scopeLabel}，其中 ${count} 条有明确${fieldName}，${listLen - count} 条为面议/未填已排除${pctText}。` },
+      {
+        type: "kpi",
+        items: [
+          { label: `${opLabel}${fieldName}`, value: String(round2(value)), unit, color: "#597EF7" },
+          { label: "最低", value: String(round2(min)), unit, color: "#36CFC9" },
+          { label: "最高", value: String(round2(max)), unit, color: "#FF7A45" },
+          { label: "有效样本", value: String(count), unit: "条", color: "#9254DE" },
+        ],
+      },
+      { type: "text", text: `结论：${scopeLabel} → ${statText}（区间 ${round2(min)}~${round2(max)} ${unit}）。` },
+    ],
+  };
+}
+
+// ==================== 操作类工具：定位目标，返回「待确认」（不直接执行） ====================
+// 安全设计：AI 只负责识别意图 + 定位目标，绝不直接改库。
+// 云函数返回 { needConfirm:true, action, ...target }，由小程序弹 TDesign 确认层，
+// 管理员点确认后才由前端调用 adminAuth / wxTask 真正执行。
+//
+// action 映射：tool → 执行动作
+const OP_TOOL_MAP = {
+  audit_pass: { action: "audit", label: "审核通过" },
+  audit_offline: { action: "offline", label: "下架" },
+  top_post: { action: "top", label: "置顶" },
+  forward_post: { action: "forward", label: "转发到朋友圈" },
+};
+
+// 定位帖子：优先 postId，其次 phone，最后 keyword（多条件 AND）
+// 返回 { list } （最多查 6 条用于判断唯一性）
+async function locatePosts(args) {
+  const a = args || {};
+  const conds = [];
+
+  if (a.postId) {
+    try {
+      const r = await db.collection(COLLECTION).doc(String(a.postId).trim()).get();
+      if (r && r.data && r.data._id) return { list: [r.data] };
+    } catch (e) { /* 找不到就继续走其他条件 */ }
+  }
+
+  if (a.phone) {
+    const phone = String(a.phone).trim();
+    const tail = phone.slice(-4);
+    const rx = db.RegExp({ regexp: escapeReg(tail), options: "i" });
+    conds.push(_.or([{ phone }, { phone_masked: rx }]));
+  }
+  if (a.dataType) conds.push({ data_type: a.dataType });
+  if (a.city) {
+    const r = detectIntent(String(a.city), 1);
+    if (r.cityCode) {
+      conds.push(_.or([
+        { city_code: r.cityCode },
+        { city: db.RegExp({ regexp: escapeReg(a.city), options: "i" }) },
+      ]));
+    }
+  }
+  if (a.keyword) {
+    // 关键词按空白/顿号切分后，取【每个词】分别在 raw_text 上做 OR 匹配。
+    // 关键：云开发 where 里 _.or 的数组不宜过长，故这里只对 raw_text 一个字段做 OR，
+    // 避免"多词 × 多字段"导致的条件数组过大而查询失效（表现为明明有数据却查不到）。
+    const words = String(a.keyword).trim().split(/[\s,，、/]+/).map((s) => s.trim()).filter(Boolean);
+    const kwOr = words.map((w) => ({ raw_text: db.RegExp({ regexp: escapeReg(w), options: "i" }) }));
+    if (kwOr.length === 1) conds.push(kwOr[0]);
+    else if (kwOr.length > 1) conds.push(_.or(kwOr));
+  }
+  if (!conds.length) return { list: [] };
+
+  const query = conds.length === 1 ? conds[0] : _.and(conds);
+  const r = await db.collection(COLLECTION)
+    .where(query)
+    .orderBy("published_at", "desc")
+    .limit(6)
+    .get();
+  return { list: r.data || [] };
+}
+
+// 操作类统一入口（handler）：定位 → 唯一则返回待确认；多条/0 条返回提示
+async function handleOpLocate(tool, args) {
+  const meta = OP_TOOL_MAP[tool] || { action: tool, label: "操作" };
+  const a = args || {};
+
+  const { list } = await locatePosts(a);
+
+  if (!list.length) {
+    return {
+      title: `未找到目标`,
+      blocks: [{ type: "empty", text: `没有找到要${meta.label}的帖子。请补充标题关键词、地区或手机号，再说一次。` }],
+      opFail: true,
+    };
+  }
+
+  // 多条：不执行，列出候选让用户说清楚
+  if (list.length > 1) {
+    return {
+      title: `找到多条，请确认是哪一条`,
+      blocks: [
+        { type: "text", text: `匹配到 ${list.length} 条，为避免误操作，请补充更精确的描述（如城市/岗位/手机号）后再说一次。` },
+        { type: "list", items: list.map(postToItem) },
+      ],
+      opFail: true,
+    };
+  }
+
+  // 唯一：返回待确认结构（前端弹确认框）
+  const p = list[0];
+  const typeName = TYPE_NAMES[p.data_type] || "信息";
+  const title = String(p.raw_text || "").replace(/\s+/g, " ").trim().slice(0, 40);
+  const loc = [p.province, p.city, p.district].filter(Boolean).join(" ");
+  const price = Number(p.salary) > 0 ? `${p.salary}元/月` : (Number(p.price) > 0 ? `${p.price}元` : "");
+  const sub = [loc || "未知地区", price, p.phone_masked || ""].filter(Boolean).join(" · ");
+
+  const target = {
+    id: p._id,
+    type: p.data_type || "",
+    title: `【${typeName}】${title}`,
+    sub,
+  };
+  // 转发需要正文
+  if (meta.action === "forward") {
+    target.content = buildDetailText(p, typeName);
+  }
+  // 置顶天数（1/3/7/30，默认 7）
+  let days = 7;
+  if (meta.action === "top") {
+    const d = parseInt(a.days, 10);
+    days = [1, 3, 7, 30].indexOf(d) >= 0 ? d : 7;
+  }
+
+  return {
+    title: `${meta.label}确认`,
+    blocks: [
+      { type: "text", text: `已定位到 1 条，请确认后执行${meta.label}：` },
+    ],
+    needConfirm: true,
+    action: meta.action,
+    actionLabel: meta.label,
+    days: meta.action === "top" ? days : undefined,
+    target,
+  };
+}
+
 // ==================== 广告管理（查询 + 上下线） ====================
 
 // 广告 → 列表行对象
@@ -793,11 +1872,16 @@ async function handleAdToggle(intent) {
     return { title: "广告管理", blocks: [{ type: "text", text: "未定位到要操作的广告，请提供广告标题（如「包子快讯」）或广告位" }] };
   }
 
-  // 批量更新状态
+  // 批量更新状态（写库，必须 try/catch：失败要明确告知，不能让用户误以为已生效）
   const ids = found.map((a) => a._id);
-  await db.collection(ADS).where({ _id: _.in(ids) }).update({
-    data: { status: targetStatus, updated_at: Date.now() },
-  });
+  try {
+    await db.collection(ADS).where({ _id: _.in(ids) }).update({
+      data: { status: targetStatus, updated_at: Date.now() },
+    });
+  } catch (e) {
+    console.error("[adminChat] 广告状态更新失败:", e && e.errMsg);
+    return { title: "广告管理", blocks: [{ type: "text", text: "更新广告状态失败，请稍后重试。" }] };
+  }
 
   const verb = targetStatus === "online" ? "上线" : "下线";
   const items = found.map((a) => ({
@@ -938,6 +2022,38 @@ function buildMemoryBlock(mem) {
   return parts.length ? `【管理员偏好（越用越懂）】\n${parts.join("\n")}` : "";
 }
 
+// ==================== 自由闲聊模式（无限制测试） ====================
+// 与「深度思考」不同：不注入任何系统能力文档、不限定角色、不做意图识别，
+// 直接把用户输入丢给 DeepSeek 原样回复，用于测试模型能力 / 闲聊。
+// 入参：{ question, history(可选) }
+async function handleFreeChat(question, history) {
+  const apiKey = process.env.DEEPSEEK_API_KEY;
+  if (!apiKey) {
+    return fail("未配置 DEEPSEEK_API_KEY，无法使用闲聊模式", "NO_API_KEY");
+  }
+  const historySafe = Array.isArray(history) ? history.slice(-10) : [];
+  try {
+    const reply = await callDeepSeek(
+      [
+        { role: "system", content: "你是一个乐于助人的 AI 助手。" },
+        ...historySafe,
+        { role: "user", content: question },
+      ],
+      0.7,
+      2000
+    );
+    const text = String(reply || "").trim() || "（无回复）";
+    return ok({
+      title: "AI 闲聊",
+      blocks: [{ type: "text", text }],
+      mode: "freeChat",
+    });
+  } catch (e) {
+    console.error("[adminChat freeChat] 调用失败:", e && e.message);
+    return fail("闲聊模式调用失败：" + (e && e.message ? e.message : e), "FREE_CHAT_FAILED");
+  }
+}
+
 // ==================== AI 接管模式 ====================
 async function callDeepSeek(messages, temperature, maxTokens) {
   const apiKey = process.env.DEEPSEEK_API_KEY;
@@ -952,6 +2068,230 @@ async function callDeepSeek(messages, temperature, maxTokens) {
   return (res.data && res.data.choices && res.data.choices[0] && res.data.choices[0].message && res.data.choices[0].message.content) || "";
 }
 
+// 安全解析 AI 返回的 JSON（多级降级，不依赖任何厂商私有参数 → 换模型也适用）
+// ① 直接 JSON.parse（AI 按要求只输出 JSON 时走这里）
+// ② 剥掉 ```json ... ``` 代码块后再解析
+// ③ 正则抠第一个「平衡的」{...} 再解析（比贪婪匹配更稳，避免多个 JSON 时吃掉多余内容）
+// 全部失败返回 null（由调用方决定降级策略）
+function safeParseJSON(text) {
+  const s = String(text == null ? "" : text).trim();
+  if (!s) return null;
+  // ① 直接解析
+  try { return JSON.parse(s); } catch (e) { /* 继续降级 */ }
+  // ② 剥 markdown 代码块
+  const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence && fence[1]) {
+    try { return JSON.parse(fence[1].trim()); } catch (e) { /* 继续降级 */ }
+  }
+  // ③ 扫描第一个「平衡括号」的 JSON 片段
+  const start = s.indexOf("{");
+  if (start >= 0) {
+    let depth = 0, inStr = false, esc = false;
+    for (let i = start; i < s.length; i++) {
+      const ch = s[i];
+      if (inStr) {
+        if (esc) esc = false;
+        else if (ch === "\\") esc = true;
+        else if (ch === '"') inStr = false;
+        continue;
+      }
+      if (ch === '"') inStr = true;
+      else if (ch === "{") depth += 1;
+      else if (ch === "}") {
+        depth -= 1;
+        if (depth === 0) {
+          try { return JSON.parse(s.slice(start, i + 1)); } catch (e) { return null; }
+        }
+      }
+    }
+  }
+  return null;
+}
+
+// ==================== 批量插入帖子（管理员「＋」按钮） ====================
+// 流程两段式（管理员确认后才真正落库）：
+//   ① analyzeInsert：AI 把一段自然语言切成 N 条帖子，识别字段 → 返回预览（不落库）
+//   ② confirmInsert：管理员确认后，逐条落库（approved=true 已过审）
+// 字段清洗复用 adminAuth 的 sanitizeFields 同款口径（白名单 + 类型校验 + 脱敏自动补）。
+
+// 师傅类型枚举（与 aiAnalyzePost / recruit 频道一致，role_id 1-14）
+const INSERT_ROLE_MAP = {
+  1: "包子师傅", 2: "二把手", 3: "售卖", 4: "夫妻工", 5: "学徒",
+  6: "全能面点师", 7: "生煎师傅", 8: "顶班师傅", 9: "打杂",
+  10: "烧麦师傅", 11: "油炸", 12: "收银", 13: "店长", 14: "其他",
+};
+
+// 帖子字段白名单 + 类型（与 adminAuth.sanitizeFields 对齐）
+const INSERT_ALLOWED_FIELDS = [
+  "data_type", "province", "province_code", "city", "city_code",
+  "district", "district_code", "address",
+  "raw_text", "content", "phone", "phone_masked", "contact", "username",
+  "image", "credit", "published_at", "source", "approved", "needs_review", "tags",
+  "role", "role_id", "salary",
+  "salary_expect", "salary_note", "availability", "service_area", "want_terms",
+  "price", "monthly_rent", "area_sqm", "daily_revenue", "has_equipment", "terms",
+  "rent_max", "area_min", "cond",
+  "from_place", "to_place", "depart_time", "depart_deadline", "seats", "remark",
+];
+const INSERT_NUMBER_FIELDS = [
+  "salary", "salary_expect", "price", "monthly_rent", "area_sqm",
+  "daily_revenue", "rent_max", "area_min", "cond", "role_id", "credit", "seats",
+];
+const INSERT_BOOL_FIELDS = ["has_equipment", "approved", "needs_review"];
+const INSERT_ARRAY_FIELDS = ["want_terms", "terms", "tags"];
+
+// 清洗单条帖子字段（白名单 + 类型校验 + 脱敏自动补 + approved 同步）
+function sanitizeInsertFields(input) {
+  const out = {};
+  if (!input || typeof input !== "object") return out;
+  for (const k of INSERT_ALLOWED_FIELDS) {
+    const v = input[k];
+    if (v === undefined || v === null || v === "") continue;
+    if (INSERT_ARRAY_FIELDS.indexOf(k) >= 0) {
+      out[k] = Array.isArray(v) ? v : String(v).split(/[,，]/).map((s) => s.trim()).filter(Boolean);
+      continue;
+    }
+    if (INSERT_BOOL_FIELDS.indexOf(k) >= 0) {
+      out[k] = v === true || v === "true" || v === 1 || v === "1";
+      continue;
+    }
+    if (INSERT_NUMBER_FIELDS.indexOf(k) >= 0) {
+      const n = Number(v);
+      if (!isNaN(n)) out[k] = n;
+      continue;
+    }
+    out[k] = v;
+  }
+  // approved 权威，反向推导 needs_review
+  if (out.approved !== undefined) out.needs_review = !out.approved;
+  else if (out.needs_review !== undefined) out.approved = !out.needs_review;
+  // 求职帖 salary = salary_expect 冗余
+  if (out.salary_expect !== undefined) out.salary = out.salary_expect;
+  // 只填 phone 时自动补脱敏号
+  if (out.phone && !out.phone_masked) {
+    out.phone_masked = String(out.phone).replace(/^(\d{3})\d{4}(\d{4})$/, "$1****$2");
+  }
+  if (out.published_at === undefined) out.published_at = Date.now();
+  return out;
+}
+
+// ① analyzeInsert：AI 把整段文本切成 N 条帖子，识别字段，返回预览（不落库）
+async function handleAnalyzeInsert(text) {
+  const s = String(text || "").trim();
+  if (!s) return fail("请输入要插入的内容", "EMPTY_INPUT");
+  if (s.length > 20000) return fail("内容过长，请分批插入（单次不超过 20000 字）", "TOO_LONG");
+
+  const system = `你是包子行业信息平台的发帖录入助手。管理员会粘贴一段「整理好的信息」（可能包含 1 条或多条帖子，用自然语言描述），
+你需要把它【切分成独立的一条条帖子】，并为每条识别结构化字段。
+
+【信息类型 data_type 枚举】
+recruit=招工, jobseek=求职, transfer=转让, want_shop=求店, equip_sell=设备出售, equip_buy=设备求购, carpool_car=车找人, carpool_person=人找车, other=其他
+
+【师傅类型 role 枚举（role_id）】
+包子师傅=1, 二把手=2, 售卖=3, 夫妻工=4, 学徒=5, 全能面点师=6, 生煎师傅=7, 顶班师傅=8, 打杂=9, 烧麦师傅=10, 油炸=11, 收银=12, 店长=13, 其他=14
+
+【字段定义】
+- data_type: 信息类型（从上面枚举选）
+- raw_text: 这条帖子的原始描述文字（保留原文，用于 C 端展示）
+- phone: 11 位手机号（若原文有，务必提取；没有则省略）
+- city: 城市名（不带"市"字，如"深圳"；识别不到则省略）
+- role: 师傅类型中文名（从 role 枚举选，招工/求职才需要）
+- role_id: 对应数字（1-14）
+- salary: 薪资数字（元/月，招工给价或求职期望）
+- price: 转让费/价格（元，转让/求店/设备类）
+- monthly_rent: 月租（元/月）
+- area_sqm: 面积（平方米）
+- daily_revenue: 日营业额（元/天）
+- want_terms: 诉求标签数组（如["包吃住","单间"]）
+- availability: 到岗方式（长期/短期/顶班/随时可到）
+
+【规则】
+1. 输出必须是合法 JSON 数组，每个元素是一条帖子对象，只包含上面定义的字段。
+2. 只输出 JSON，不要任何解释文字、不要 Markdown、不要代码块。
+3. 识别不到的字段【不要输出】，宁可缺也别编造。
+4. 若管理员粘贴的是一整段含多条信息的话，务必【切分成多条】，每条一个对象。
+5. "万"换算成元（"8000"=8000，"1.2万"=12000）。
+
+【输出示例】
+[{"data_type":"recruit","raw_text":"深圳招大师傅，月薪8500，包吃住，电话13800138000","phone":"13800138000","city":"深圳","role":"包子师傅","role_id":1,"salary":8500,"want_terms":["包吃住"]}]`;
+
+  let parsed;
+  try {
+    const raw = await callDeepSeek(
+      [
+        { role: "system", content: system },
+        { role: "user", content: s },
+      ],
+      0.1,
+      3000
+    );
+    parsed = safeParseJSON(raw);
+    if (!parsed || !Array.isArray(parsed)) {
+      // 有时模型包了一层 {items:[...]}
+      if (parsed && Array.isArray(parsed.items)) parsed = parsed.items;
+      else throw new Error("AI 返回不是数组");
+    }
+  } catch (e) {
+    console.error("[adminChat] analyzeInsert 解析失败:", e && e.message);
+    return fail("AI 识别失败，请检查粘贴内容或稍后重试", "ANALYZE_FAIL");
+  }
+
+  // 清洗 + 归一化每条的 data_type
+  const items = [];
+  for (const it of parsed) {
+    const cleaned = sanitizeInsertFields(it);
+    // data_type 必须合法，否则跳过
+    if (!cleaned.data_type || !TYPE_NAMES[cleaned.data_type]) {
+      cleaned.data_type = "other";
+    }
+    // 至少要有描述或电话，否则视为无效条目
+    if (!cleaned.raw_text && !cleaned.phone) continue;
+    // 标记缺失的关键字段，供前端标红
+    cleaned._missing = [];
+    if (!cleaned.phone) cleaned._missing.push("phone");
+    if (!cleaned.city) cleaned._missing.push("city");
+    if (!cleaned.role && (cleaned.data_type === "recruit" || cleaned.data_type === "jobseek")) cleaned._missing.push("role");
+    items.push(cleaned);
+  }
+
+  if (!items.length) return fail("没有识别到有效帖子，请检查内容格式", "NO_ITEMS");
+  return ok({ items, count: items.length });
+}
+
+// ② confirmInsert：管理员确认后逐条落库（approved=true 已过审）
+// openid：当前操作管理员的 openid（归属到管理员本人，便于追溯是谁插入的）
+async function handleConfirmInsert(items, openid) {
+  if (!Array.isArray(items) || !items.length) return fail("没有要插入的数据", "EMPTY_ITEMS");
+  const results = [];
+  let successCount = 0;
+  for (const it of items) {
+    try {
+      const cleaned = sanitizeInsertFields(it);
+      // 强制已过审上线（管理员确认插入即上线）
+      cleaned.approved = true;
+      cleaned.needs_review = false;
+      cleaned.source = cleaned.source || "admin_batch";
+      // 归属到当前操作管理员（openid 双字段并存，与 publishPost/adminAuth 口径一致）
+      if (openid) {
+        cleaned._openid = openid;
+        cleaned.userid = openid;
+      }
+      if (!cleaned.data_type || !TYPE_NAMES[cleaned.data_type]) cleaned.data_type = "other";
+      if (!cleaned.raw_text && !cleaned.phone) {
+        results.push({ ok: false, err: "缺描述和电话" });
+        continue;
+      }
+      const res = await db.collection(COLLECTION).add({ data: cleaned });
+      results.push({ ok: true, _id: res && res._id });
+      successCount += 1;
+    } catch (e) {
+      console.error("[adminChat] confirmInsert 单条失败:", e && e.errMsg || e && e.message);
+      results.push({ ok: false, err: e && e.errMsg || e && e.message || "写入失败" });
+    }
+  }
+  return ok({ total: items.length, successCount, failedCount: items.length - successCount, results });
+}
+
 async function handleDeepThink(question, history, event) {
   const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) {
@@ -963,13 +2303,31 @@ async function handleDeepThink(question, history, event) {
   const glossary = DOMAIN_GLOSSARY.join("\n");
   const historySafe = Array.isArray(history) ? history.slice(-6) : [];
 
-  // 上下文：上一轮的查询工具 + 参数（前端开启"上下文"开关时传入）
+  // ===== 会话记忆（本页连续对话） =====
+  // 前端打开页面时生成 sessionId 并每次带上；此处读取，用于注入 Stage1 并驱动结果集链。
+  const sessionId = String((event && event.sessionId) || "").trim();
+  const session = sessionId ? await loadSession(sessionId) : null;
+
+  // 上下文：优先用【会话记忆】；无 sessionId 时回退到旧的 event.context（兼容旧前端）
   const ctx = (event && event.context) || null;
+  // 会话里最新的结果集 id（结果集链栈顶）——本轮 aggregate(onPrevious) 自动关联它
+  let ctxResultSetId = null;
+  if (session && Array.isArray(session.resultStack) && session.resultStack.length) {
+    ctxResultSetId = session.resultStack[session.resultStack.length - 1].resultSetId;
+  } else if (ctx && ctx.resultSetId) {
+    ctxResultSetId = ctx.resultSetId;
+  }
 
   // 上下文摘要：注入 Stage1，让 DeepSeek 知道"这是延续上一轮"
-  const ctxBlock = ctx
-    ? `\n\n【上下文继承】管理员在连续追问，上一轮查询是：\n工具：${ctx.tool || "search"}\n参数：${JSON.stringify(ctx.args || {})}\n本轮若是对上一轮【追加/收紧筛选条件】（如"8000元以内""那北京的呢"），请【继承上一轮的 tool 与 args】，只在其基础上追加或覆盖本轮提到的新条件；若本轮是全新的查询主题（换了信息类型），则不要继承。`
-    : "";
+  const ctxBlock = session
+    ? buildSessionBlock(session)
+    : (ctx
+      ? `\n\n【上下文继承】管理员在连续追问，上一轮查询是：\n工具：${ctx.tool || "search"}\n参数：${JSON.stringify(ctx.args || {})}\n`
+        + (ctx.resultSetId ? `上一轮结果集ID：${ctx.resultSetId}（上一轮共返回 ${ctx.resultCount || "若干"} 条，可被"这里面"指代）\n` : "")
+        + `本轮若是对上一轮【追加/收紧筛选条件】（如"8000元以内""那北京的呢"），请【继承上一轮的 tool 与 args】，只在其基础上追加或覆盖本轮提到的新条件；\n`
+        + `本轮若是用「这里面/这些/刚才那些」指代上一轮结果做二次统计，请用 aggregate 并带 onPrevious=true（系统会自动关联上一轮结果集，无需你填 resultSetId）。\n`
+        + `若本轮是全新的查询主题（换了信息类型），则不要继承。`
+      : "");
 
   // 别名硬命中：先用已沉淀的快捷别名对问题文本做一次替换（不依赖模型自觉）
   // 例如「收店」已沉淀为 want_shop，则问题里「收店」直接替换成「求店」，Stage1 更稳
@@ -985,17 +2343,23 @@ async function handleDeepThink(question, history, event) {
     }
   }
 
+  // ===== 错误库：注入历史误判经验（越测越聪明） =====
+  const mistakes = await loadMistakes();
+  const mistakeBlock = buildMistakeBlock(mistakes);
+
   // ===== Stage1：AI 理解问题 + 选工具 =====
   const stage1System =
     SYSTEM_CAPABILITY_DOC +
     "\n\n【行业黑话对齐】\n" + glossary +
     (memBlock ? "\n\n" + memBlock : "") +
+    (mistakeBlock || "") +
     ctxBlock +
     "\n\n现在请判断用户这句话该调哪个工具，只输出一个 JSON。";
 
   let plan;
+  let raw = "";   // 提到外层作用域：answer 分支兜底文案会用（原来在 try 内 const，块外不可见）
   try {
-    const raw = await callDeepSeek(
+    raw = await callDeepSeek(
       [
         { role: "system", content: stage1System },
         ...historySafe,
@@ -1004,8 +2368,8 @@ async function handleDeepThink(question, history, event) {
       0.1,
       400
     );
-    const m = String(raw || "").trim().match(/\{[\s\S]*\}/);
-    plan = JSON.parse(m ? m[0] : raw);
+    plan = safeParseJSON(raw);
+    if (!plan) throw new Error("Stage1 未返回合法 JSON");
     console.log("[adminChat deepThink] Stage1 输出:", raw);
   } catch (e) {
     console.error("[adminChat deepThink] Stage1 失败:", e);
@@ -1022,10 +2386,34 @@ async function handleDeepThink(question, history, event) {
     }
   }
 
+  // 纠正识别②：管理员反馈「AI 答错了」→ 自动写错误库（越用越聪明）
+  // 触发：用户话里含「不对/错了/应该是/不是这样/搞错」等纠正语义（Stage1 输出 correction.isMistake）。
+  // 记录：上一轮的原问题 + 上一轮 AI 实际用的工具 + 管理员指出的正确做法。
+  if (plan && plan.correction && plan.correction.isMistake) {
+    try {
+      const prev = (session && Array.isArray(session.turns) && session.turns.length)
+        ? session.turns[session.turns.length - 1] : null;
+      if (prev) {
+        await saveMistake({
+          question: prev.q,                                  // 上一轮的原问题（场景）
+          wrongTool: prev.tool || "",                        // 上一轮 AI 实际选了什么
+          wrongArgs: prev.args || null,                      // 上一轮实际参数
+          expectTool: plan.correction.expectTool || "",      // 管理员指出的正确工具
+          expectArgs: plan.correction.expectArgs || null,    // 正确参数
+          lesson: String(plan.correction.lesson || question || "").slice(0, 300),  // 教训（管理员原话）
+          source: "user_feedback",                           // 来源：用户反馈
+        });
+      }
+    } catch (e) {
+      console.error("[adminChat] 记录用户反馈误判失败:", e && e.message);
+    }
+  }
+
   // ===== 执行工具 =====
   let toolResult = null;
   let toolTitle = "查询结果";
 
+  try {
   switch (plan.tool) {
     case "stats": toolResult = await handleStats(); toolTitle = toolResult.title; break;
     case "pending": toolResult = await handlePending({ page: (plan.args && plan.args.page) || 1 }); toolTitle = "待审核帖子"; break;
@@ -1038,6 +2426,60 @@ async function handleDeepThink(question, history, event) {
     case "ads": toolResult = await handleAds({ slot: plan.args && plan.args.slot, status: plan.args && plan.args.status, page: (plan.args && plan.args.page) || 1 }); toolTitle = toolResult.title; break;
     case "adToggle": toolResult = await handleAdToggle({ op: plan.args && plan.args.op, adId: plan.args && plan.args.adId, slot: plan.args && plan.args.slot, adTitle: plan.args && plan.args.adTitle }); toolTitle = toolResult.title; break;
     case "phone": toolResult = await handlePhone({ phone: plan.args && plan.args.phone, page: (plan.args && plan.args.page) || 1 }); toolTitle = "号码反查"; break;
+    case "aggregate": {
+      const aggArgs = Object.assign({}, plan.args || {});
+      // 服务端自动补 resultSetId：AI 只要给 onPrevious=true，就从上下文取上一轮结果集 id，
+      // 不要求模型自行填 id（更稳，模型也不必知道 id）。
+      // 支持 stackIndex：0=最早那批（"最开始那批"），默认=最新（"这里面"）。
+      if (aggArgs.onPrevious && !aggArgs.resultSetId) {
+        if (session && Array.isArray(session.resultStack) && session.resultStack.length) {
+          const stack = session.resultStack;
+          const idx = aggArgs.stackIndex === 0 ? 0 : (stack.length - 1);
+          aggArgs.resultSetId = stack[idx] && stack[idx].resultSetId;
+        } else if (ctxResultSetId) {
+          aggArgs.resultSetId = ctxResultSetId;
+        }
+      }
+      // 供 resolveResultSetRef 兜底（按栈位置解析）
+      if (sessionId) aggArgs.__sessionId = sessionId;
+      toolResult = await handleAggregate(aggArgs);
+      toolTitle = toolResult.title || "聚合统计";
+      // 回写，便于前端记录上下文/调试（去掉内部字段）
+      delete aggArgs.__sessionId;
+      plan.args = aggArgs;
+      break;
+    }
+    // ===== 操作类工具：定位目标后直接返回「待确认」，不做 Stage2 分析 =====
+    case "audit_pass":
+    case "audit_offline":
+    case "top_post":
+    case "forward_post": {
+      const opResult = await handleOpLocate(plan.tool, plan.args || {});
+      await remember(question, plan.tool, plan.args || {});
+      // 定位失败/多条：把提示作为普通结果返回，由 AI 语境自然呈现
+      if (opResult.opFail) {
+        return ok({
+          title: opResult.title,
+          blocks: opResult.blocks,
+          mode: "deepThink",
+          tool: plan.tool,
+          toolArgs: plan.args || {},
+        });
+      }
+      // 定位成功：返回待确认结构（前端弹确认框），附一条简短说明
+      return ok({
+        title: opResult.title,
+        blocks: opResult.blocks,
+        mode: "deepThink",
+        tool: plan.tool,
+        toolArgs: plan.args || {},
+        needConfirm: true,
+        action: opResult.action,
+        actionLabel: opResult.actionLabel,
+        days: opResult.days,
+        target: opResult.target,
+      });
+    }
     case "search": {
       const intent = detectIntent(question, 1);
       const args = plan.args || {};
@@ -1045,7 +2487,10 @@ async function handleDeepThink(question, history, event) {
       if (args.dataType) intent.dataType = args.dataType;
       if (args.city) intent.city = args.city;
       if (args.keyword) intent.keyword = args.keyword;
-      if (args.limit) intent.limit = args.limit;
+      // 条数：AI 明确给了 limit 就用 AI 的（封顶 MAX_LIMIT），否则保持 detectIntent 的结果
+      if (args.limit != null) {
+        intent.limit = Math.min(MAX_LIMIT, Math.max(1, parseInt(args.limit, 10) || DEFAULT_LIMIT));
+      }
       // 薪资范围
       if (args.salaryMax != null) intent.salaryMax = Number(args.salaryMax);
       if (args.salaryMin != null) intent.salaryMin = Number(args.salaryMin);
@@ -1126,28 +2571,28 @@ async function handleDeepThink(question, history, event) {
         mode: "deepThink",
       });
   }
+  } catch (e) {
+    // 工具执行失败兜底：返回友好提示，而不是让整个云函数抛错（500）
+    console.error("[adminChat deepThink] 工具执行失败:", (plan && plan.tool), e && (e.errMsg || e.message));
+    return ok({
+      title: "查询失败",
+      blocks: [{ type: "text", text: "查询时出错，请重试或换个问法。" }],
+      mode: "deepThink",
+      tool: plan.tool,
+      toolArgs: (plan && plan.args) || {},
+    });
+  }
 
   // 记录偏好（非 answer 的查询类）
   await remember(question, plan.tool, plan.args || {});
 
-  // ===== Stage2：AI 基于真实数据写总结 =====
+  // ===== Stage2：AI 基于真实数据写总结（分批摘要 → 二次汇总） =====
+  // 大数据量（如 100/200 条列表）不能一次塞给模型，改为：
+  //   ① 把列表按 ANALYZE_BATCH 条一批，逐批交给「分析 AI」写要点；
+  //   ② 再把各批要点交给「分析 AI」做二次汇总，产出最终结论。
   let insight = "";
   try {
-    const dataSummary = JSON.stringify(toolResult.blocks || []).slice(0, 6000);
-    const stage2System =
-      "你是「包子一哥传媒」后台管理 AI 助手。以下是刚查到的真实数据（结构化卡片 JSON），请用中文给管理员写一段总结。\n" +
-      "要求：1) 严禁编造数字，只引用 JSON 内容；2) 2-5 个短句，口语化；3) 纯文本，禁止任何 Markdown（#、**、-、表格）；4) 数据为空就直说「暂无数据」。";
-    insight = (await callDeepSeek(
-      [
-        { role: "system", content: stage2System },
-        ...historySafe,
-        { role: "user", content: question },
-        { role: "assistant", content: `【${toolTitle} 真实数据】\n${dataSummary}` },
-        { role: "user", content: "请基于以上真实数据写最终回复。" },
-      ],
-      0.5,
-      500
-    )).trim();
+    insight = await analyzeToolResult(toolResult, toolTitle, question, historySafe);
   } catch (e) {
     console.error("[adminChat deepThink] Stage2 失败:", e);
   }
@@ -1158,7 +2603,129 @@ async function handleDeepThink(question, history, event) {
     blocks.push({ type: "section", title: toolTitle });
     blocks.push(...toolResult.blocks);
   }
-  return ok({ title: toolTitle, blocks, mode: "deepThink", tool: plan.tool, toolArgs: plan.args || {} });
+
+  // 结果集记忆：列表类查询（含结果）落一份快照，返回 resultSetId 给前端。
+  // 注意：aggregate 走 aggregateOnResultSet 时，toolResult 里可能已带「命中集合」的新结果集
+  //       （结果集链，A→B→C），此处优先采用它，避免重复落库、保证链是对的。
+  let resultSetId = (toolResult && toolResult.resultSetId) || null;
+  let resultCount = (toolResult && toolResult.resultCount) || 0;
+  let derivedDesc = (toolResult && toolResult.__derivedDesc) || "";
+  if (!resultSetId) {
+    try {
+      const list = extractListForResultSet(toolResult);
+      if (list.length) {
+        resultSetId = await saveResultSet(question, plan.tool, plan.args || {}, list);
+        resultCount = list.length;
+      }
+    } catch (e) {
+      console.error("[adminChat] 保存结果集失败:", e && e.message);
+    }
+  }
+
+  // ===== 会话记忆收尾：合并条件、push 结果集链、记轮次 =====
+  if (session && sessionId) {
+    try {
+      updateSession(session, {
+        question,
+        answerText: insight,
+        tool: plan.tool,
+        args: plan.args || {},
+        resultSet: resultSetId ? { resultSetId, count: resultCount, desc: derivedDesc || question.slice(0, 30) } : null,
+      });
+      await saveSession(session);
+      await pruneSessions();   // 必须 await：见 pruneMistakes 说明
+    } catch (e) {
+      console.error("[adminChat] 会话保存失败:", e && e.message);
+    }
+  }
+
+  const payload = { title: toolTitle, blocks, mode: "deepThink", tool: plan.tool, toolArgs: plan.args || {} };
+  if (resultSetId) {
+    payload.resultSetId = resultSetId;
+    payload.resultCount = resultCount;
+  }
+  return ok(payload);
+}
+
+// 从工具结果里提取「可指代的结果集」（列表块的原始帖子数据）
+// 说明：列表 items 是 postToItem 的产物（无原始字段），故这里以「该结果对应的 toolResult.rawList」为准。
+function extractListForResultSet(toolResult) {
+  if (!toolResult) return [];
+  if (Array.isArray(toolResult.rawList) && toolResult.rawList.length) return toolResult.rawList;
+  return [];
+}
+
+// Stage2 分析汇总：分批摘要 + 二次汇总
+// - 小数据量（列表条目 ≤ ANALYZE_BATCH）：单次调用直接总结（与旧行为一致）
+// - 大数据量：分批摘要，再把摘要合并做二次汇总（解决 100/200 条塞不进一次请求）
+async function analyzeToolResult(toolResult, toolTitle, question, historySafe) {
+  const stage2System =
+    "你是「包子一哥传媒」后台管理 AI 助手。以下是刚查到的真实数据（结构化卡片 JSON），请用中文给管理员写一段总结。\n" +
+    "要求：1) 严禁编造数字，只引用 JSON 内容；2) 2-5 个短句，口语化；3) 纯文本，禁止任何 Markdown（#、**、-、表格）；4) 数据为空就直说「暂无数据」。";
+
+  // 取出第一个列表块（最常见的大数据载体）
+  const blocks = (toolResult && toolResult.blocks) || [];
+  const listBlk = blocks.find((b) => b && b.type === "list" && Array.isArray(b.items));
+  const items = listBlk ? listBlk.items : [];
+
+  // 小数据量：单次总结（保留原行为，省时省 token）
+  if (items.length <= ANALYZE_BATCH) {
+    const dataSummary = JSON.stringify(blocks).slice(0, 6000);
+    return (await callDeepSeek(
+      [
+        { role: "system", content: stage2System },
+        ...historySafe,
+        { role: "user", content: question },
+        { role: "assistant", content: `【${toolTitle} 真实数据】\n${dataSummary}` },
+        { role: "user", content: "请基于以上真实数据写最终回复。" },
+      ],
+      0.5,
+      500
+    )).trim();
+  }
+
+  // 大数据量：分批摘要
+  const batchSystem =
+    "你是数据分析助手。下面是包子行业平台的一批信息（JSON 数组），请用 2-4 句中文提炼这批的要点（涉及数量、地区、薪资/价格分布等）。\n" +
+    "要求：1) 严禁编造数字，只引用给定内容；2) 纯文本，禁止 Markdown；3) 不要罗列每一条，只做归纳。";
+  const summaries = [];
+  const total = items.length;
+  for (let i = 0; i < total; i += ANALYZE_BATCH) {
+    const chunk = items.slice(i, i + ANALYZE_BATCH);
+    const compact = JSON.stringify(chunk.map((it) => ({
+      text: it.text, sub: it.sub, tag: it.tag,
+    })));
+    try {
+      const part = (await callDeepSeek(
+        [
+          { role: "system", content: batchSystem },
+          { role: "user", content: `第 ${Math.floor(i / ANALYZE_BATCH) + 1} 批（第 ${i + 1}~${i + chunk.length} 条，共 ${total} 条）：\n${compact}` },
+        ],
+        0.3,
+        400
+      )).trim();
+      if (part) summaries.push(part);
+    } catch (e) {
+      console.error("[adminChat] 分批摘要失败:", e && e.message);
+    }
+  }
+
+  if (!summaries.length) return "";
+
+  // 二次汇总：把各批要点合并成最终结论
+  const finalSystem =
+    stage2System +
+    `\n注意：这是一份【${total} 条】的大批量数据，已分 ${summaries.length} 批做过要点提炼，以下是各批要点，请你综合它们写最终总结。`;
+  return (await callDeepSeek(
+    [
+      { role: "system", content: finalSystem },
+      { role: "user", content: question },
+      { role: "assistant", content: `【${toolTitle} 分批次要点】\n${summaries.map((s, i) => `${i + 1}. ${s}`).join("\n")}` },
+      { role: "user", content: "请综合以上各批要点写最终回复。" },
+    ],
+    0.5,
+    600
+  )).trim();
 }
 
 // 深度思考翻页直查：复用上次选定的工具，只改 page，不重新做意图识别
@@ -1186,7 +2753,8 @@ async function handleDeepThinkPage(tool, args, page) {
         cityCode: base.cityCode || null,
         isProvince: base.isProvince || false,
         keyword: a.keyword || "",
-        limit: a.limit || 10,
+        // 翻页沿用上一轮的条数（AI 给的 limit 优先，封顶 MAX_LIMIT），无则默认 5
+        limit: Math.min(MAX_LIMIT, Math.max(1, parseInt(a.limit, 10) || DEFAULT_LIMIT)),
         salaryMin: a.salaryMin != null ? Number(a.salaryMin) : null,
         salaryMax: a.salaryMax != null ? Number(a.salaryMax) : null,
         priceMin: a.priceMin != null ? Number(a.priceMin) : null,
@@ -1225,9 +2793,76 @@ exports.main = async (event = {}) => {
     return fail("未授权：仅管理员可用", "AUTH_FAILED");
   }
 
+  // ★ 离开管理员 AI 页面时清理本页产生的结果集（用完即清，避免云端堆积）
+  // 入参：{ action:"cleanupResultSets", resultSetIds:[...] }
+  if (event.action === "cleanupResultSets") {
+    const ids = Array.isArray(event.resultSetIds) ? event.resultSetIds.filter(Boolean).slice(0, 200) : [];
+    if (!ids.length) return ok({ cleaned: 0 });
+    let cleaned = 0;
+    try {
+      const r = await db.collection(AI_RESULT_SETS).where({ _id: _.in(ids) }).remove();
+      cleaned = (r && r.stats && r.stats.removed) || 0;
+    } catch (e) {
+      console.error("[adminChat] cleanupResultSets 失败:", e && e.errMsg);
+    }
+    return ok({ cleaned });
+  }
+
+  // ★ 关闭管理员 AI 页面时清理会话（再打开即新对话）
+  // 入参：{ action:"cleanupSession", sessionId:"..." }
+  if (event.action === "cleanupSession") {
+    const sid = String(event.sessionId || "").trim();
+    if (!sid) return ok({ cleaned: 0 });
+    let cleaned = 0;
+    try {
+      const r = await db.collection(AI_SESSIONS).doc(sid).remove();
+      cleaned = (r && r.stats && r.stats.removed) || 0;
+    } catch (e) {
+      console.error("[adminChat] cleanupSession 失败:", e && e.errMsg);
+    }
+    return ok({ cleaned });
+  }
+
+  // ★ 错误库：记录一条误判经验（让 AI 越测越聪明）
+  // 入参：{ action:"saveMistake", question, wrongTool, wrongArgs, expectTool, expectArgs, lesson }
+  if (event.action === "saveMistake") {
+    const id = await saveMistake({
+      question: event.question, wrongTool: event.wrongTool, wrongArgs: event.wrongArgs,
+      expectTool: event.expectTool, expectArgs: event.expectArgs, lesson: event.lesson,
+      source: event.source,
+    });
+    return ok({ saved: !!id, id });
+  }
+
+  // ★ 错误库：查看已沉淀的经验
+  if (event.action === "listMistakes") {
+    try {
+      const r = await db.collection(AI_MISTAKES).orderBy("at", "desc")
+        .limit(Math.min(Number(event.limit) || 50, 100)).get();
+      return ok({ total: (r.data || []).length, items: r.data || [] });
+    } catch (e) {
+      return ok({ total: 0, items: [] });
+    }
+  }
+
+  // ★ 批量插入①：AI 分析一段文本 → 切成 N 条帖子 → 返回预览（不落库）
+  if (event.action === "analyzeInsert") {
+    return await handleAnalyzeInsert(event.text);
+  }
+
+  // ★ 批量插入②：管理员确认后逐条落库（approved=true 已过审，归属当前管理员 openid）
+  if (event.action === "confirmInsert") {
+    return await handleConfirmInsert(event.items, OPENID);
+  }
+
   const question = String(event.question || "").trim();
   if (!question) {
     return ok({ title: "管理员 AI 助手", blocks: buildGuideBlocks() });
+  }
+
+  // ★ 自由闲聊模式：不注入能力文档、不限定角色，直接原样回复（测试用）
+  if (event.freeChat) {
+    return await handleFreeChat(question, event.history || []);
   }
 
   // ★ 深度思考翻页直查：翻页时带 tool，跳过意图识别，直接查下一页
@@ -1242,7 +2877,7 @@ exports.main = async (event = {}) => {
 
   // ---- 规则模式 ----
   const intent = detectIntent(question, event.page);
-  console.log("[adminChat] 意图:", JSON.stringify(intent));
+  console.log("[adminChat] 规则模式 type:", intent.type, "| dataType:", intent.dataType);
 
   let result = { title: "查询结果", blocks: [] };
   try {

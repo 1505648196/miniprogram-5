@@ -1,6 +1,53 @@
 /* pages/chat/chat.wxss */
 /* 管理员 AI 对话页：自定义消息列表 + 结构化卡片 */
 
+/* ============ 操作确认框 ============ */
+.op-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+  padding: 8rpx 0;
+}
+.op-target {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+  background: #F6F7F9;
+  border-radius: 16rpx;
+  padding: 20rpx 24rpx;
+}
+.op-target-title {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #1A1A1A;
+  line-height: 1.4;
+}
+.op-target-sub {
+  font-size: 24rpx;
+  color: #888888;
+  line-height: 1.4;
+}
+.op-field {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+.op-field-label {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #1A1A1A;
+}
+.op-targets {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+.op-targets-tip {
+  font-size: 24rpx;
+  color: #D48806;
+  line-height: 1.5;
+}
+
 .chat-page {
   height: 100vh;
   background: #F6F6F6;
@@ -180,6 +227,29 @@
   display: flex;
   flex-direction: column;
   gap: 12rpx;
+}
+/* 一键复制全部栏 */
+.copy-all-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  padding: 12rpx 16rpx;
+  background: #FFF7E6;
+  border-radius: 12rpx;
+}
+.copy-all-hint {
+  font-size: 22rpx;
+  color: #B37F00;
+}
+.copy-all-btn {
+  font-size: 24rpx;
+  line-height: 1;
+  color: #FFFFFF;
+  background: #FF7A45;
+  padding: 14rpx 28rpx;
+  border-radius: 999rpx;
+  white-space: nowrap;
 }
 .card-list-item {
   display: flex;
@@ -374,6 +444,26 @@
   background-color: var(--td-brand-color-light, #f2f3ff);
 }
 
+/* 自由闲聊开关（圆形图标按钮，与深度思考并列，互斥） */
+.free-chat-block {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 60rpx;
+  height: 60rpx;
+  margin-right: 16rpx;
+  border-radius: 50%;
+  border: 2rpx solid var(--td-component-border, #e7e7e7);
+  color: var(--td-text-color-primary, #333333);
+  background: transparent;
+  flex-shrink: 0;
+}
+.free-chat-block.active {
+  border-color: var(--td-brand-color-light-active, #e0e7ff);
+  color: var(--td-brand-color, #0052d9);
+  background-color: var(--td-brand-color-light, #f2f3ff);
+}
+
 /* 上下文开关（圆形图标按钮，仅深度思考开启时显示） */
 .context-btn {
   width: 60rpx;
@@ -522,6 +612,11 @@
   color: #7C3AED;
   background-color: #F3EEFF;
 }
+.chat-page--deep .free-chat-block.active {
+  border-color: #7C3AED;
+  color: #7C3AED;
+  background-color: #F3EEFF;
+}
 .chat-page--deep .context-btn.active {
   border-color: #7C3AED;
   color: #7C3AED;
@@ -531,4 +626,98 @@
 /* 审核按钮：编辑(蓝)→紫蓝、置顶(紫)保持、下架(橙)保持（仅编辑按钮改色，其余语义色不变） */
 .chat-page--deep .audit-btn--edit {
   background: linear-gradient(135deg, #5B21B6 0%, #2563EB 100%);
+}
+
+/* ===== 批量插入帖子（「＋」悬浮按钮 + 弹窗） ===== */
+.insert-fab {
+  position: fixed;
+  right: 32rpx;
+  bottom: 220rpx;
+  width: 100rpx;
+  height: 100rpx;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #0052D9 0%, #003DA5 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8rpx 24rpx rgba(0, 82, 217, 0.4);
+  z-index: 100;
+}
+.insert-fab:active {
+  transform: scale(0.92);
+}
+
+.insert-panel {
+  min-height: 60vh;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  padding: 32rpx 32rpx calc(32rpx + env(safe-area-inset-bottom));
+  background: #FFFFFF;
+  border-radius: 32rpx 32rpx 0 0;
+}
+.insert-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20rpx;
+}
+.insert-title {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #1A1A1A;
+}
+.insert-close {
+  padding: 8rpx;
+}
+.insert-hint {
+  font-size: 24rpx;
+  color: #999999;
+  margin-bottom: 16rpx;
+  line-height: 1.5;
+}
+.insert-preview-hint {
+  font-size: 24rpx;
+  color: #E37318;
+  margin-bottom: 16rpx;
+  line-height: 1.5;
+}
+.insert-actions {
+  display: flex;
+  margin-top: 24rpx;
+}
+
+.insert-preview-list {
+  flex: 1;
+  min-height: 320rpx;
+  max-height: 52vh;
+}
+.insert-item {
+  padding: 20rpx 24rpx;
+  border: 1rpx solid #EEEEEE;
+  border-radius: 16rpx;
+  margin-bottom: 16rpx;
+  background: #FAFAFA;
+}
+.insert-item-head {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12rpx;
+}
+.insert-item-salary {
+  margin-left: 12rpx;
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #E37318;
+}
+.insert-item-text {
+  font-size: 26rpx;
+  color: #333333;
+  line-height: 1.5;
+  word-break: break-all;
+}
+.insert-item-meta {
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  color: #666666;
 }

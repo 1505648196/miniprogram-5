@@ -96,6 +96,8 @@ async function updateProfile(OPENID, event) {
       phone_verified: !!user.phone_verified,
       credit_score: Number(user.credit_score) || 100,
       membership: user.membership || "normal",
+      identities: Array.isArray(user.identities) ? user.identities : [],
+      identity_status: user.identity_status || "none",
     },
   };
 }
@@ -342,6 +344,8 @@ exports.main = async (event) => {
       phone_verified: !!user.phone_verified,
       credit_score: Number(user.credit_score) || 100,
       membership: user.membership || "normal",
+      identities: Array.isArray(user.identities) ? user.identities : [],
+      identity_status: user.identity_status || "none",
     },
   };
 };

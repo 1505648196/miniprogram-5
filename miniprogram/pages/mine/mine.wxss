@@ -167,39 +167,6 @@
 }
 
 /* ===== 我的交易 ===== */
-.trade .card-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 24rpx;
-}
-.trade-left {
-  display: flex;
-  flex-direction: column;
-  gap: 4rpx;
-}
-.trade-title {
-  font-size: 30rpx;
-  font-weight: 700;
-  color: #1A1A1A;
-}
-.trade-sub {
-  font-size: 22rpx;
-  color: #999999;
-}
-.trade-right {
-  display: flex;
-  align-items: center;
-  gap: 4rpx;
-}
-.trade-badge {
-  background: linear-gradient(90deg, #FF7A45 0%, #FFD666 100%);
-  color: #FFFFFF;
-  font-size: 22rpx;
-  font-weight: 700;
-  padding: 6rpx 18rpx;
-  border-radius: 999rpx;
-}
 .order-row {
   display: flex;
   justify-content: space-between;
@@ -312,96 +279,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-/* ===== 闲鱼回收（招回/卖等横滑卡） ===== */
-.recycle-head {
-  display: flex;
-  align-items: baseline;
-  gap: 12rpx;
-  margin-bottom: 16rpx;
-}
-.recycle-name {
-  font-size: 30rpx;
-  font-weight: 700;
-  color: #1A1A1A;
-}
-.recycle-sub {
-  font-size: 22rpx;
-  color: #FF7A45;
-}
-.recycle-row {
-  display: flex;
-  gap: 12rpx;
-}
-.recycle-card {
-  flex: 1;
-  background: #FFF1E8;
-  border-radius: 16rpx;
-  padding: 16rpx;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 200rpx;
-  position: relative;
-}
-.recycle-tag {
-  background: #FF7A45;
-  color: #FFFFFF;
-  font-size: 18rpx;
-  font-weight: 700;
-  padding: 2rpx 10rpx;
-  border-radius: 6rpx;
-  align-self: flex-start;
-}
-.recycle-name2 {
-  margin-top: 12rpx;
-  font-size: 24rpx;
-  color: #1A1A1A;
-  font-weight: 600;
-}
-.recycle-sub2 {
-  margin-top: 8rpx;
-  font-size: 20rpx;
-  color: #999999;
-}
-.recycle-coin {
-  color: #FF7A45;
-  font-weight: 700;
-  font-size: 26rpx;
-}
-.recycle-card.more {
-  background: #FAFAFA;
-  color: #999999;
-  font-size: 22rpx;
-}
-.recycle-more { font-size: 28rpx; }
-
-/* ===== 工具 5 宫格 ===== */
-.recycle-grid-row {
-  display: flex;
-  justify-content: space-between;
-}
-.recycle-grid-cell {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12rpx;
-}
-.recycle-grid-icon {
-  width: 96rpx;
-  height: 96rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #FAFAFA;
-  border-radius: 999rpx;
-}
-.recycle-grid-label {
-  font-size: 22rpx;
-  color: #1A1A1A;
 }
 
 /* ===== 底部真实 TabBar（同 demo 风格） ===== */

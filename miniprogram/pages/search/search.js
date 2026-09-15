@@ -1,4 +1,5 @@
 // pages/search/search.js
+const { fmtAgo } = require('../../utils/time.js');
 // 包子行业信息平台 · 全局模糊搜索页
 // 数据源：feedPosts 云函数 keyword 参数（云端对 原文/角色/省市区/地址/联系人/备注 做正则模糊，全部分类）
 // 交互：t-search 输入即搜(防抖)，也支持点键盘"搜索"；双列卡片；触底分页；点卡片进详情。
@@ -38,17 +39,6 @@ function safeDecode(s) {
   }
 }
 
-function fmtAgo(ts) {
-  if (!ts) return '';
-  const d = new Date();
-  const todayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  if (ts >= todayStart) return '今天';
-  const days = Math.floor((todayStart - ts) / DAY);
-  if (days <= 1) return '昨天';
-  if (days < 30) return `${days}天前`;
-  if (days < 365) return `${Math.floor(days / 30)}个月前`;
-  return `${Math.floor(days / 365)}年前`;
-}
 
 function fmtMoney(n) {
   const num = Number(n) || 0;

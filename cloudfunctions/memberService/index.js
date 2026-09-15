@@ -63,6 +63,7 @@ async function getOrCreateUser(openid) {
     credit_score: 100,
     credit_count: 0,
     remark: "",
+    identities: [],
     created_at: now,
     updated_at: now,
   };

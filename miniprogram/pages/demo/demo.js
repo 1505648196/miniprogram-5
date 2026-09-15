@@ -118,6 +118,7 @@ const TOP_TABS = [
   { id: 'recruit',  label: '求职招聘' },
 ];
 
+const { fmtAgo } = require('../../utils/time.js');
 const { loadAds, openAdLink } = require('../../utils/ad');
 
 // 首页全局弹窗广告的「今日已弹」标记（storage key，值为当天日期字符串）
@@ -134,19 +135,6 @@ const SUB_TMPL_IDS = [
 
 const LOGIN_STORAGE_KEY = 'baozi_login_done';
 
-const DAY = 864e5;
-
-function fmtAgo(ts) {
-  if (!ts) return '';
-  const d = new Date();
-  const todayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  if (ts >= todayStart) return '今天';
-  const days = Math.floor((todayStart - ts) / DAY);
-  if (days <= 1) return '昨天';
-  if (days < 30) return `${days}天前`;
-  if (days < 365) return `${Math.floor(days / 30)}个月前`;
-  return `${Math.floor(days / 365)}年前`;
-}
 
 // 金额：≥1万显示 x万，否则原样数字
 function fmtMoney(n) {

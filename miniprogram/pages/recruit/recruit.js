@@ -8,6 +8,7 @@
 //   后续接入数据库 / 运营后台后，把数据灌进这三个数组即可自动显示，
 //   无需改动任何 wxml。见下方 loadAdSlots()。
 
+const { fmtAgo } = require('../../utils/time.js');
 const regionData = require('../../utils/regionData.js');
 const privacy = require('../../utils/privacy.js');
 
@@ -57,19 +58,6 @@ const CREDIT_META = {
 // 高薪阈值（元/月），工资筛选未设置时用于"高薪"标记
 const HIGH_PAY = 8000;
 
-const DAY = 864e5;
-
-function fmtAgo(ts) {
-  if (!ts) return '';
-  const d = new Date();
-  const todayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  if (ts >= todayStart) return '今天';
-  const days = Math.floor((todayStart - ts) / DAY);
-  if (days <= 1) return '昨天';
-  if (days < 30) return `${days}天前`;
-  if (days < 365) return `${Math.floor(days / 30)}个月前`;
-  return `${Math.floor(days / 365)}年前`;
-}
 
 function findCat(id) {
   for (let i = 0; i < SUB_CATS.length; i += 1) {

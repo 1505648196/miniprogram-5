@@ -1,0 +1,70 @@
+<!-- pages/identity/identity.wxml -->
+<!-- 身份认证选择页：3 个身份选择框 -->
+<view class="page">
+
+  <!-- 加载骨架屏 -->
+  <view wx:if="{{loading}}" class="skeleton">
+    <t-skeleton theme="text" />
+    <t-skeleton theme="text" />
+    <t-skeleton theme="text" />
+  </view>
+
+  <block wx:else>
+    <!-- 顶部说明 -->
+    <view class="header">
+      <view class="header-title">选择要认证的身份</view>
+      <view class="header-desc">认证后可提升可信度，获得更多曝光机会</view>
+    </view>
+
+    <!-- 3 个身份选择卡片 -->
+    <view class="identity-list">
+      <view
+        wx:for="{{identityTypes}}" wx:key="id"
+        class="identity-card"
+        data-id="{{item.id}}"
+        bindtap="onIdentityTap"
+      >
+        <view class="identity-icon" style="background: {{item.bg}};">
+          <t-icon name="{{item.icon}}" size="56rpx" color="{{item.color}}" />
+        </view>
+        <view class="identity-info">
+          <view class="identity-name-row">
+            <text class="identity-name">{{item.name}}</text>
+            <!-- 状态标签 -->
+            <t-tag
+              wx:if="{{item.id === 'owner' && ownerStatus !== 'none'}}"
+              size="small"
+              theme="{{ownerStatus === 'approved' ? 'success' : ownerStatus === 'pending' ? 'warning' : 'danger'}}"
+              variant="light"
+            >{{statusText(ownerStatus)}}</t-tag>
+            <t-tag
+              wx:elif="{{item.id === 'master' && masterStatus !== 'none'}}"
+              size="small"
+              theme="{{masterStatus === 'approved' ? 'success' : masterStatus === 'pending' ? 'warning' : 'danger'}}"
+              variant="light"
+            >{{statusText(masterStatus)}}</t-tag>
+            <t-tag
+              wx:elif="{{item.id === 'merchant' && merchantStatus !== 'none'}}"
+              size="small"
+              theme="{{merchantStatus === 'approved' ? 'success' : merchantStatus === 'pending' ? 'warning' : 'danger'}}"
+              variant="light"
+            >{{statusText(merchantStatus)}}</t-tag>
+          </view>
+          <view class="identity-desc">{{item.desc}}</view>
+          <!-- 商家已认证时显示店铺名 -->
+          <view wx:if="{{item.id === 'merchant' && merchantStatus === 'approved' && merchantName}}" class="identity-extra">
+            {{merchantName}} · {{merchantCategory}}
+          </view>
+        </view>
+        <t-icon name="chevron-right" size="36rpx" color="#CCCCCC" />
+      </view>
+    </view>
+
+    <!-- 底部提示 -->
+    <view class="footer-tip">
+      <t-icon name="info-circle" size="28rpx" color="#999999" />
+      <text class="footer-tip-text">认证需人工审核，请确保提交真实有效的资料</text>
+    </view>
+  </block>
+
+</view>

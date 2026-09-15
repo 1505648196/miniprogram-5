@@ -3,6 +3,7 @@
 // 数据源：feedPosts 云函数（dataType = 'other'）
 // 无专项筛选维度，仅 Header 关键词搜索；卡片通用展示(标题/价格/地区/发布人/图)。
 
+const { fmtAgo } = require('../../utils/time.js');
 const privacy = require('../../utils/privacy.js');
 
 const CREDIT_META = {
@@ -12,19 +13,6 @@ const CREDIT_META = {
   4: { label: '信用一般', color: '#8C8C8C', bg: '#F5F5F5' },
 };
 
-const DAY = 864e5;
-
-function fmtAgo(ts) {
-  if (!ts) return '';
-  const d = new Date();
-  const todayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  if (ts >= todayStart) return '今天';
-  const days = Math.floor((todayStart - ts) / DAY);
-  if (days <= 1) return '昨天';
-  if (days < 30) return `${days}天前`;
-  if (days < 365) return `${Math.floor(days / 30)}个月前`;
-  return `${Math.floor(days / 365)}年前`;
-}
 
 // 金额：≥1万显示 x万
 function fmtMoney(n) {

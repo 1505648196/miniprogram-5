@@ -10,6 +10,7 @@
 //   筛选三同构：price(价格下限) / city_code(区域) / cond(成色下限)，云函数统一 AND 过滤。
 //   无设备品类枚举(role_id)，靠物品描述区分；金刚位不放品类。
 
+const { fmtAgo } = require('../../utils/time.js');
 const regionData = require('../../utils/regionData.js');
 const privacy = require('../../utils/privacy.js');
 
@@ -31,19 +32,6 @@ const CREDIT_META = {
   4: { label: '信用一般', color: '#8C8C8C', bg: '#F5F5F5' },
 };
 
-const DAY = 864e5;
-
-function fmtAgo(ts) {
-  if (!ts) return '';
-  const d = new Date();
-  const todayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  if (ts >= todayStart) return '今天';
-  const days = Math.floor((todayStart - ts) / DAY);
-  if (days <= 1) return '昨天';
-  if (days < 30) return `${days}天前`;
-  if (days < 365) return `${Math.floor(days / 30)}个月前`;
-  return `${Math.floor(days / 365)}年前`;
-}
 
 // 金额：≥1万显示 x万
 function fmtMoney(n) {

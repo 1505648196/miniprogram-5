@@ -11,6 +11,7 @@
 //   - 所有展示文本(title/正文/地址/备注/联系方式)都会过 maskText，把正文里藏的电话识别成 138****5678。
 //   - 正文/联系方式里识别出的脱敏号会汇总到"联系电话"单独一栏(phones)。
 
+const { fmtAgo } = require('../../utils/time.js');
 const privacy = require('../../utils/privacy.js');
 const { callPayCommon, pickPayment } = require('../../utils/pay.js');
 const { loadAds, openAdLink } = require('../../utils/ad.js');
@@ -22,19 +23,6 @@ const CREDIT_META = {
   4: { label: '信用一般', color: '#8C8C8C', bg: '#F5F5F5' },
 };
 
-const DAY = 864e5;
-
-function fmtAgo(ts) {
-  if (!ts) return '';
-  const d = new Date();
-  const todayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  if (ts >= todayStart) return '今天';
-  const days = Math.floor((todayStart - ts) / DAY);
-  if (days <= 1) return '昨天';
-  if (days < 30) return `${days}天前`;
-  if (days < 365) return `${Math.floor(days / 30)}个月前`;
-  return `${Math.floor(days / 365)}年前`;
-}
 
 function fmtDateTime(ts) {
   if (!ts) return '';
@@ -58,6 +46,10 @@ Page({
       forwardText: '',
       forwarding: false,
       forwardError: '',
+      forwardTargets: [],   // 可选发送账号（在线微信号 wxid 列表）
+      forwardTargetOptions: [], // 发送账号选项（t-checkbox-group 用，label/value 均为 wxid）
+      forwardPicked: [],    // 当前选中的发送账号 wxid（多选，每个号各发一条）
+      forwardLoadingTargets: false, // 拉取在线号中
     // 删除确认
     deleteDialogVisible: false,
     deleting: false,
@@ -233,6 +225,7 @@ Page({
   // 点悬浮「转发」按钮：
   //   朋友圈是给潜在客户看的，脱敏号（138****5678）发出去根本没法联系，
   //   所以先找云函数要完整号替换掉，再弹编辑窗让管理员过一眼。
+  //   同时拉取当前在线的微信号列表，供管理员选择「用哪个号发」。
   async onWxForward() {
     let text = this.buildForwardText(this.data.d);
     if (!text) {
@@ -249,7 +242,49 @@ Page({
     }
     wx.hideLoading();
 
-    this.setData({ forwardDialogVisible: true, forwardText: text, forwardError: '' });
+    // 打开弹窗，并异步拉取在线发送账号
+    this.setData({
+      forwardDialogVisible: true,
+      forwardText: text,
+      forwardError: '',
+      forwardTargets: [],
+      forwardTargetOptions: [],
+      forwardPicked: [],
+      forwardLoadingTargets: true,
+    });
+    this.loadForwardTargets();
+  },
+
+  // 拉取当前在线的微信号（本机 Worker 挂着长连就会出现在里面）
+  loadForwardTargets() {
+    wx.cloud
+      .callFunction({ name: 'wxTask', data: { action: 'online' }, config: { timeout: 10000 } })
+      .then((res) => {
+        const r = (res && res.result) || {};
+        const online = ((r.data || {}).online) || [];
+        this.setData({
+          forwardLoadingTargets: false,
+          forwardTargets: online,
+          // t-checkbox-group 选项：label/value 均为 wxid
+          forwardTargetOptions: online.map((wxid) => ({ label: wxid, value: wxid })),
+          // 默认选中第一个在线号；管理员可点选切换/追加（多选，每个号各发一条）
+          forwardPicked: online.length ? [online[0]] : [],
+        });
+      })
+      .catch(() => {
+        this.setData({
+          forwardLoadingTargets: false,
+          forwardTargets: [],
+          forwardTargetOptions: [],
+          forwardPicked: [],
+        });
+      });
+  },
+
+  // 切换选中的发送账号（t-checkbox-group change：value 为选中 wxid 数组）
+  onForwardPickTarget(e) {
+    const picked = e.detail.value || [];
+    this.setData({ forwardPicked: picked });
   },
 
   // 管理员专属：取该帖完整手机号（云函数 adminAuth 的 post_phone 动作，带管理员鉴权）
@@ -281,7 +316,7 @@ Page({
     this.setData({ forwardDialogVisible: false, forwardError: '' });
   },
 
-  // 确认转发：取在线号 → 建任务
+  // 确认转发：多选号 → 逐个建任务（选几个号调几次 create，云函数仍一次一单）
   onForwardConfirm() {
     if (this.data.forwarding) return;
     const content = (this.data.forwardText || '').trim();
@@ -290,58 +325,71 @@ Page({
       return;
     }
 
-    this.setData({ forwarding: true, forwardError: '' });
+    const picked = (this.data.forwardPicked || []).filter(Boolean);
+    if (!picked.length) {
+      this.setData({ forwardError: '请先选择发送账号（本机需启动 WXLauncher 并连接）' });
+      return;
+    }
 
-    // 1) 问云函数当前在线的微信号（本机 Worker 挂着长连就会出现在里面）
-    wx.cloud
-      .callFunction({ name: 'wxTask', data: { action: 'online' }, config: { timeout: 10000 } })
-      .then((res) => {
-        const r = (res && res.result) || {};
-        const online = ((r.data || {}).online) || [];
-        if (!online.length) {
-          throw new Error('本机未上线：请确认电脑上的 WXLauncher 已启动并连接');
-        }
-        return this.createForwardTask(online[0], content);
-      })
-      .catch((err) => {
-        this.setData({
-          forwarding: false,
-          forwardError: (err && err.message) || '提交失败，请稍后再试',
-        });
-      });
+    this.setData({ forwarding: true, forwardError: '' });
+    this.createForwardTask(picked, content);
   },
 
-  // 真正下单
-  createForwardTask(wxid, content) {
-    return wx.cloud
-      .callFunction({
-        name: 'wxTask',
-        data: { action: 'create', wxid, content },
-        config: { timeout: 15000 },
-      })
-      .then((res) => {
-        const r = (res && res.result) || {};
-        if (!r.success) throw new Error(r.message || '提交失败');
-
-        this.setData({ forwarding: false, forwardDialogVisible: false });
-        wx.showToast({ title: '已提交，稍后自动发布', icon: 'success', duration: 2200 });
-
-        // 给个明确的"去哪儿看结果"的引导
-        setTimeout(() => {
-          wx.showModal({
-            title: '已提交',
-            content: '任务已进入队列，本机微信会自动发布到朋友圈。若本机没开，任务会排队等上线后补发。',
-            showCancel: false,
-            confirmText: '知道了',
-          });
-        }, 2400);
-      })
-      .catch((err) => {
-        this.setData({
-          forwarding: false,
-          forwardError: (err && err.message) || '提交失败，请稍后再试',
+  // 真正下单：多选号逐个 create，统计成功/失败
+  async createForwardTask(wxids, content) {
+    let okCount = 0;
+    let failCount = 0;
+    let lastErr = '';
+    for (const wxid of wxids) {
+      try {
+        const res = await wx.cloud.callFunction({
+          name: 'wxTask',
+          data: { action: 'create', wxid, content },
+          config: { timeout: 15000 },
         });
+        const r = (res && res.result) || {};
+        if (!r.success) {
+          failCount++;
+          lastErr = r.message || '提交失败';
+        } else {
+          okCount++;
+        }
+      } catch (err) {
+        failCount++;
+        lastErr = (err && err.message) || '提交失败，请稍后再试';
+      }
+    }
+
+    this.setData({ forwarding: false });
+    if (okCount && failCount) {
+      // 部分成功：明确交代，不整单报错
+      this.setData({ forwardDialogVisible: false });
+      wx.showModal({
+        title: '部分提交成功',
+        content: `已投递 ${okCount} 条，${failCount} 条失败${lastErr ? '（' + lastErr + '）' : ''}。`,
+        showCancel: false,
+        confirmText: '知道了',
       });
+      return;
+    }
+    if (!okCount) {
+      this.setData({ forwardError: lastErr || '提交失败，请稍后再试' });
+      return;
+    }
+
+    // 全部成功
+    this.setData({ forwardDialogVisible: false });
+    wx.showToast({ title: `已提交 ${okCount} 条，稍后自动发布`, icon: 'success', duration: 2200 });
+
+    // 给个明确的"去哪儿看结果"的引导
+    setTimeout(() => {
+      wx.showModal({
+        title: '已提交',
+        content: '任务已进入队列，本机微信会自动发布到朋友圈。若本机没开，任务会排队等上线后补发。',
+        showCancel: false,
+        confirmText: '知道了',
+      });
+    }, 2400);
   },
 
   // 页面首次渲染完成后：关闭列表页跳转时展示的 loading

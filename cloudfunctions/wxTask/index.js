@@ -13,6 +13,8 @@
  *   report  Worker 调用，回写 done / failed
  *   list    后台查看任务列表
  *   retry   后台把失败任务重新置为 pending
+ *   delete  删除任务 —— 按 taskId 单条 / 按 ids 批量 / 按 wxid+status 清理。
+ *           ⚠️ 必须给条件，且一次最多 50 条（防误删整库）；返回删掉了哪些 id 便于留档
  *   online  后台调用，查 relay 上当前在线的微信号（后台据此自动选定目标号，换号免配置）
  *
  * 兼容两种调用入参：
@@ -183,9 +185,14 @@ function getOpenId(context) {
 }
 
 /** 写操作：必须管理员 */
-const WRITE_ACTIONS = ['create', 'retry']
+const WRITE_ACTIONS = ['create', 'retry', 'delete']
 /** 读操作：也要求管理员（任务内容、在线号不宜外泄） */
 const READ_ACTIONS = ['list', 'online', 'pull', 'report']
+
+/** delete 一次最多删几条 —— 防止手滑把整库清了 */
+const DELETE_MAX = 50
+/** 允许按状态清理的白名单（防止 p.status 是脏值时条件失效） */
+const DELETABLE_STATUS = ['pending', 'sending', 'done', 'failed']
 
 /**
  * 统一鉴权。返回 null = 放行；返回字符串 = 拒绝原因。
@@ -231,6 +238,7 @@ exports.main = async (event, context) => {
       case 'report': return await reportTask(p)
       case 'list': return await listTasks(p)
       case 'retry': return await retryTask(p)
+      case 'delete': return await deleteTasks(p)
       case 'online': return await listOnline()
       default: return fail('unknown action: ' + action)
     }
@@ -360,6 +368,78 @@ async function retryTask(p) {
     status: 'pending', error: null, lease: 0, updatedAt: Date.now(),
   })
   return ok({})
+}
+
+/**
+ * 删除任务（可从「待命 / 发送中 / 失败 / 已完成」任一状态删掉）。
+ * ------------------------------------------------------------
+ * 三种用法（**必须给条件**，不给就拒绝 —— 绝不允许多条件全空时误删整库）：
+ *   ① { taskId: "xxx" }                    删单条
+ *   ② { ids: ["a","b", ...] }              按 id 批量删（最多 DELETE_MAX 条）
+ *   ③ { wxid: "wxid_xxx", status: "failed" }  清某个号的某状态（status 走白名单）
+ *
+ * 实现上**先 get 出 id 再逐个 doc(id).remove()**，不用 where().remove() 批量：
+ *   · 每个 id 都是明确的，删了什么能如实回给调用方（本地留档用得上）
+ *   · 顺带天然带上 DELETE_MAX 上限，手滑也不会一次清空
+ *
+ * 返回 { deleted: N, ids: [...] }
+ */
+async function deleteTasks(p) {
+  const ids = []
+
+  // ① 单条
+  if (p.taskId) {
+    ids.push(String(p.taskId))
+  }
+  // ② 一批 id
+  else if (Array.isArray(p.ids) && p.ids.length) {
+    for (const one of p.ids) {
+      if (one) ids.push(String(one))
+    }
+  }
+  // ③ 按 号 + 状态 清（两个条件都要，缺一不可）
+  else {
+    const wxid = String(p.wxid || '').trim()
+    const status = String(p.status || '').trim()
+    if (!wxid || !status) {
+      return fail('delete 需要 taskId、ids、或 wxid+status 三选一（必须带条件，不能清空整库）')
+    }
+    if (!DELETABLE_STATUS.includes(status)) {
+      return fail('status 不合法：' + status + '（只能是 ' + DELETABLE_STATUS.join(' / ') + '）')
+    }
+    const res = await db.collection(COL)
+      .where({ wxid, status })
+      .orderBy('createdAt', 'asc')
+      .limit(DELETE_MAX)
+      .get()
+    for (const doc of res.data || []) {
+      if (doc && doc._id) ids.push(String(doc._id))
+    }
+    if (!ids.length) return ok({ deleted: 0, ids: [] })
+  }
+
+  // 去重 + 上限（防止 ids 传了几百条）
+  const uniq = [...new Set(ids)]
+  if (uniq.length > DELETE_MAX) {
+    return fail('一次最多删 ' + DELETE_MAX + ' 条（本次 ' + uniq.length +
+      ' 条）—— 分批删，或按 wxid+status 清理')
+  }
+
+  const removed = []
+  for (const id of uniq) {
+    try {
+      const r = await db.collection(COL).doc(id).remove()
+      // ⚠️ doc().remove() 对**不存在的文档不报错**（实测：删一个假 id 也返回成功），
+      //    所以不能"没抛异常就算删掉了"。优先用 SDK 回的计数，拿不到再保守算 1。
+      let n = 1
+      if (r && typeof r.deleted === 'number') n = r.deleted
+      else if (r && r.stats && typeof r.stats.removed === 'number') n = r.stats.removed
+      if (n > 0) removed.push(id)
+    } catch (e) {
+      // 单条失败不中断整批：能删几条删几条，回执里能看出来差哪条
+    }
+  }
+  return ok({ deleted: removed.length, ids: removed })
 }
 
 /**

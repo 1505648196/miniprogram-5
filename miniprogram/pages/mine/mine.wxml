@@ -57,25 +57,13 @@
       </view>
     </view>
 
-  <!-- 我的交易卡片 -->
+  <!-- 我的交易卡片（我发布的 / 付款记录 / 客服） -->
   <view class="card trade">
-    <view class="card-row">
-      <!-- <view class="trade-left" bindtap="onTradeTap">
-        <text class="trade-title">我的交易</text>
-        <text class="trade-sub">{{tradeSummary}}</text>
-      </view> -->
-      <view class="trade-right" bindtap="onTradeBadgeTap">
-        <!-- <view class="trade-badge">{{tradeBadge}}</view> -->
-        <!-- <t-icon name="chevron-right" size="24rpx" color="#999999" /> -->
-      </view>
-    </view>
-
     <view class="order-row">
       <view class="order" wx:for="{{orderList}}" wx:key="key"
             data-key="{{item.key}}" bindtap="onOrderTap">
         <view class="order-icon">
           <t-icon name="upload" wx:if="{{item.key==='sell'}}" size="48rpx" color="#FF7A45" />
-          <t-icon name="home" wx:elif="{{item.key==='space'}}" size="48rpx" color="#9254DE" />
           <t-icon name="shop" wx:elif="{{item.key==='sold'}}" size="48rpx" color="#36CFC9" />
           <t-icon name="service" wx:elif="{{item.key==='service'}}" size="48rpx" color="#FA8C16" />
           <t-icon name="cart" wx:else size="48rpx" color="#FA8C16" />
@@ -93,46 +81,9 @@
     <t-icon name="chevron-right" size="24rpx" color="#999999" />
   </view>
 
-  <!-- 闲鱼回收 -->
-  <!-- <view class="card recycle">
-    <view class="recycle-head">
-      <text class="recycle-name">闲鱼回收</text>
-      <text class="recycle-sub">省心极速卖得高</text>
-    </view>
-    <view class="recycle-row">
-      <view class="recycle-card">
-        <text class="recycle-tag">热门</text>
-        <text class="recycle-name2">vivo X200 Pro</text>
-        <text class="recycle-sub2">预估赚 <text class="recycle-coin">¥3313</text></text>
-      </view>
-      <view class="recycle-card">
-        <t-icon name="image" size="120rpx" color="#FFD9B3" />
-      </view>
-      <view class="recycle-card more">
-        <text class="recycle-more">更多</text>
-      </view>
-    </view>
-  </view> -->
-
-  <!-- 工具 5 宫格（超强擦亮 / 托管无忧卖 / 闲鱼小法庭 / 借钱 / 闲鱼小约） -->
-  <!-- <view class="card recycle-grid">
-    <view class="recycle-grid-row">
-      <view class="recycle-grid-cell" wx:for="{{recycleGrid}}" wx:key="key"
-            data-key="{{item.key}}" bindtap="onRecycleTap">
-        <view class="recycle-grid-icon">
-          <t-icon name="brush" wx:if="{{item.key==='clean'}}" size="48rpx" color="#FFD666" />
-          <t-icon name="user" wx:elif="{{item.key==='host'}}" size="48rpx" color="#597EF7" />
-          <t-icon name="verified" wx:elif="{{item.key==='law'}}" size="48rpx" color="#9254DE" />
-          <t-icon name="wallet" wx:elif="{{item.key==='loan'}}" size="48rpx" color="#36CFC9" />
-          <t-icon name="edit-1" wx:else size="48rpx" color="#FF7A45" />
-        </view>
-        <text class="recycle-grid-label">{{item.label}}</text>
-      </view>
-    </view>
-  </view> -->
-
-  <!-- 关于 / 意见反馈 / 清除缓存 -->
+  <!-- 关于 / 意见反馈 / 清除缓存 / 我的认证 -->
   <t-cell-group theme="card" title="通用">
+    <t-cell title="我的认证" description="店主 / 师傅 / 商家 身份认证" left-icon="verified" arrow hover bind:click="onIdentityTap" />
     <t-cell title="意见反馈" description="功能建议 / 使用问题 / 举报投诉" left-icon="chat" arrow hover bind:click="onFeedbackTap" />
     <t-cell title="清除浏览缓存" description="清除本地浏览历史缓存" left-icon="delete" arrow hover bind:click="onClearCacheTap" />
     <t-cell title="关于我们" left-icon="info-circle" arrow hover bind:click="onAboutTap" />

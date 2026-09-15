@@ -28,7 +28,9 @@
     "pages/privacy/privacy",
     "pages/chat/chat",
     "pages/news/news",
-    "pages/news-detail/news-detail"
+    "pages/news-detail/news-detail",
+    "pages/identity/identity",
+    "pages/identity-form/identity-form"
   ],
   "window": {
     "backgroundColor": "#F6F6F6",

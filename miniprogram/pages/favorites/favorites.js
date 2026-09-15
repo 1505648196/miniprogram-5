@@ -1,4 +1,5 @@
 // pages/favorites/favorites.js
+const { fmtAgo } = require('../../utils/time.js');
 // 包子行业信息平台 · 我的收藏
 // 数据源：favorite 云函数 list(分页拉我收藏的帖子) / toggle(取消收藏)
 
@@ -13,19 +14,6 @@ const TYPE_META = {
   carpool_person:{ name: '人找车',   color: '#73D13D', light: '#F6FFED' },
   other:         { name: '其他',     color: '#8C8C8C', light: '#F0F0F0' },
 };
-const DAY = 864e5;
-
-function fmtAgo(ts) {
-  if (!ts) return '';
-  const d = new Date();
-  const todayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  if (ts >= todayStart) return '今天';
-  const days = Math.floor((todayStart - ts) / DAY);
-  if (days <= 1) return '昨天';
-  if (days < 30) return `${days}天前`;
-  if (days < 365) return `${Math.floor(days / 30)}个月前`;
-  return `${Math.floor(days / 365)}年前`;
-}
 function fmtMoney(n) {
   const num = Number(n) || 0;
   if (num <= 0) return '';

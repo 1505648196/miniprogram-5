@@ -10,6 +10,12 @@
     "t-empty": "/miniprogram_npm/tdesign-miniprogram/empty/empty",
     "t-chat-loading": "/miniprogram_npm/tdesign-miniprogram/chat-loading/chat-loading",
     "t-chat-thinking": "/miniprogram_npm/tdesign-miniprogram/chat-thinking/chat-thinking",
-    "t-chat-record": "/miniprogram_npm/tdesign-miniprogram/chat-record/chat-record"
+    "t-chat-record": "/miniprogram_npm/tdesign-miniprogram/chat-record/chat-record",
+    "t-dialog": "/miniprogram_npm/tdesign-miniprogram/dialog/dialog",
+    "t-radio-group": "/miniprogram_npm/tdesign-miniprogram/radio-group/radio-group",
+    "t-radio": "/miniprogram_npm/tdesign-miniprogram/radio/radio",
+    "t-popup": "/miniprogram_npm/tdesign-miniprogram/popup/popup",
+    "t-textarea": "/miniprogram_npm/tdesign-miniprogram/textarea/textarea",
+    "t-button": "/miniprogram_npm/tdesign-miniprogram/button/button"
   }
 }

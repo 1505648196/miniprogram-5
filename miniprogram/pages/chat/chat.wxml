@@ -95,6 +95,11 @@
 
                 <!-- 列表 -->
                 <view class="card-list" wx:if="{{blk.type === 'list'}}">
+                  <!-- 一键复制全部：仅当列表项带 detail（已排好版的完整信息）时显示 -->
+                  <view class="copy-all-bar" wx:if="{{blk.items.length && blk.items[0].detail}}">
+                    <text class="copy-all-hint">本页共 {{blk.items.length}} 条</text>
+                    <view class="copy-all-btn" data-msg-id="{{item.id}}" data-blk-index="{{blkIndex}}" catch:tap="onCopyAll">复制全部</view>
+                  </view>
                   <view class="card-list-item" wx:for="{{blk.items}}" wx:for-item="li" wx:key="index">
                     <view class="card-list-main">
                       <text class="card-list-text">{{li.text}}</text>
@@ -161,6 +166,54 @@
     <view id="chat-bottom"></view>
   </scroll-view>
 
+  <!-- 操作二次确认框（AI 只定位目标，真正执行需管理员确认） -->
+  <t-dialog
+    visible="{{opVisible}}"
+    title="{{opTitle}}"
+    confirm-btn="{{opConfirmText}}"
+    cancel-btn="取消"
+    bind:confirm="onOpConfirm"
+    bind:cancel="onOpCancel"
+  >
+    <view slot="content" class="op-confirm">
+      <view class="op-target">
+        <text class="op-target-title">{{opTarget.title}}</text>
+        <text class="op-target-sub" wx:if="{{opTarget.sub}}">{{opTarget.sub}}</text>
+      </view>
+
+      <!-- 置顶：选天数 -->
+      <view class="op-field" wx:if="{{opAction === 'top'}}">
+        <text class="op-field-label">置顶时长</text>
+        <t-radio-group
+          value="{{opDays}}"
+          options="{{opDayOptions}}"
+          borderless
+          bind:change="onOpDaysChange"
+        />
+      </view>
+
+      <!-- 转发：选发送账号 -->
+      <view class="op-field" wx:if="{{opAction === 'forward'}}">
+        <text class="op-field-label">发送账号{{opLoadingTargets ? '（获取中…）' : ''}}</text>
+        <view wx:if="{{opTargets.length}}" class="op-targets">
+          <t-radio-group
+            value="{{opWxid}}"
+            borderless
+            bind:change="onOpWxidChange"
+          >
+            <t-radio
+              wx:for="{{opTargets}}"
+              wx:key="*this"
+              value="{{item}}"
+              label="{{item}}"
+            />
+          </t-radio-group>
+        </view>
+        <text wx:elif="{{!opLoadingTargets}}" class="op-targets-tip">没有可用账号 —— 请先在本机启动 WXLauncher 并点「启动远程服务」</text>
+      </view>
+    </view>
+  </t-dialog>
+
   <!-- 底部输入区 -->
   <view class="chat-footer">
     <t-chat-sender
@@ -178,10 +231,13 @@
       bind:change="onChange"
       bind:keyboardheightchange="onKeyboardHeightChange"
     >
-      <!-- footer-prefix：深度思考 + 上下文 按钮（统一容器内，避免多 slot 兄弟节点渲染问题） -->
+      <!-- footer-prefix：深度思考 + 自由闲聊 + 上下文 按钮（统一容器内，避免多 slot 兄弟节点渲染问题） -->
       <view slot="footer-prefix" class="footer-prefix-bar">
         <view class="deep-think-block {{deepThinkActive ? 'active' : ''}}" bind:tap="onDeepThinkTap">
           <t-icon name="system-sum" size="36rpx" />
+        </view>
+        <view class="free-chat-block {{freeChatActive ? 'active' : ''}}" bind:tap="onFreeChatTap">
+          <t-icon name="chat" size="36rpx" />
         </view>
         <view
           wx:if="{{deepThinkActive}}"
@@ -205,5 +261,67 @@
       <view class="clear-btn" wx:if="{{chatList.length}}" bind:tap="onClearChat">清除</view>
     </view>
   </view>
+
+  <!-- 悬浮「＋」按钮：批量插入帖子 -->
+  <view class="insert-fab" bind:tap="onInsertTap">
+    <t-icon name="add" size="48rpx" color="#FFFFFF" />
+  </view>
+
+  <!-- 批量插入弹窗 -->
+  <t-popup
+    visible="{{insertPopupVisible}}"
+    placement="bottom"
+    bind:visible-change="onInsertPopupVisibleChange"
+    close-on-overlay-click="{{true}}"
+  >
+    <view class="insert-panel">
+      <view class="insert-header">
+        <text class="insert-title">批量插入帖子</text>
+        <view class="insert-close" bind:tap="onInsertClose">
+          <t-icon name="close" size="40rpx" color="#999999" />
+        </view>
+      </view>
+
+      <!-- 未分析时：输入区 -->
+      <block wx:if="{{!insertItems.length}}">
+        <view class="insert-hint">粘贴整理好的信息（可多段，AI 自动切分识别），分析后确认才入库。</view>
+        <t-textarea
+          value="{{insertText}}"
+          placeholder="例：深圳招大师傅 8500 包吃住 13800138000；广州转让包子铺 5万…"
+          autosize="{{insertTextareaProps}}"
+          bordered="{{true}}"
+          maxlength="20000"
+          bind:change="onInsertTextChange"
+        />
+        <view class="insert-actions">
+          <t-button theme="primary" block loading="{{insertAnalyzing}}" bind:tap="onInsertAnalyze">AI 分析</t-button>
+        </view>
+      </block>
+
+      <!-- 已分析：预览确认区 -->
+      <block wx:else>
+        <view class="insert-preview-hint">识别出 {{insertItems.length}} 条，确认字段无误后插入（缺手机号/城市会标红）。</view>
+        <scroll-view scroll-y class="insert-preview-list">
+          <view class="insert-item" wx:for="{{insertItems}}" wx:key="index">
+            <view class="insert-item-head">
+              <t-tag theme="primary" variant="light">{{item._typeName}}</t-tag>
+              <text class="insert-item-salary" wx:if="{{item._salaryText}}">{{item._salaryText}}</text>
+            </view>
+            <view class="insert-item-text">{{item.raw_text || '（无描述）'}}</view>
+            <view class="insert-item-meta">
+              <text wx:if="{{item.phone}}">📱 {{item.phone}}</text>
+              <text wx:elif="{{item._missingTags.length}}">⚠️ 缺：{{item._missingTags}}</text>
+              <text wx:if="{{item.city}}"> · {{item.city}}</text>
+              <text wx:if="{{item.role}}"> · {{item.role}}</text>
+            </view>
+          </view>
+        </scroll-view>
+        <view class="insert-actions">
+          <t-button theme="light" block bind:tap="onInsertClose" style="margin-right: 16rpx;">取消</t-button>
+          <t-button theme="primary" block loading="{{insertConfirming}}" bind:tap="onInsertConfirm">确认插入（{{insertItems.length}} 条）</t-button>
+        </view>
+      </block>
+    </view>
+  </t-popup>
 
 </view>

@@ -293,6 +293,35 @@
       <text class="fwd-tip">文案可以直接改，确认后由你电脑上的微信自动发布</text>
     </view>
 
+    <!-- 发送账号选择（多选：每个账号各发一条） -->
+    <view class="fwd-targets">
+      <view class="fwd-targets-head">
+        <text class="fwd-targets-label">发送账号</text>
+        <text wx:if="{{forwardTargets.length}}" class="fwd-targets-count">已选 {{forwardPicked.length}} 个</text>
+      </view>
+      <text wx:if="{{forwardLoadingTargets}}" class="fwd-targets-tip">正在获取在线账号…</text>
+      <t-checkbox-group
+        wx:elif="{{forwardTargets.length}}"
+        class="fwd-targets-group"
+        value="{{forwardPicked}}"
+        bind:change="onForwardPickTarget"
+      >
+        <view class="fwd-targets-grid">
+          <t-checkbox
+            wx:for="{{forwardTargets}}"
+            wx:key="*this"
+            class="fwd-target-chip"
+            value="{{item}}"
+            label="{{item}}"
+            icon="circle"
+            borderless
+          />
+        </view>
+      </t-checkbox-group>
+      <text wx:else class="fwd-targets-tip fwd-targets-tip--warn">没有可用账号 —— 请先在本机启动 WXLauncher 并点「启动远程服务」</text>
+      <text wx:if="{{forwardTargets.length}}" class="fwd-targets-hint">可多选，每个账号各发一条</text>
+    </view>
+
     <textarea
       class="fwd-text"
       value="{{forwardText}}"

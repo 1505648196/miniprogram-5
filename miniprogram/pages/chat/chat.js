@@ -36,6 +36,13 @@ const CAPABILITIES = ['数据统计', '帖子查询', '用户管理', '订单流
 // AI 头像（TDesign 官方 chat 示例图，蓝色圆形，https 已确认可用）
 const AI_AVATAR = 'https://tdesign.gtimg.com/site/chat-avatar.png';
 
+// 帖子类型中文名（批量插入预览用）
+const TYPE_NAME_MAP = {
+  recruit: '招工', jobseek: '求职', transfer: '转让', want_shop: '求店',
+  equip_sell: '设备出售', equip_buy: '设备求购', carpool_car: '车找人',
+  carpool_person: '人找车', other: '其他',
+};
+
 Page({
   data: {
     chatList: [],           // 消息列表（新的在前，用 unshift 插入）
@@ -48,26 +55,135 @@ Page({
     scrollIntoView: '',
     auditing: false,        // 审核操作进行中（防重复点击）
     deepThinkActive: false, // 深度思考开关：开启后 AI 全面接管（跳过规则识别）
+    freeChatActive: false,  // 自由闲聊开关：开启后不注入能力文档，直接与 DeepSeek 闲聊（测试用）
     contextActive: false,   // 上下文开关：开启后多轮追问继承上一轮筛选条件（仅深度思考模式）
     keyboardHeight: 0,      // 键盘弹起高度（px），用于让输入框跟随键盘上移
     // 输入框紧凑配置：minHeight 调小，输入框默认高度更小（不占空间）
     textareaProps: { autosize: { maxHeight: 200, minHeight: 32 } },
+
+    // ===== 操作二次确认框（AI 只定位，执行需管理员确认） =====
+    opVisible: false,       // 确认框显隐
+    opTitle: '',            // 标题（如「下架确认」）
+    opConfirmText: '确认',   // 确认按钮文案
+    opAction: '',           // audit / offline / top / forward
+    opActionLabel: '',      // 操作中文名
+    opTarget: {},           // { id, type, title, sub, content }
+    opDays: 7,              // 置顶天数
+    opDayOptions: [
+      { label: '1 天', value: 1 },
+      { label: '3 天', value: 3 },
+      { label: '7 天', value: 7 },
+      { label: '30 天', value: 30 },
+    ],
+    opTargets: [],          // 转发可选发送账号
+    opWxid: '',             // 转发选中的账号
+    opLoadingTargets: false,
+    opSubmitting: false,    // 执行中（防重复点击）
+
+    // ===== 批量插入帖子（「＋」悬浮按钮） =====
+    insertPopupVisible: false,  // 插入弹窗显隐
+    insertText: '',             // 粘贴的原始文本
+    insertAnalyzing: false,     // AI 分析中
+    insertItems: [],            // AI 识别出的帖子预览列表
+    insertConfirming: false,    // 确认插入中
+    // 插入输入框高度：初始就占约半屏（autosize 单位 px，320≈40% 屏幕，随内容长高，上限 640）
+    // 注意：这里直接就是 {minHeight,maxHeight}，wxml 里 autosize="{{insertTextareaProps}}" 直传
+    insertTextareaProps: { minHeight: 320, maxHeight: 640 },
   },
 
   // 上一轮的查询上下文（tool + args），非 data（避免 setData 开销）
   chatContext: null,
 
+  // 本页面会话中产生的「结果集 id」列表，真正关闭页面时统一清理（避免云端堆积）
+  producedResultSets: null,
+
+  // 本次页面会话的 sessionId（会话记忆用）。页面打开时生成，关闭时清理。
+  sessionId: null,
+
+  // 页面加载：生成一个本次会话的 sessionId（内存态，不持久化）。
+  // 关闭页面后 sessionId 销毁，再进入即全新对话。
+  onLoad() {
+    this.sessionId = `s_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+  },
+
+  // ===== 只在「真正关闭页面」时清理本页产生的会话与结果集 =====
+  // 说明：onHide（切后台/跳转/锁屏）【不清理】，这样切出去看消息再回来，
+  //       连续对话（含结果集链）仍然可用。
+  // 仅 onUnload（返回上一页/页面销毁）才清 → 再打开即新对话。
+  onUnload() {
+    this.cleanupSession();
+    this.cleanupResultSets();
+  },
+
+  // 清理本次会话（再打开即新对话）。失败不阻断（云端 TTL/超量兜底）。
+  cleanupSession() {
+    const sid = this.sessionId;
+    if (!sid) return;
+    this.sessionId = null;
+    try {
+      wx.cloud.callFunction({
+        name: 'adminChat',
+        data: { action: 'cleanupSession', sessionId: sid },
+      }).catch(() => {});
+    } catch (e) {
+      // 忽略
+    }
+  },
+
+  // 清理本页产生的所有结果集：调 adminChat action=cleanupResultSets 批量删除。
+  // 注意：onUnload 时页面正在销毁，请求可能发不出去（不可靠），故不依赖其返回值；
+  //       云端另有 pruneResultSets（写入时清理 + 最多保留 20 条）与 24h TTL 兜底。
+  cleanupResultSets() {
+    const ids = this.producedResultSets;
+    if (!ids || !ids.length) return;
+    const toDelete = ids.slice();
+    // 立即清空本地记录，避免重复触发重复请求
+    this.producedResultSets = [];
+    this.chatContext = null;
+    try {
+      wx.cloud.callFunction({
+        name: 'adminChat',
+        data: { action: 'cleanupResultSets', resultSetIds: toDelete },
+        // fire-and-forget：不等待结果，不阻断页面销毁
+      }).catch(() => {});
+    } catch (e) {
+      // 忽略：清理失败不影响使用，云端兜底
+    }
+  },
+
   // 切换「深度思考」开关（AI 全面接管模式）
   onDeepThinkTap() {
     const next = !this.data.deepThinkActive;
-    // 关闭深度思考时，同步关闭上下文开关（按钮只在深度思考开启时出现）
-    this.setData({ deepThinkActive: next, contextActive: next ? this.data.contextActive : false });
+    this.setData({
+      deepThinkActive: next,
+      // 开启深度思考时【默认同时开启上下文】（多轮追问继承条件/结果集），
+      // 关闭深度思考时同步关闭上下文（上下文按钮只在深度思考开启时可见）
+      contextActive: next,
+      // 开启深度思考时关闭自由闲聊，避免两模式叠加
+      freeChatActive: next ? false : this.data.freeChatActive,
+    });
     wx.showToast({
-      title: next ? '已进入 AI 全面接管模式' : '已退出 AI 全面接管模式',
+      title: next ? '已进入 AI 全面接管模式（已开启上下文）' : '已退出 AI 全面接管模式',
       icon: 'none',
     });
     // 退出深度思考时清空上下文
     if (!next) this.chatContext = null;
+  },
+
+  // 切换「自由闲聊」开关（与深度思考互斥，开启后直接与 DeepSeek 闲聊，不注入能力文档）
+  onFreeChatTap() {
+    const next = !this.data.freeChatActive;
+    this.setData({
+      freeChatActive: next,
+      // 开启闲聊时关闭深度思考，避免两个模式叠加
+      deepThinkActive: next ? false : this.data.deepThinkActive,
+      contextActive: false,
+    });
+    if (!next) this.chatContext = null;
+    wx.showToast({
+      title: next ? '已进入自由闲聊模式' : '已退出自由闲聊模式',
+      icon: 'none',
+    });
   },
 
   // 切换「上下文」开关（仅深度思考模式下可见）
@@ -135,13 +251,18 @@ Page({
         name: 'adminChat',
         data: {
           question: text,
+          // 自由闲聊模式：不注入能力文档，直接与 DeepSeek 闲聊（测试用）
+          freeChat: this.data.freeChatActive,
           deepThink: this.data.deepThinkActive,
-          // 上下文：仅深度思考 + 开启上下文开关时，才传"结构化上下文"和"对话历史"
-          // 否则传空，确保不开启开关时每次都是独立查询，不会自动继承上一轮
+          // 会话记忆：深度思考 + 开启上下文时，带上 sessionId。
+          // 云端据此维护「条件累积 + 结果集链 + 最近轮次」，实现真正的连续对话。
+          sessionId: (this.data.deepThinkActive && this.data.contextActive) ? this.sessionId : null,
+          // 上下文：保留兼容（云端优先用 sessionId 的会话记忆；无会话时回退到此）
           context: this.data.deepThinkActive && this.data.contextActive && this.chatContext
             ? this.chatContext
             : null,
-          history: this.data.deepThinkActive && this.data.contextActive
+          // 对话历史：闲聊模式与深度思考上下文模式都携带（供多轮记忆）
+          history: (this.data.freeChatActive || (this.data.deepThinkActive && this.data.contextActive))
             ? this.data.chatList.slice(-6).map((m) => ({
                 role: m.role === 'user' ? 'user' : 'assistant',
                 content: m.role === 'user' ? m.text : (m.title || ''),
@@ -182,9 +303,24 @@ Page({
       blocks = [{ type: 'empty', text: '没有找到相关信息，换个问法试试？' }];
     }
 
-    // 更新上下文：深度思考模式下，记录本次的 tool + toolArgs，供下一轮追问继承
+    // 更新上下文：深度思考模式下，记录本次的 tool + toolArgs + 结果集引用，
+    // 供下一轮追问继承条件、以及支持「这里面/这些」对上一轮结果做二次统计。
     if (this.data.deepThinkActive && r && r.mode === 'deepThink' && r.tool) {
-      this.chatContext = { tool: r.tool, args: (r.toolArgs || {}) };
+      const prevCtx = this.chatContext || {};
+      this.chatContext = {
+        tool: r.tool,
+        args: (r.toolArgs || {}),
+        // 结果集：有新 id 用新的，没有则【保留旧 id】（避免被 null 覆盖导致断链）
+        resultSetId: r.resultSetId || prevCtx.resultSetId || null,
+        resultCount: r.resultCount || prevCtx.resultCount || 0,
+      };
+      // 记录本页面产生的全部结果集 id，供离开页面时一次性清理（避免云端堆积）
+      if (r.resultSetId) {
+        if (!this.producedResultSets) this.producedResultSets = [];
+        if (this.producedResultSets.indexOf(r.resultSetId) === -1) {
+          this.producedResultSets.push(r.resultSetId);
+        }
+      }
     }
 
     const list = this.data.chatList.map((m) => {
@@ -207,6 +343,248 @@ Page({
       });
     });
     this.setData({ chatList: list });
+
+    // 操作类结果：云函数已定位到唯一目标并返回 needConfirm → 弹二次确认框
+    if (r && r.needConfirm && r.action && r.target) {
+      this.openOpConfirm(r);
+    }
+  },
+
+  // 打开操作确认框（由云函数返回的待确认结构驱动）
+  openOpConfirm(r) {
+    const action = r.action;
+    const target = r.target || {};
+    this.setData({
+      opVisible: true,
+      opAction: action,
+      opActionLabel: r.actionLabel || '操作',
+      opTitle: `${r.actionLabel || '操作'}确认`,
+      opConfirmText: `确认${r.actionLabel || ''}`,
+      opTarget: target,
+      opDays: r.days || 7,
+      opTargets: [],
+      opWxid: '',
+      opLoadingTargets: false,
+    });
+    // 转发需要拉取在线发送账号
+    if (action === 'forward') {
+      this.loadOpTargets();
+    }
+  },
+
+  // 拉取在线发送账号（与详情页同源：wxTask action=online）
+  loadOpTargets() {
+    this.setData({ opLoadingTargets: true });
+    wx.cloud.callFunction({
+      name: 'wxTask',
+      data: { action: 'online' },
+      config: { timeout: 10000 },
+    })
+      .then((res) => {
+        const r = (res && res.result) || {};
+        const online = Array.isArray(r.online) ? r.online : (Array.isArray(r.list) ? r.list : []);
+        this.setData({
+          opLoadingTargets: false,
+          opTargets: online,
+          opWxid: online.length ? online[0] : '',
+        });
+      })
+      .catch(() => {
+        this.setData({ opLoadingTargets: false, opTargets: [], opWxid: '' });
+      });
+  },
+
+  onOpDaysChange(e) {
+    this.setData({ opDays: e.detail.value });
+  },
+
+  onOpWxidChange(e) {
+    this.setData({ opWxid: e.detail.value });
+  },
+
+  onOpCancel() {
+    if (this.data.opSubmitting) return;
+    this.setData({ opVisible: false });
+  },
+
+  // 确认执行：按 action 分发到 adminAuth / wxTask（真正改库在这里）
+  async onOpConfirm() {
+    if (this.data.opSubmitting) return;
+    const { opAction, opTarget, opDays, opWxid } = this.data;
+
+    if (opAction === 'forward') {
+      if (!opWxid) {
+        wx.showToast({ title: '请先选择发送账号', icon: 'none' });
+        return;
+      }
+    }
+
+    this.setData({ opSubmitting: true });
+    wx.showLoading({ title: '执行中…', mask: true });
+    try {
+      let okMsg = '';
+      if (opAction === 'audit') {
+        const r = await wx.cloud.callFunction({
+          name: 'adminAuth',
+          data: { action: 'audit', _id: opTarget.id },
+          config: { timeout: 10000 },
+        });
+        const rr = (r && r.result) || {};
+        if (!rr.success) throw new Error(rr.message || '操作失败');
+        okMsg = '已通过审核';
+      } else if (opAction === 'offline') {
+        const r = await wx.cloud.callFunction({
+          name: 'adminAuth',
+          data: { action: 'offline', _id: opTarget.id },
+          config: { timeout: 10000 },
+        });
+        const rr = (r && r.result) || {};
+        if (!rr.success) throw new Error(rr.message || '操作失败');
+        okMsg = '已下架';
+      } else if (opAction === 'top') {
+        const r = await wx.cloud.callFunction({
+          name: 'adminAuth',
+          data: { action: 'top', op: 'set', post_id: opTarget.id, data_type: opTarget.type, days: opDays },
+          config: { timeout: 10000 },
+        });
+        const rr = (r && r.result) || {};
+        if (!rr.success) throw new Error(rr.message || '操作失败');
+        okMsg = `已置顶 ${opDays} 天`;
+      } else if (opAction === 'forward') {
+        const r = await wx.cloud.callFunction({
+          name: 'wxTask',
+          data: { action: 'create', wxid: opWxid, content: opTarget.content || '' },
+          config: { timeout: 15000 },
+        });
+        const rr = (r && r.result) || {};
+        if (!rr.success) throw new Error(rr.message || '提交失败');
+        okMsg = '已提交，稍后自动发布';
+      } else {
+        throw new Error('不支持的操作');
+      }
+
+      wx.hideLoading();
+      wx.showToast({ title: okMsg, icon: 'success' });
+      this.setData({ opVisible: false, opSubmitting: false });
+
+      // 在对话里补一条成功提示，形成闭环
+      this.appendSystemTip(`✅ ${this.data.opActionLabel}成功：${opTarget.title}`);
+    } catch (err) {
+      wx.hideLoading();
+      this.setData({ opSubmitting: false });
+      wx.showToast({ title: (err && err.message) || '操作失败，请重试', icon: 'none' });
+    }
+  },
+
+  // 往对话列表追加一条系统提示（AI 头像）
+  appendSystemTip(text) {
+    const msg = {
+      id: getUniqueKey(),
+      role: 'assistant',
+      avatar: AI_AVATAR,
+      name: '管理员 AI 助手',
+      time: getCurrentTime(),
+      loading: false,
+      title: '操作结果',
+      blocks: [{ type: 'text', text }],
+    };
+    this.setData({ chatList: [...this.data.chatList, msg] });
+    this.scrollToBottom();
+  },
+
+  // ===== 批量插入帖子 =====
+  // 打开插入弹窗
+  onInsertTap() {
+    this.setData({
+      insertPopupVisible: true,
+      insertText: '',
+      insertItems: [],
+    });
+  },
+  // 关闭插入弹窗
+  onInsertClose() {
+    if (this.data.insertAnalyzing || this.data.insertConfirming) return;
+    this.setData({ insertPopupVisible: false, insertText: '', insertItems: [] });
+  },
+  // 弹窗 visible 变化（点遮罩关闭）
+  onInsertPopupVisibleChange(e) {
+    if (!e.detail.visible && !this.data.insertAnalyzing && !this.data.insertConfirming) {
+      this.setData({ insertPopupVisible: false, insertText: '', insertItems: [] });
+    }
+  },
+  // 输入框内容变化
+  onInsertTextChange(e) {
+    this.setData({ insertText: e.detail.value || '' });
+  },
+  // 第一步：AI 分析（切分 + 识别字段，返回预览，不落库）
+  async onInsertAnalyze() {
+    const text = (this.data.insertText || '').trim();
+    if (!text) {
+      wx.showToast({ title: '请先粘贴要插入的内容', icon: 'none' });
+      return;
+    }
+    if (this.data.insertAnalyzing) return;
+    this.setData({ insertAnalyzing: true, insertItems: [] });
+    wx.showLoading({ title: 'AI 识别中…', mask: true });
+    try {
+      const res = await wx.cloud.callFunction({
+        name: 'adminChat',
+        data: { action: 'analyzeInsert', text },
+        config: { timeout: 30000 },
+      });
+      const r = (res && res.result) || {};
+      if (!r.success) throw new Error(r.message || '识别失败');
+      const MISSING_NAME = { phone: '手机号', city: '城市', role: '岗位' };
+      const items = (r.items || []).map((it) => ({
+        ...it,
+        // 供预览展示的中文标签
+        _typeName: TYPE_NAME_MAP[it.data_type] || it.data_type || '其他',
+        _salaryText: it.salary ? `${it.salary}元` : (it.price ? `${it.price}元` : ''),
+        _missingTags: (it._missing || []).map((k) => MISSING_NAME[k] || k),
+      }));
+      this.setData({ insertItems: items });
+      wx.hideLoading();
+      if (!items.length) {
+        wx.showToast({ title: '没有识别到有效帖子', icon: 'none' });
+      }
+    } catch (err) {
+      wx.hideLoading();
+      wx.showToast({ title: (err && err.message) || '识别失败，请重试', icon: 'none' });
+    } finally {
+      this.setData({ insertAnalyzing: false });
+    }
+  },
+  // 第二步：确认插入
+  async onInsertConfirm() {
+    const items = this.data.insertItems;
+    if (!items.length) {
+      wx.showToast({ title: '没有可插入的数据', icon: 'none' });
+      return;
+    }
+    if (this.data.insertConfirming) return;
+    this.setData({ insertConfirming: true });
+    wx.showLoading({ title: '插入中…', mask: true });
+    try {
+      const res = await wx.cloud.callFunction({
+        name: 'adminChat',
+        data: { action: 'confirmInsert', items },
+        config: { timeout: 30000 },
+      });
+      const r = (res && res.result) || {};
+      if (!r.success) throw new Error(r.message || '插入失败');
+      wx.hideLoading();
+      const successCount = r.successCount || 0;
+      const failedCount = r.failedCount || 0;
+      wx.showToast({ title: `成功 ${successCount} 条${failedCount ? `，失败 ${failedCount} 条` : ''}`, icon: successCount ? 'success' : 'none' });
+      this.setData({ insertPopupVisible: false, insertText: '', insertItems: [] });
+      // 在对话里补一条结果提示，形成闭环
+      this.appendSystemTip(`✅ 已插入 ${successCount} 条帖子${failedCount ? `，失败 ${failedCount} 条` : ''}`);
+    } catch (err) {
+      wx.hideLoading();
+      wx.showToast({ title: (err && err.message) || '插入失败，请重试', icon: 'none' });
+    } finally {
+      this.setData({ insertConfirming: false });
+    }
   },
 
   // 翻页：重新调 adminChat 带 page 参数，更新该列表块
@@ -281,6 +659,31 @@ Page({
     wx.setClipboardData({
       data: detail,
       success: () => wx.showToast({ title: '已复制', icon: 'success' }),
+      fail: () => wx.showToast({ title: '复制失败', icon: 'none' }),
+    });
+  },
+
+  // 一键复制某条消息里某个列表块的全部信息（按 detail 字段拼接，每条用空行分隔）
+  onCopyAll(e) {
+    const { msgId, blkIndex } = e.currentTarget.dataset;
+    const msg = this.data.chatList.find((m) => m.id === msgId);
+    if (!msg || !msg.blocks) return;
+    const blk = msg.blocks[Number(blkIndex)];
+    if (!blk || !Array.isArray(blk.items) || !blk.items.length) return;
+
+    // 收集所有条目的 detail（已排好版的完整信息），过滤空值
+    const parts = blk.items
+      .map((li) => (li && typeof li.detail === 'string' ? li.detail.trim() : ''))
+      .filter(Boolean);
+    if (!parts.length) {
+      wx.showToast({ title: '暂无可复制的信息', icon: 'none' });
+      return;
+    }
+
+    const text = parts.join('\n\n');
+    wx.setClipboardData({
+      data: text,
+      success: () => wx.showToast({ title: `已复制 ${parts.length} 条`, icon: 'success' }),
       fail: () => wx.showToast({ title: '复制失败', icon: 'none' }),
     });
   },
@@ -528,6 +931,8 @@ Page({
       success: (res) => {
         if (res.confirm) {
           this.setData({ chatList: [], value: '', loading: false });
+          // 对话已清空，本页产生的结果集也一并清掉（追问已无上下文可指代）
+          this.cleanupResultSets();
           wx.showToast({ title: '已清除', icon: 'success' });
         }
       },

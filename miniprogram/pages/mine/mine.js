@@ -34,39 +34,19 @@ Page({
     clearDialogVisible: false,
     aboutDialogVisible: false,
     clearing: false,
-    // 仿闲鱼：统计（收藏/历史为真实计数，关注默认 0）
+    // 统计（收藏/历史为真实计数；已去掉无实现的「我的关注」占位项）
     statList: [
       { key: 'fav',     label: '我的收藏' },
       { key: 'history', label: '历史浏览' },
-      { key: 'follow',  label: '我的关注', num: 0 },
     ],
-    // 我的交易
-    tradeSummary: '在闲鱼赚了 92495.02元',
-    tradeBadge: '今日曝 904',
-    // 订单 4 项
+    // 我的交易（订单 3 项，均为真实功能：我发布的/付款记录/客服）
     orderList: [
       { key: 'sell',     label: '我发布的', count: 0 }, // onShow 会覆盖为真实发布数
-      { key: 'space',    label: '我的认证', count: 0  },
       { key: 'sold',     label: '付款记录', count: 0 }, // onShow 会覆盖为真实付款记录数
       { key: 'service',  label: '客服',     count: '人工客服' },
     ],
-    // 工具宫格（4 列）
-    toolGrid: [
-      { key: 'expose',    label: '宝贝曝光数',  count: 220, hint: '查看完整数据' },
-      { key: 'deal',      label: '成交数',     count: 0,   hint: '查看完整数据' },
-      { key: 'promotion', label: '曝光推广' },
-      { key: 'marketing', label: '营销工具' },
-    ],
     // 公告（来自 notifyMsg.notice_latest 的最新一条；无公告时显示「暂无公告」）
     notice: '暂无公告',
-    // 鱼力回收（招回/卖等）
-    recycleGrid: [
-      { key: 'clean',   label: '超强擦亮' },
-      { key: 'host',    label: '托管无忧卖' },
-      { key: 'law',     label: '闲鱼小法庭' },
-      { key: 'loan',    label: '借钱' },
-      { key: 'sign',    label: '闲鱼小约' },
-    ],
     // 底部真实 TabBar（与 demo 一致，mine 为独立页，点击切换用 reLaunch 清栈）
     tabbar: [
       { id: 'home',    icon: 'home',        label: '首页' },
@@ -238,12 +218,6 @@ Page({
     const { key } = e.currentTarget.dataset;
     if (key === 'history') { this.goHistory(); return; }
     if (key === 'fav') { this.goFavorites(); return; }
-    if (key === 'follow') { wx.showToast({ title: '正在制作中', icon: 'none' }); return; }
-    if (key === 'coupon') {
-      wx.showToast({ title: '该功能待接入', icon: 'none' });
-      return;
-    }
-    wx.showToast({ title: '该功能待接入', icon: 'none' });
   },
 
   onOrderTap(e) {
@@ -253,7 +227,6 @@ Page({
     if (key === 'sold') { wx.navigateTo({ url: '/pages/payrecords/payrecords' }); return; }
     // 客服：弹出「联系一哥」并支持直接拨打
     if (key === 'service') { this.contactService(); return; }
-    wx.showToast({ title: '该功能待接入', icon: 'none' });
   },
 
   // 客服：弹出联系电话，可一键拨打
@@ -279,28 +252,8 @@ Page({
       .catch(() => 0);
   },
 
-  onToolTap() {
-    wx.showToast({ title: '该功能待接入', icon: 'none' });
-  },
-
-  onRecycleTap() {
-    wx.showToast({ title: '该功能待接入', icon: 'none' });
-  },
-
-  onTradeTap() {
-    wx.showToast({ title: '交易记录待接入', icon: 'none' });
-  },
-
-  onTradeBadgeTap() {
-    wx.showToast({ title: '今日曝光详情待接入', icon: 'none' });
-  },
-
   onNoticeTap() {
     wx.navigateTo({ url: '/pages/notice/notice' });
-  },
-
-  onBannerTap() {
-    wx.showToast({ title: '闲鱼会员权益说明', icon: 'none' });
   },
 
   onHeaderRightTap(e) {
@@ -371,6 +324,11 @@ Page({
 
   onAboutTap() {
     this.setData({ aboutDialogVisible: true });
+  },
+
+  // 我的认证：进身份认证中心（店主/师傅/商家）
+  onIdentityTap() {
+    wx.navigateTo({ url: '/pages/identity/identity' });
   },
 
   // 意见反馈：进反馈页（type=feedback，可提交功能建议/使用问题/投诉等）

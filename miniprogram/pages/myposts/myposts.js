@@ -1,4 +1,5 @@
 // pages/myposts/myposts.js
+const { fmtAgo } = require('../../utils/time.js');
 // 包子行业信息平台 · 我的发布（管理自己发布的信息）
 // 数据源：managePost(action=list_mine) —— 按 _openid 归属返回本人全部帖子（含待审核）
 // 操作：编辑（跳发布页带 id 预填）/ 删除（managePost action=delete）
@@ -15,19 +16,6 @@ const TYPE_META = {
   other:         { name: '其他',     color: '#8C8C8C', light: '#F0F0F0' },
 };
 
-const DAY = 864e5;
-
-function fmtAgo(ts) {
-  if (!ts) return '';
-  const d = new Date();
-  const todayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  if (ts >= todayStart) return '今天';
-  const days = Math.floor((todayStart - ts) / DAY);
-  if (days <= 1) return '昨天';
-  if (days < 30) return `${days}天前`;
-  if (days < 365) return `${Math.floor(days / 30)}个月前`;
-  return `${Math.floor(days / 365)}年前`;
-}
 
 function fmtMoney(n) {
   const num = Number(n) || 0;

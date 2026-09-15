@@ -70,6 +70,7 @@ const AD_SLOTS = "ad_slots"; // §2.9 广告位定义（方案 C：数据驱动�
 const GROUPS = "baozi_groups"; // 包友群（C 端只读，管理端增删改）
 const MERCHANTS = "baozi_merchants"; // 包友圈商家（C 端提交/浏览，管理端审核）
 const MESSAGES = "baozi_messages"; // 站内通知 / 平台公告（与 notifyMsg 同集合）
+const IDENTITIES = "baozi_identities"; // 身份认证申请（店主/师傅，管理端审核）
 
 // ---- RBAC：管理员账号 / 角色（多人分级权限）----
 const ADMIN_ACCOUNTS = "admin_accounts"; // 管理员账号表（username 唯一）
@@ -142,6 +143,11 @@ const ACTION_PERM = {
   notice_update: "notice.manage",
   notice_delete: "notice.manage",
   notice_toggle: "notice.manage",
+  // 身份认证管理（baozi_identities，店主/师傅认证）
+  identity_list: "identity.manage",
+  identity_get: "identity.manage",
+  identity_audit: "identity.manage",
+  identity_delete: "identity.manage",
   // 日志 / 概览
   logs: "log.view",
   stats: "log.view",
@@ -2409,6 +2415,144 @@ async function actionNoticeToggle(event) {
   }
 }
 
+// ---------- 身份认证管理（baozi_identities，店主/师傅） ----------
+// 商家身份走包友圈商家入驻（baozi_merchants），不在此管理。
+// 每条记录对应一个身份的一次申请：{ openid, identity: 'owner'|'master', real_name, id_card, phone, address, license_img, photos[], status, ... }
+
+const IDENTITY_TYPES = ["owner", "master"];
+const IDENTITY_LABEL = { owner: "店主", master: "师傅" };
+
+/** 身份认证列表：分页 + 状态/身份类型/关键词筛选 */
+async function actionIdentityList(event) {
+  try {
+    const page = Math.max(1, parseInt(event.page, 10) || 1);
+    const pageSize = Math.min(100, Math.max(1, parseInt(event.pageSize, 10) || 20));
+    const coll = db.collection(IDENTITIES);
+    const conds = [];
+    if (event.status) conds.push({ status: event.status });
+    const identity = String(event.identity || "").trim();
+    if (identity && IDENTITY_TYPES.includes(identity)) {
+      conds.push({ identity });
+    }
+    const kw = event.keyword ? String(event.keyword).trim() : "";
+    if (kw) {
+      const reg = db.RegExp({ regexp: escapeRegExp(kw), options: "i" });
+      conds.push(_.or([{ real_name: reg }, { phone: reg }, { id_card: reg }, { address: reg }]));
+    }
+    const where = conds.length ? (conds.length === 1 ? conds[0] : _.and(conds)) : {};
+    const hasWhere = conds.length > 0;
+
+    const total = hasWhere ? (await coll.where(where).count()).total : (await coll.count()).total;
+    const query = hasWhere
+      ? coll.where(where).skip((page - 1) * pageSize).limit(pageSize)
+      : coll.skip((page - 1) * pageSize).limit(pageSize);
+    let res;
+    try {
+      res = await query.orderBy("created_at", "desc").get();
+    } catch (e) {
+      res = await query.get();
+    }
+    return ok({ list: res.data || [], total, page, pageSize });
+  } catch (e) {
+    return fail(String(e && e.message ? e.message : e));
+  }
+}
+
+/** 身份认证详情 */
+async function actionIdentityGet(event) {
+  if (!event._id) return fail("缺少 _id");
+  try {
+    const r = await db.collection(IDENTITIES).doc(event._id).get();
+    return ok({ item: r.data });
+  } catch (e) {
+    return fail(String(e && e.message ? e.message : e));
+  }
+}
+
+/** 审核身份认证：op=approve / reject（reject 可带 reason） */
+async function actionIdentityAudit(event) {
+  if (!event._id) return fail("缺少 _id");
+  const op = event.op === "reject" ? "reject" : "approve";
+  const status = op === "reject" ? "rejected" : "approved";
+
+  try {
+    // 1) 读申请记录
+    const r = await db.collection(IDENTITIES).doc(event._id).get();
+    const apply = r.data;
+    if (!apply) return fail("申请不存在", "NOT_FOUND");
+
+    // 2) 更新申请状态
+    await db.collection(IDENTITIES).doc(event._id).update({
+      data: {
+        status,
+        reject_reason: op === "reject" ? String(event.reason || "") : "",
+        reviewed_by: String(event.user || event.__role || "admin"),
+        reviewed_at: Date.now(),
+        updated_at: Date.now(),
+      },
+    });
+
+    // 3) 回写 baozi_users（审核通过时把该身份并入用户 identities）
+    if (op === "approve") {
+      const identity = apply.identity;
+      try {
+        const ur = await db.collection(USERS).where({ openid_wxapp: apply.openid }).limit(1).get();
+        const user = ur.data && ur.data[0];
+        if (user) {
+          const existing = Array.isArray(user.identities) ? user.identities : [];
+          const merged = [...new Set([...existing, identity])];
+          await db.collection(USERS).doc(user._id).update({
+            data: { identities: merged, updated_at: Date.now() },
+          });
+        }
+      } catch (e) {
+        console.error("[adminAuth] 回写用户认证身份失败:", e && e.errMsg);
+      }
+    }
+
+    await writeLog(event, op === "reject" ? "identity_reject" : "identity_approve", event._id, event.reason || "");
+    return ok({ status });
+  } catch (e) {
+    return fail(String(e && e.message ? e.message : e));
+  }
+}
+
+/** 删除身份认证申请（物理删除），同时从用户 identities 移除对应身份 */
+async function actionIdentityDelete(event) {
+  if (!event._id) return fail("缺少 _id");
+  try {
+    // 先读申请，拿到 openid 和 identity
+    const r = await db.collection(IDENTITIES).doc(event._id).get();
+    const apply = r.data;
+    if (!apply) return fail("申请不存在", "NOT_FOUND");
+
+    // 删除申请记录
+    await db.collection(IDENTITIES).doc(event._id).remove();
+
+    // 从用户 identities 移除对应身份
+    const identity = apply.identity;
+    if (identity) {
+      try {
+        const ur = await db.collection(USERS).where({ openid_wxapp: apply.openid }).limit(1).get();
+        const user = ur.data && ur.data[0];
+        if (user && Array.isArray(user.identities)) {
+          const filtered = user.identities.filter((id) => id !== identity);
+          await db.collection(USERS).doc(user._id).update({
+            data: { identities: filtered, updated_at: Date.now() },
+          });
+        }
+      } catch (e) {
+        console.error("[adminAuth] 移除用户认证身份失败:", e && e.errMsg);
+      }
+    }
+
+    await writeLog(event, "identity_delete", event._id, "");
+    return ok();
+  } catch (e) {
+    return fail(String(e && e.message ? e.message : e));
+  }
+}
+
 // ---------- 入口 ----------
 exports.main = async (event = {}) => {
   const action = event.action || "list";
@@ -2515,6 +2659,11 @@ exports.main = async (event = {}) => {
       case "notice_update": return await actionNoticeUpdate(event);
       case "notice_delete": return await actionNoticeDelete(event);
       case "notice_toggle": return await actionNoticeToggle(event);
+      // 身份认证管理
+      case "identity_list": return await actionIdentityList(event);
+      case "identity_get": return await actionIdentityGet(event);
+      case "identity_audit": return await actionIdentityAudit(event);
+      case "identity_delete": return await actionIdentityDelete(event);
       default: return fail("未知操作: " + action, "UNKNOWN_ACTION");
     }
   }

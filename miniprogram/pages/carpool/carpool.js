@@ -8,6 +8,7 @@
 //     / seats(可乘人数) / raw_text(具体描述) / phone+phone_masked(电话)
 //   无价格、无品类、无成色 —— 频道页只按 类别(车找人/人找车) + 路线/城市关键词 浏览。
 
+const { fmtAgo } = require('../../utils/time.js');
 const privacy = require('../../utils/privacy.js');
 
 const CREDIT_META = {
@@ -17,19 +18,6 @@ const CREDIT_META = {
   4: { label: '信用一般', color: '#8C8C8C', bg: '#F5F5F5' },
 };
 
-const DAY = 864e5;
-
-function fmtAgo(ts) {
-  if (!ts) return '';
-  const d = new Date();
-  const todayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  if (ts >= todayStart) return '今天';
-  const days = Math.floor((todayStart - ts) / DAY);
-  if (days <= 1) return '昨天';
-  if (days < 30) return `${days}天前`;
-  if (days < 365) return `${Math.floor(days / 30)}个月前`;
-  return `${Math.floor(days / 365)}年前`;
-}
 
 Page({
   data: {

@@ -1,0 +1,89 @@
+/* pages/identity/identity.wxss */
+.page {
+  min-height: 100vh;
+  background: #F6F6F6;
+  padding-bottom: 32rpx;
+  box-sizing: border-box;
+}
+
+/* ===== 骨架屏 ===== */
+.skeleton {
+  padding: 32rpx 24rpx;
+}
+
+/* ===== 顶部说明 ===== */
+.header {
+  padding: 40rpx 32rpx 24rpx;
+  text-align: center;
+}
+.header-title {
+  font-size: 36rpx;
+  font-weight: 700;
+  color: #1A1A1A;
+}
+.header-desc {
+  font-size: 24rpx;
+  color: #999999;
+  margin-top: 8rpx;
+}
+
+/* ===== 身份选择卡片列表 ===== */
+.identity-list {
+  padding: 0 24rpx;
+}
+.identity-card {
+  background: #FFFFFF;
+  border-radius: 20rpx;
+  padding: 24rpx;
+  margin-bottom: 16rpx;
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
+}
+.identity-icon {
+  width: 100rpx;
+  height: 100rpx;
+  border-radius: 20rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.identity-info {
+  flex: 1;
+  min-width: 0;
+}
+.identity-name-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+.identity-name {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #1A1A1A;
+}
+.identity-desc {
+  font-size: 24rpx;
+  color: #999999;
+  margin-top: 4rpx;
+}
+.identity-extra {
+  font-size: 22rpx;
+  color: #36CFC9;
+  margin-top: 8rpx;
+}
+
+/* ===== 底部提示 ===== */
+.footer-tip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+  padding: 40rpx 32rpx;
+}
+.footer-tip-text {
+  font-size: 22rpx;
+  color: #999999;
+}

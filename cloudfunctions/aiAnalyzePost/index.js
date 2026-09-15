@@ -74,7 +74,7 @@ function callDeepSeek(messages) {
     const baseUrl = process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com";
 
     const postData = JSON.stringify({
-      model: "deepseek-chat",
+      model: "deepseek-flash",
       messages,
       temperature: 0.1,
       response_format: { type: "json_object" },
@@ -119,6 +119,47 @@ function callDeepSeek(messages) {
     req.write(postData);
     req.end();
   });
+}
+
+// 安全解析 AI 返回的 JSON（多级降级，不依赖任何厂商私有参数 → 换模型也适用）
+// ① 直接 JSON.parse（AI 按要求只输出 JSON 时走这里）
+// ② 剥掉 ```json ... ``` 代码块后再解析
+// ③ 扫描第一个「平衡括号」的 {...} 片段（比贪婪正则更稳：多个 JSON 不吃多余内容、
+//    字符串内含花括号不误判、被 max_tokens 截断时也能尽量救回）
+// 全部失败返回 null（由调用方决定降级策略）
+function safeParseJSON(text) {
+  const s = String(text == null ? "" : text).trim();
+  if (!s) return null;
+  // ① 直接解析
+  try { return JSON.parse(s); } catch (e) { /* 继续降级 */ }
+  // ② 剥 markdown 代码块
+  const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence && fence[1]) {
+    try { return JSON.parse(fence[1].trim()); } catch (e) { /* 继续降级 */ }
+  }
+  // ③ 扫描第一个「平衡括号」的 JSON 片段
+  const start = s.indexOf("{");
+  if (start >= 0) {
+    let depth = 0, inStr = false, esc = false;
+    for (let i = start; i < s.length; i++) {
+      const ch = s[i];
+      if (inStr) {
+        if (esc) esc = false;
+        else if (ch === "\\") esc = true;
+        else if (ch === '"') inStr = false;
+        continue;
+      }
+      if (ch === '"') inStr = true;
+      else if (ch === "{") depth += 1;
+      else if (ch === "}") {
+        depth -= 1;
+        if (depth === 0) {
+          try { return JSON.parse(s.slice(start, i + 1)); } catch (e) { return null; }
+        }
+      }
+    }
+  }
+  return null;
 }
 
 // 构造 prompt：只补空字段
@@ -244,14 +285,11 @@ async function analyzeOne(postId) {
     { role: "user", content: buildPrompt(rawText, dataType) },
   ]);
 
-  let parsed;
-  try {
-    parsed = JSON.parse(content);
-  } catch (e) {
-    // DeepSeek 可能返回非纯 JSON，尝试提取 {...}
-    const m = content.match(/\{[\s\S]*\}/);
-    if (!m) return fail("DeepSeek 返回无法解析", "PARSE_FAIL");
-    try { parsed = JSON.parse(m[0]); } catch (e2) { return fail("DeepSeek 返回无法解析", "PARSE_FAIL"); }
+  const parsed = safeParseJSON(content);
+  if (!parsed || typeof parsed !== "object") {
+    // 把原文前 200 字带进日志，便于定位（不返回给调用方，避免污染）
+    console.error("[aiAnalyzePost] 解析失败，原文前200字:", String(content || "").slice(0, 200));
+    return fail("DeepSeek 返回无法解析", "PARSE_FAIL");
   }
 
   const aiOut = sanitizeAIOutput(parsed, dataType);

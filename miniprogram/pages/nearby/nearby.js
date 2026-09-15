@@ -1,4 +1,5 @@
 // pages/nearby/nearby.js
+const { fmtAgo } = require('../../utils/time.js');
 // 包子行业信息平台 · 附近页（定位授权 → 按定位城市 code 查全板块同城帖子）
 // 数据源：feedPosts 云函数（7 类各拉一页 + city_code 过滤）
 // 定位用 wx.getLocation → 就近匹配热门城市(CITY_GEO)；非热门城市提示切回。
@@ -69,19 +70,6 @@ function nearestCity(lat, lng) {
   return best && bestDist <= 260 ? { name: best.name, code: best.code, dist: bestDist } : null;
 }
 
-const DAY = 864e5;
-
-function fmtAgo(ts) {
-  if (!ts) return '';
-  const d = new Date();
-  const todayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  if (ts >= todayStart) return '今天';
-  const days = Math.floor((todayStart - ts) / DAY);
-  if (days <= 1) return '昨天';
-  if (days < 30) return `${days}天前`;
-  if (days < 365) return `${Math.floor(days / 30)}个月前`;
-  return `${Math.floor(days / 365)}年前`;
-}
 
 function fmtMoney(n) {
   const num = Number(n) || 0;
