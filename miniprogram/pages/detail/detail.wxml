@@ -154,7 +154,7 @@
     <view wx:if="{{d.hasPhone}}" class="card-row phone-row">
       <text class="card-key">联系电话</text>
       <text class="card-val phone-val" user-select>{{d.phonesText}}</text>
-      <view class="phone-action {{paying ? 'is-loading' : ''}}" bind:tap="onRevealPhone">{{paying ? '加载中…' : (canCall ? '拨打' : ((isVip || hasPaid) ? '免费拨打' : '查看电话'))}}</view>
+      <view class="phone-action {{paying ? 'is-loading' : ''}}" bind:tap="onRevealPhone">{{paying ? '加载中…' : (canCall ? '拨打' : ((isVip || hasPaid) ? '拨打' : '查看电话'))}}</view>
     </view>
     <view wx:if="{{d.address}}" class="card-row">
       <text class="card-key">详细地址</text>
@@ -249,7 +249,7 @@
           size="large"
           loading="{{paying}}"
           bind:tap="onViewContact"
-        >{{ (isVip || hasPaid) ? '免费拨打电话' : '查看联系方式' }}</t-button>
+        >{{ (isVip || hasPaid) ? '拨打' : '查看联系方式' }}</t-button>
       </view>
     </block>
   </view>
@@ -358,3 +358,25 @@
     </view>
   </view>
 </view>
+
+<!-- 手机号绑定半屏弹层（打开详情页触发；已绑定/未满3天不弹） -->
+<t-popup
+  visible="{{bindSheetVisible}}"
+  placement="center"
+  bind:visible-change="onBindSheetClose"
+>
+  <view class="bind-sheet">
+    <view class="bind-sheet-icon">
+      <t-icon name="mobile" size="96rpx" color="#FF7A45" />
+    </view>
+    <view class="bind-sheet-title">绑定手机号，找回你的信息</view>
+    <view class="bind-sheet-sub">绑定后系统会自动匹配并认领你历史上发布过的所有信息，不会丢失、不会重复</view>
+    <button
+      class="bind-sheet-btn"
+      open-type="getPhoneNumber"
+      bind:getphonenumber="onGetPhone"
+      loading="{{bindPhoneLoading}}"
+    >立即绑定手机号</button>
+    <view class="bind-sheet-cancel" bind:tap="onBindSheetClose">暂不绑定</view>
+  </view>
+</t-popup>

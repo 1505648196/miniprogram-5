@@ -10,6 +10,7 @@
     "t-dialog": "/miniprogram_npm/tdesign-miniprogram/dialog/dialog",
     "t-swiper": "/miniprogram_npm/tdesign-miniprogram/swiper/swiper",
     "t-checkbox-group": "/miniprogram_npm/tdesign-miniprogram/checkbox-group/checkbox-group",
-    "t-checkbox": "/miniprogram_npm/tdesign-miniprogram/checkbox/checkbox"
+    "t-checkbox": "/miniprogram_npm/tdesign-miniprogram/checkbox/checkbox",
+    "t-popup": "/miniprogram_npm/tdesign-miniprogram/popup/popup"
   }
 }

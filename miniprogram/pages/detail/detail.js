@@ -16,6 +16,7 @@ const privacy = require('../../utils/privacy.js');
 const { callPayCommon, pickPayment } = require('../../utils/pay.js');
 const { loadAds, openAdLink } = require('../../utils/ad.js');
 const track = require('../../utils/track.js');
+const bindPhone = require('../../utils/bindPhone.js');
 
 
 function fmtDateTime(ts) {
@@ -61,6 +62,9 @@ Page({
     isVip: false,
     hasPaid: false,
     paying: false,
+    // 手机号绑定半屏弹层
+    bindSheetVisible: false,
+    bindPhoneLoading: false,
     // 详情页顶部卡片广告（方案 C：ad_slots 里 page=detail, position=top_card）
     detailAds: [],
     // 广告轮播加载中（骨架屏先出来，广告拉到后再渲染轮播）
@@ -115,6 +119,18 @@ Page({
     }
     // 2) 缓存未命中 → 兜底查库
     this.fetchRemote(id);
+  },
+
+  // 拨完电话（或从后台）回到本页时：刷新付费/VIP 状态，确保按钮与号码展示实时正确
+  onShow() {
+    if (!this._id) return;
+    // 已具备拨打权限（拿到过号）或正在加载时不重复刷新
+    if (!this._phone && !this.data.paying) {
+      this.loadVip();
+      this.loadPaidStatus(this._id);
+    }
+    // 打开详情页时：判断是否该弹手机号绑定半屏弹层（已绑定/未满3天不弹）
+    this.tryShowBindSheet();
   },
 
   // 详情页顶部广告轮播：page=detail, position=top_card
@@ -705,14 +721,45 @@ Page({
       .catch(() => {});
   },
 
-  // 查是否已为该帖子付费 → 已付费则按钮显示「免费拨打」，无需再次付费
+  // 查是否已为该帖子付费 / 是否会员 → 已付费或会员则按钮显示「拨打」，
+  // 并且直接显示完整号码（不脱敏），让用户一眼看到「我已付过 / 我是会员」。
+  // 注意：check 返回 { paid, is_vip }，is_vip 也一并同步，与 memberService.status 双保险
   loadPaidStatus(id) {
     if (!id) return;
     wx.cloud
       .callFunction({ name: 'payForPhone', data: { action: 'check', post_id: id }, config: { timeout: 10000 } })
       .then((res) => {
         const r = (res && res.result) || {};
-        this.setData({ hasPaid: !!r.paid });
+        const paid = !!r.paid;
+        const vip = this.data.isVip || !!r.is_vip;
+        this.setData({ hasPaid: paid, isVip: vip });
+        // 已付费或 VIP → 直接显示完整号码
+        if (paid || vip) this.revealPhoneForPayed();
+      })
+      .catch(() => {});
+  },
+
+  // 已付费/VIP 用户：主动取完整号并渲染到「联系电话」栏（替换脱敏号，不脱敏）
+  // 与管理员 revealPhoneForAdmin 类似，但走 payForPhone.reveal（会员/已付费门槛），
+  // 而非 adminAuth.post_phone（管理员专属）。
+  revealPhoneForPayed() {
+    if (!this._id || this._phone) return;
+    this.callPay('reveal', this._id)
+      .then((r) => {
+        if (!r.success || !r.phone) return;
+        this._phone = r.phone;
+        // 详情数据可能还没就位（缓存未命中时需等云函数返回），最多等 3 秒
+        const patch = () => {
+          if (!this.data.d) return;
+          this.setData({ 'd.phonesText': r.phone, 'd.hasPhone': true, canCall: true });
+        };
+        if (this.data.d) { patch(); return; }
+        let tries = 0;
+        const timer = setInterval(() => {
+          tries++;
+          if (this.data.d) { clearInterval(timer); patch(); }
+          else if (tries >= 30) clearInterval(timer);
+        }, 100);
       })
       .catch(() => {});
   },
@@ -809,6 +856,30 @@ Page({
       return;
     }
     if (this.data.paying) return;
+
+    // —— 关键短路：前端已判定「已付费 或 VIP」（按钮显示「拨打」）时，
+    //    只走 reveal 拿号弹号，**绝不落支付**。防止状态边界导致已付费/VIP 被误拉去支付。
+    if (this.data.isVip || this.data.hasPaid) {
+      this.setData({ paying: true });
+      try {
+        const r = await this.callPay('reveal', postId);
+        if (r.success && r.phone) {
+          this._phone = r.phone;
+          this.setData({ paying: false, canCall: true });
+          this.callPhone(r.phone);
+          return;
+        }
+        // reveal 意外失败（如帖子已删、号未登记）→ 提示，绝不落支付
+        this.setData({ paying: false });
+        wx.showToast({ title: r.message || '获取电话失败', icon: 'none' });
+        return;
+      } catch (err) {
+        this.setData({ paying: false });
+        wx.showToast({ title: '获取电话失败，请重试', icon: 'none' });
+        return;
+      }
+    }
+
     // 付费意图埋点（即时上报）
     track.trackNow('pay_intent', { post_id: postId, biz_type: 'phone' });
     this.setData({ paying: true });
@@ -922,10 +993,34 @@ Page({
     }).then((res) => res.result || {});
   },
 
-  // 拨打完整号（号码只存实例，绝不渲染到界面，防复制/截图/抓取）
+  // 拨打完整号：先像「客服」一样弹出号码（showActionSheet），点「拨打」再真正拨号。
+  // 拨号前把当前页面状态存本地，供拨完电话回来后（App.onShow / onLaunch）恢复页面。
   callPhone(phone) {
     if (!phone) return;
-    wx.makePhoneCall({ phoneNumber: phone }).catch(() => {});
+    // 1) 拨号前：把当前页面路径 + 参数 + 业务数据存到本地，防止拨号期间小程序被系统回收后无法恢复
+    this.saveCallState();
+    // 2) 弹出号码（对齐 mine.js 客服 contactService 的 showActionSheet 交互）
+    wx.showActionSheet({
+      itemList: ['拨打 ' + phone],
+      success: (res) => {
+        if (res.tapIndex === 0) {
+          wx.makePhoneCall({ phoneNumber: phone }).catch(() => {});
+        }
+      },
+    });
+  },
+
+  // 拨号前保存当前页面上下文（详情页 id），供冷启动恢复
+  saveCallState() {
+    try {
+      wx.setStorageSync('call_back_state', {
+        path: '/pages/detail/detail',
+        query: { id: this._id || '' },
+        ts: Date.now(),
+      });
+    } catch (e) {
+      // ignore
+    }
   },
 
   // ---------- 本人帖子：编辑 / 删除 ----------
@@ -983,6 +1078,46 @@ Page({
         this.setData({ deleting: false });
         console.error('[detail] 删除失败:', err && err.errMsg);
         wx.showToast({ title: '删除失败，请重试', icon: 'none' });
+      });
+  },
+
+  // 进入详情页：判断是否该弹手机号绑定半屏弹层（已绑定/未满3天不弹）
+  async tryShowBindSheet() {
+    if (this._bindChecked) return;
+    this._bindChecked = true;
+    const should = await bindPhone.shouldShowBindSheet();
+    if (should) {
+      bindPhone.markShown();
+      this.setData({ bindSheetVisible: true });
+    }
+  },
+
+  onBindSheetClose(e) {
+    if (e && e.detail && e.detail.visible) return;
+    this.setData({ bindSheetVisible: false });
+  },
+
+  onGetPhone(e) {
+    const code = (e && e.detail && e.detail.code) || '';
+    if (!code) {
+      this.setData({ bindSheetVisible: false });
+      return;
+    }
+    this.setData({ bindPhoneLoading: true });
+    wx.cloud
+      .callFunction({ name: 'getOrCreateUser', data: { phoneCode: code }, config: { timeout: 10000 } })
+      .then((res) => {
+        this.setData({ bindPhoneLoading: false, bindSheetVisible: false });
+        const r = res.result || {};
+        const matched = Number(r.matched_posts) || 0;
+        wx.showToast({
+          title: matched > 0 ? `已绑定，认领 ${matched} 条信息` : '绑定成功',
+          icon: 'success',
+        });
+      })
+      .catch(() => {
+        this.setData({ bindPhoneLoading: false });
+        wx.showToast({ title: '绑定失败，请重试', icon: 'none' });
       });
   },
 });

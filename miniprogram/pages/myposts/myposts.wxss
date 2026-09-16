@@ -133,3 +133,59 @@
   border-top: 1rpx solid #F0F0F0;
   background: #FAFAFA;
 }
+
+/* ===== 手机号绑定居中弹窗 ===== */
+.bind-sheet {
+  background: #FFFFFF;
+  border-radius: 24rpx;
+  padding: 48rpx 44rpx 40rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 560rpx;
+  box-sizing: border-box;
+}
+.bind-sheet-icon {
+  width: 128rpx;
+  height: 128rpx;
+  border-radius: 50%;
+  background: #FFF3EC;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 24rpx;
+}
+.bind-sheet-title {
+  font-size: 38rpx;
+  font-weight: 700;
+  color: #1A1A1A;
+  text-align: center;
+  line-height: 1.4;
+}
+.bind-sheet-sub {
+  margin-top: 16rpx;
+  font-size: 28rpx;
+  color: #666666;
+  text-align: center;
+  line-height: 1.6;
+}
+.bind-sheet-btn {
+  margin-top: 40rpx;
+  width: 100%;
+  height: 96rpx;
+  line-height: 96rpx;
+  background: #FF7A45;
+  color: #FFFFFF;
+  border-radius: 48rpx;
+  font-size: 32rpx;
+  font-weight: 700;
+}
+.bind-sheet-btn::after {
+  border: none;
+}
+.bind-sheet-cancel {
+  margin-top: 28rpx;
+  font-size: 28rpx;
+  color: #999999;
+  padding: 12rpx 0;
+}

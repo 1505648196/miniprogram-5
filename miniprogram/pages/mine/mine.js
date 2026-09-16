@@ -1,4 +1,5 @@
 // pages/mine/mine.js
+const bindPhone = require('../../utils/bindPhone.js');
 // 包子行业信息平台 · 我的（个人中心，仿闲鱼风格）
 // 功能：我的发布(跳转管理页) / 浏览历史 / 清除缓存 / 关于
 //       + 仿闲鱼的订单/工具/工具宫格（先做占位，功能后续补）
@@ -64,6 +65,9 @@ Page({
     vipExpire: '',
     // 未读站内通知数（消息 tab 红点）
     unread: 0,
+    // 手机号绑定半屏弹层
+    bindSheetVisible: false,
+    bindPhoneLoading: false,
   },
 
   // 说明：数据拉取统一放 onShow，不再写 onLoad。
@@ -77,6 +81,7 @@ Page({
     this.loadVip();
     this.refreshUnread();
     this.loadNotice();
+    this.tryShowBindSheet();
   },
 
   onPullDownRefresh() {
@@ -347,5 +352,47 @@ Page({
   },
   onAboutDialogClose() {
     this.setData({ aboutDialogVisible: false });
+  },
+
+  // 进入「我的」页：每次进都弹（未绑定手机号时），不记 3 天标记
+  async tryShowBindSheet() {
+    // always=true：跳过 3 天间隔，只查云端是否已绑定 → 未绑定就每次弹
+    const should = await bindPhone.shouldShowBindSheet(true);
+    if (should) {
+      this.setData({ bindSheetVisible: true });
+    }
+  },
+
+  // 半屏弹层关闭（点遮罩/暂不绑定）
+  onBindSheetClose(e) {
+    if (e && e.detail && e.detail.visible) return;
+    this.setData({ bindSheetVisible: false });
+  },
+
+  // 手机号授权回调（getPhoneNumber）→ 调 getOrCreateUser 绑定并认领老数据
+  onGetPhone(e) {
+    const code = (e && e.detail && e.detail.code) || '';
+    if (!code) {
+      // 用户拒绝授权：静默关闭
+      this.setData({ bindSheetVisible: false });
+      return;
+    }
+    this.setData({ bindPhoneLoading: true });
+    wx.cloud
+      .callFunction({ name: 'getOrCreateUser', data: { phoneCode: code }, config: { timeout: 10000 } })
+      .then((res) => {
+        this.setData({ bindPhoneLoading: false, bindSheetVisible: false });
+        const r = res.result || {};
+        const matched = Number(r.matched_posts) || 0;
+        wx.showToast({
+          title: matched > 0 ? `已绑定，认领 ${matched} 条信息` : '绑定成功',
+          icon: 'success',
+        });
+        this.loadUser(); // 刷新用户信息
+      })
+      .catch(() => {
+        this.setData({ bindPhoneLoading: false });
+        wx.showToast({ title: '绑定失败，请重试', icon: 'none' });
+      });
   },
 });

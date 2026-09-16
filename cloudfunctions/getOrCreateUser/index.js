@@ -283,6 +283,22 @@ exports.main = async (event) => {
       const pr = await cloud.openapi.phonenumber.getPhoneNumber({ code: event.phoneCode });
       const phone = pr && pr.phoneInfo && pr.phoneInfo.phoneNumber;
       if (/^1\d{10}$/.test(phone)) {
+        // —— 一机一号校验：该手机号若已被「其他账号」绑定，直接拒绝 ——
+        //   用 openid_wxapp 去重（小程序内一个手机号只能绑一个账号）；
+        //   排除当前 openid 自己（同一账号重复绑定同一个号不报错，幂等）。
+        try {
+          const dup = await users
+            .where({ phone, openid_wxapp: _.neq(OPENID) })
+            .limit(1)
+            .get();
+          if (dup.data && dup.data.length) {
+            return { success: false, error: "该手机号已被其他账号绑定" };
+          }
+        } catch (e2) {
+          // 查重失败（如索引未建）不阻断绑定，避免影响正常流程
+          console.error("[getOrCreateUser] 手机号查重失败:", e2 && e2.errMsg);
+        }
+
         const mask = maskPhone(phone);
         const patch = {
           phone,

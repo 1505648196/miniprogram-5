@@ -135,7 +135,7 @@
   <!-- 发布类型选择弹层（同 demo 首页，点底部"发布"触发） -->
   <t-popup
     visible="{{publishSheetVisible}}"
-    placement="bottom"
+    placement="center"
     bind:visible-change="onPublishSheetClose"
   >
     <view class="pub-sheet">
@@ -151,6 +151,28 @@
           <view class="pub-name">{{item.name}}</view>
         </t-grid-item>
       </t-grid>
+    </view>
+  </t-popup>
+
+  <!-- 手机号绑定半屏弹层（进入「我的」页触发；已绑定/未满3天不弹） -->
+  <t-popup
+    visible="{{bindSheetVisible}}"
+    placement="center"
+    bind:visible-change="onBindSheetClose"
+  >
+    <view class="bind-sheet">
+      <view class="bind-sheet-icon">
+        <t-icon name="mobile" size="96rpx" color="#FF7A45" />
+      </view>
+      <view class="bind-sheet-title">绑定手机号，找回你的信息</view>
+      <view class="bind-sheet-sub">绑定后系统会自动匹配并认领你历史上发布过的所有信息，不会丢失、不会重复</view>
+      <button
+        class="bind-sheet-btn"
+        open-type="getPhoneNumber"
+        bind:getphonenumber="onGetPhone"
+        loading="{{bindPhoneLoading}}"
+      >立即绑定手机号</button>
+      <view class="bind-sheet-cancel" bind:tap="onBindSheetClose">暂不绑定</view>
     </view>
   </t-popup>
 

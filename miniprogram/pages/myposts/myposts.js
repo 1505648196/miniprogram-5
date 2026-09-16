@@ -1,5 +1,6 @@
 // pages/myposts/myposts.js
 const { fmtAgo } = require('../../utils/time.js');
+const bindPhone = require('../../utils/bindPhone.js');
 // 包子行业信息平台 · 我的发布（管理自己发布的信息）
 // 数据源：managePost(action=list_mine) —— 按 _openid 归属返回本人全部帖子（含待审核）
 // 操作：编辑（跳发布页带 id 预填）/ 删除（managePost action=delete）
@@ -65,6 +66,9 @@ Page({
       [{ width: '100%', height: '160rpx', type: 'rect' }],
       [{ width: '100%', height: '160rpx', type: 'rect' }],
     ],
+    // 手机号绑定半屏弹层
+    bindSheetVisible: false,
+    bindPhoneLoading: false,
   },
 
   onLoad() {
@@ -74,6 +78,7 @@ Page({
   // 发布/编辑返回后刷新
   onShow() {
     this.loadList();
+    this.tryShowBindSheet();
   },
 
   onPullDownRefresh() {
@@ -368,5 +373,46 @@ Page({
   // 去发布（空态点击"去发布"按钮）：在当前页直接弹出发布类型选择弹层
   goPublish() {
     this.openPublishSheet();
+  },
+
+  // 进入「我的发布」页：判断是否该弹手机号绑定半屏弹层（已绑定/未满3天不弹）
+  async tryShowBindSheet() {
+    if (this._bindChecked) return;
+    this._bindChecked = true;
+    const should = await bindPhone.shouldShowBindSheet();
+    if (should) {
+      bindPhone.markShown();
+      this.setData({ bindSheetVisible: true });
+    }
+  },
+
+  onBindSheetClose(e) {
+    if (e && e.detail && e.detail.visible) return;
+    this.setData({ bindSheetVisible: false });
+  },
+
+  onGetPhone(e) {
+    const code = (e && e.detail && e.detail.code) || '';
+    if (!code) {
+      this.setData({ bindSheetVisible: false });
+      return;
+    }
+    this.setData({ bindPhoneLoading: true });
+    wx.cloud
+      .callFunction({ name: 'getOrCreateUser', data: { phoneCode: code }, config: { timeout: 10000 } })
+      .then((res) => {
+        this.setData({ bindPhoneLoading: false, bindSheetVisible: false });
+        const r = res.result || {};
+        const matched = Number(r.matched_posts) || 0;
+        wx.showToast({
+          title: matched > 0 ? `已绑定，认领 ${matched} 条信息` : '绑定成功',
+          icon: 'success',
+        });
+        this.loadList();
+      })
+      .catch(() => {
+        this.setData({ bindPhoneLoading: false });
+        wx.showToast({ title: '绑定失败，请重试', icon: 'none' });
+      });
   },
 });
