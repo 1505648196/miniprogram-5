@@ -131,7 +131,6 @@ exports.main = async (event) => {
     contact: String(f.contact || "").trim(),
     username: String(f.username || "").trim(), // 发布者称呼(可空)
     image: String(f.image || "").trim(), // 封面图：云存储 fileID
-    credit: int(f.credit, 0),
     published_at: Date.now(),
     source: "user",
     needs_review: false,
@@ -221,6 +220,16 @@ exports.main = async (event) => {
   regionBase.sec_status = sec.suggest;
   if (sec.label) regionBase.sec_label = sec.label;
   regionBase.sec_checked_at = sec.checkedAt;
+
+  // 信用分：查发布者 credit_score 冗余写入帖子（新用户默认 100），
+  // 替代旧的 credit(1-4 等级)。查不到/异常时回落 100，不阻断发布。
+  try {
+    const uRes = await db.collection("baozi_users").where({ openid_wxapp: openid }).limit(1).get();
+    const u = (uRes.data && uRes.data[0]) || null;
+    regionBase.credit_score = u && u.credit_score != null ? Number(u.credit_score) : 100;
+  } catch (e) {
+    regionBase.credit_score = 100;
+  }
 
   try {
     const res = await db.collection("baozi_posts").add({ data: regionBase });

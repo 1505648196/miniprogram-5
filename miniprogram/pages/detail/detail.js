@@ -17,13 +17,6 @@ const { callPayCommon, pickPayment } = require('../../utils/pay.js');
 const { loadAds, openAdLink } = require('../../utils/ad.js');
 const track = require('../../utils/track.js');
 
-const CREDIT_META = {
-  1: { label: '信用优秀', color: '#FF7A45', bg: '#FFF1E8' },
-  2: { label: '信用极好', color: '#36CFC9', bg: '#E6FFFB' },
-  3: { label: '信用良好', color: '#597EF7', bg: '#F0F5FF' },
-  4: { label: '信用一般', color: '#8C8C8C', bg: '#F5F5F5' },
-};
-
 
 function fmtDateTime(ts) {
   if (!ts) return '';
@@ -66,6 +59,7 @@ Page({
     //    避免被复制/截图/爬虫抓取，降低隐私泄露与骚扰风险。
     canCall: false,
     isVip: false,
+    hasPaid: false,
     paying: false,
     // 详情页顶部卡片广告（方案 C：ad_slots 里 page=detail, position=top_card）
     detailAds: [],
@@ -139,6 +133,8 @@ Page({
           list.push({
             id: a._id,
             value: img,
+            slot: a.slot || a.position || '',
+            page: 'detail',
             link: a.link || '',
             linkType: a.linkType || 'none',
             target: a.target || '',
@@ -656,8 +652,9 @@ Page({
       otherPriceText,
       // 发布者
       username: p.username || '',
-      creditMeta: CREDIT_META[Number(p.credit)] || null,
-      // 求职到岗/服务区域
+      // 信用分（新用户默认 100）
+      creditScore: Number(p.credit_score) || 100,
+            // 求职到岗/服务区域
       availability,
       serviceArea,
       // 时间
@@ -691,6 +688,8 @@ Page({
     this.checkFav(rawItem._id);
     // 查会员状态（会员可免费拨打电话）
     this.loadVip();
+    // 查是否已付费（已付费则按钮显示「免费拨打」）
+    this.loadPaidStatus(rawItem._id);
     // 浏览量 +1（前端节流：同一帖子 10 秒内不重复上报）
     this.reportView(rawItem._id);
   },
@@ -702,6 +701,18 @@ Page({
       .then((res) => {
         const r = (res && res.result) || {};
         this.setData({ isVip: !!r.isVip });
+      })
+      .catch(() => {});
+  },
+
+  // 查是否已为该帖子付费 → 已付费则按钮显示「免费拨打」，无需再次付费
+  loadPaidStatus(id) {
+    if (!id) return;
+    wx.cloud
+      .callFunction({ name: 'payForPhone', data: { action: 'check', post_id: id }, config: { timeout: 10000 } })
+      .then((res) => {
+        const r = (res && res.result) || {};
+        this.setData({ hasPaid: !!r.paid });
       })
       .catch(() => {});
   },

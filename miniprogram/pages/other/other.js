@@ -6,13 +6,6 @@
 const { fmtAgo } = require('../../utils/time.js');
 const privacy = require('../../utils/privacy.js');
 
-const CREDIT_META = {
-  1: { label: '信用优秀', color: '#FF7A45', bg: '#FFF1E8' },
-  2: { label: '信用极好', color: '#36CFC9', bg: '#E6FFFB' },
-  3: { label: '信用良好', color: '#597EF7', bg: '#F0F5FF' },
-  4: { label: '信用一般', color: '#8C8C8C', bg: '#F5F5F5' },
-};
-
 
 // 金额：≥1万显示 x万
 function fmtMoney(n) {
@@ -67,6 +60,18 @@ Page({
     this.loadMore();
   },
 
+  // 封禁提示：feedPosts 返回 banned:true 时弹出
+  handleBanned() {
+    if (this._bannedShown) return;
+    this._bannedShown = true;
+    wx.showModal({
+      title: '账号已被封禁',
+      content: '您的账号已被封禁，暂无法浏览与发布信息。如有疑问请联系客服。',
+      showCancel: false,
+      confirmText: '我知道了',
+    });
+  },
+
   fetchFeed(page) {
     return wx.cloud
       .callFunction({
@@ -76,6 +81,7 @@ Page({
       })
       .then((res) => {
         const r = res.result || {};
+        if (r.banned) { this.handleBanned(); return { list: [], hasMore: false }; }
         if (r.success) return { list: r.list || [], hasMore: !!r.hasMore };
         console.error('[other] feedPosts 返回失败:', r.error);
         return null;
@@ -161,9 +167,8 @@ Page({
       city: p.city || '',
       city_code: p.city_code || '',
       username: p.username || '',
-      credit: Number(p.credit) || 0,
-      creditMeta: CREDIT_META[Number(p.credit)] || null,
-      haystack: raw,
+      creditScore: Number(p.credit_score) || 100,
+            haystack: raw,
       emoji,
       image: p.image || '',
       color,

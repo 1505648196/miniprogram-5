@@ -152,7 +152,7 @@ const ACTION_PERM = {
   logs: "log.view",
   stats: "log.view",
   event_stats: "log.view",
-  event_paths: "log.view",
+  user_events: "log.view",
   // 账号 / 角色管理（仅超管）
   admin_list: "admin.manage",
   admin_create: "admin.manage",
@@ -353,7 +353,7 @@ const ALLOWED_FIELDS = [
   "raw_text", "content",
   "phone", "phone_masked", "contact", "username",
   "image",
-  "credit", "published_at", "source",
+  "credit_score", "published_at", "source",
   "needs_review", "reviewed", "reviewed_at", "review_note", "approved",
   "sec_status", "sec_label", "sec_checked_at", "tags",
 
@@ -382,7 +382,7 @@ const ALLOWED_FIELDS = [
 const NUMBER_FIELDS = [
   "salary", "salary_expect", "price", "monthly_rent", "area_sqm",
   "daily_revenue", "rent_max", "area_min", "cond", "role_id",
-  "credit", "seats", "latitude", "longitude",
+  "credit_score", "seats", "latitude", "longitude",
   "sec_checked_at",
   // 旧版
   "salary_low", "salary_high", "rent", "transfer_fee",
@@ -1802,80 +1802,41 @@ async function actionEventStats(event) {
   return ok(out);
 }
 
-// ---------- 用户行为链路树（page_view 按 session 还原跳转路径）----------
-// 后台「埋点分析」看板：把 page_view 事件按 session_id 分组，
-// 还原每个会话的页面访问序列（按 ts 升序），构建「页面跳转前缀树(trie)」。
-// 根节点 → 入口页 → 下一跳 → 再下一跳，层层嵌套。
-// 限深 + 限节点数，避免树爆炸；聚合失败降级为空树。
-async function actionEventPaths(event) {
-  const ev = db.collection("baozi_events");
-  const now = Date.now();
-  const days = Math.max(1, Math.min(365, parseInt(event.days, 10) || 30));
-  const since = now - days * 86400000;
-  const maxDepth = Math.max(2, Math.min(8, parseInt(event.max_depth, 10) || 5));
+// ---------- 用户行为流水（按 openid 查单个用户全部事件）----------
+// 后台「用户管理」里点「行为链路」查看单个用户的操作记录：
+// 按 _openid 精准匹配 baozi_events，按 ts 倒序分页返回。
+// 不再做全局会话聚合（原 event_paths/event_sessions 已废弃删除）。
+async function actionUserEvents(event) {
+  const openid = String(event.openid || "").trim();
+  if (!openid) return fail("缺少 openid");
 
-  // 拉取近 N 天所有 page_view（按 ts 升序，便于串路径）
+  const ev = db.collection("baozi_events");
+  const page = Math.max(1, parseInt(event.page, 10) || 1);
+  const pageSize = Math.min(100, Math.max(1, parseInt(event.pageSize, 10) || 50));
+
+  // 该用户事件总数
+  let total = 0;
+  try {
+    total = (await ev.where({ _openid: openid }).count()).total;
+  } catch (e) {
+    console.error("[adminAuth] 统计用户事件数失败:", e && e.errMsg);
+  }
+
+  // 按 ts 倒序拉一页
   let list = [];
   try {
     const r = await ev
-      .where({ event: "page_view", ts: _.gte(since) })
-      .orderBy("ts", "asc")
-      .limit(1000)
+      .where({ _openid: openid })
+      .orderBy("ts", "desc")
+      .skip((page - 1) * pageSize)
+      .limit(pageSize)
       .get();
     list = r.data || [];
   } catch (e) {
-    console.error("[adminAuth] 拉取 page_view 失败:", e && e.errMsg);
-    return ok({ tree: [], total_sessions: 0, days, max_depth: maxDepth });
+    console.error("[adminAuth] 拉取用户事件失败:", e && e.errMsg);
   }
 
-  // 按 session_id 分组，每组按 ts 升序排列 page 序列
-  const sessions = {};
-  list.forEach((x) => {
-    const sid = x.session_id || "_anon";
-    if (!sessions[sid]) sessions[sid] = [];
-    sessions[sid].push(String(x.page || "").trim());
-  });
-
-  // 构建前缀树：每个节点 { name, count, children }
-  // count = 有多少个 session 经过该页面序列（前缀）
-  const root = { name: "", count: 0, children: new Map() };
-  let totalSessions = 0;
-  Object.values(sessions).forEach((seq) => {
-    if (!seq.length) return;
-    totalSessions++;
-    let node = root;
-    node.count++;
-    for (let i = 0; i < seq.length && i < maxDepth; i++) {
-      const page = seq[i];
-      if (!page) break;
-      if (!node.children.has(page)) {
-        node.children.set(page, { name: page, count: 0, children: new Map() });
-      }
-      node = node.children.get(page);
-      node.count++;
-    }
-  });
-
-  // 转成普通对象树，并限制每层子节点数（按 count 降序取前 N）
-  const MAX_CHILDREN = 50;
-  function toTree(mapNode) {
-    const children = Array.from(mapNode.children.values())
-      .sort((a, b) => b.count - a.count)
-      .slice(0, MAX_CHILDREN)
-      .map((c) => ({
-        name: c.name,
-        count: c.count,
-        children: toTree(c),
-      }));
-    return children;
-  }
-
-  return ok({
-    tree: toTree(root),
-    total_sessions: totalSessions,
-    days,
-    max_depth: maxDepth,
-  });
+  return ok({ list, total, page, pageSize });
 }
 
 // ---------- 广告运营位管理（§2.9）----------
@@ -2769,7 +2730,7 @@ exports.main = async (event = {}) => {
       case "file_url": return await actionFileUrl(event);
       case "stats": return await actionStats(event);
       case "event_stats": return await actionEventStats(event);
-      case "event_paths": return await actionEventPaths(event);
+      case "user_events": return await actionUserEvents(event);
       case "user_ban": return await actionUserBan(event);
       case "logs": return await actionLogs(event);
       case "ad_list": return await actionAdList(event);

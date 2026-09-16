@@ -510,7 +510,6 @@ Page({
       contact: String(form.contact || '').trim(),
       username: '',
       image: String(image || '').trim(),
-      credit: 1,
       tags: [],
     };
     // role / role_id（有 role 的分类）

@@ -445,7 +445,6 @@ Page({
       form: Object.assign({}, base, {
         desc,
         username: String(form.username || '').trim(),
-        credit: 1,
         tags: [],
       }),
     };

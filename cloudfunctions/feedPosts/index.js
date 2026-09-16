@@ -35,7 +35,7 @@ function escapeReg(s) {
 const LIST_KEYS = [
   "_id", "data_type", "role", "role_id", "province", "city", "district",
   "province_code", "city_code", "district_code",
-  "salary", "contact", "phone_masked", "username", "credit",
+  "salary", "contact", "phone_masked", "username", "credit_score",
   "raw_text", "tags", "published_at", "needs_review", "approved", "sec_status", "sec_label",
   // 求职(jobseek)专属字段
   "salary_expect", "salary_note", "availability", "want_terms", "service_area",
@@ -137,6 +137,25 @@ async function fetchTops(types, openid, cityCode) {
 exports.main = async (event) => {
   const { OPENID } = cloud.getWXContext();
   const openid = OPENID || "";
+
+  // ---- §2.4 封禁校验：封禁用户拒绝读数据（列表/搜索一律不下发） ----
+  if (openid) {
+    try {
+      const u = await db
+        .collection("baozi_users")
+        .where({ openid_wxapp: openid })
+        .limit(1)
+        .get();
+      const me = u.data && u.data[0];
+      if (me && me.status === "banned") {
+        return { success: false, banned: true, error: "账号已被封禁" };
+      }
+    } catch (e) {
+      // 查询失败不阻塞：避免因用户表异常导致正常用户无法浏览
+      console.error("[feedPosts] 封禁校验失败:", e);
+    }
+  }
+
   const page = Math.max(parseInt(event.page, 10) || 1, 1);
   const pageSize = Math.min(Math.max(parseInt(event.pageSize, 10) || 10, 1), 20);
 

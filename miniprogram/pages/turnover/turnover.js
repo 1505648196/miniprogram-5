@@ -29,13 +29,6 @@ const SHOP_TYPES = [
 ];
 
 // 信用评分等级：1优秀 / 2极好 / 3良好 / 4一般
-const CREDIT_META = {
-  1: { label: '信用优秀', color: '#FF7A45', bg: '#FFF1E8' },
-  2: { label: '信用极好', color: '#36CFC9', bg: '#E6FFFB' },
-  3: { label: '信用良好', color: '#597EF7', bg: '#F0F5FF' },
-  4: { label: '信用一般', color: '#8C8C8C', bg: '#F5F5F5' },
-};
-
 
 function findShop(id) {
   for (let i = 0; i < SHOP_TYPES.length; i += 1) {
@@ -175,6 +168,7 @@ Page({
       })
       .then((res) => {
         const r = res.result || {};
+        if (r.banned) { this.handleBanned(); return { list: [], hasMore: false }; }
         if (r.success) return { list: r.list || [], hasMore: !!r.hasMore };
         console.error('[turnover] feedPosts 返回失败:', r.error);
         return null;
@@ -183,6 +177,18 @@ Page({
         console.error('[turnover] feedPosts 调用失败:', err && err.errMsg);
         return null;
       });
+  },
+
+  // 封禁提示：feedPosts 返回 banned:true 时弹出
+  handleBanned() {
+    if (this._bannedShown) return;
+    this._bannedShown = true;
+    wx.showModal({
+      title: '账号已被封禁',
+      content: '您的账号已被封禁，暂无法浏览与发布信息。如有疑问请联系客服。',
+      showCancel: false,
+      confirmText: '我知道了',
+    });
   },
 
   async loadFeed(extra) {
@@ -306,9 +312,8 @@ Page({
       city: p.city || '',
       city_code: p.city_code || '',
       username: p.username || '',
-      credit: Number(p.credit) || 0,
-      creditMeta: CREDIT_META[Number(p.credit)] || null,
-      // 店铺类型（金刚位筛选检索：卡片可含 role + 原文）
+      creditScore: Number(p.credit_score) || 100,
+            // 店铺类型（金刚位筛选检索：卡片可含 role + 原文）
       haystack: `${p.role || ''} ${raw}`,
       emoji,
       image: p.image || '',

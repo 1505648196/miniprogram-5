@@ -17,13 +17,6 @@ const TYPE_META = {
   other:      { name: '其他',     emoji: '📦', color: '#8C8C8C', light: '#F5F5F5' },
 };
 
-const CREDIT_META = {
-  1: { label: '信用优秀', color: '#FF7A45', bg: '#FFF1E8' },
-  2: { label: '信用极好', color: '#36CFC9', bg: '#E6FFFB' },
-  3: { label: '信用良好', color: '#597EF7', bg: '#F0F5FF' },
-  4: { label: '信用一般', color: '#8C8C8C', bg: '#F5F5F5' },
-};
-
 // 热门城市中心坐标（gcj02）+ city_code，用于定位后就近匹配
 const CITY_GEO = [
   { name: '北京', code: '110100', lat: 39.9042, lng: 116.4074 },
@@ -187,6 +180,7 @@ Page({
       })
       .then((res) => {
         const r = res.result || {};
+        if (r.banned) { this.handleBanned(); return { list: [], hasMore: false }; }
         if (r.success) return { list: r.list || [], hasMore: !!r.hasMore };
         return null;
       })
@@ -194,6 +188,18 @@ Page({
         console.error('[nearby] feedPosts 调用失败:', types, err && err.errMsg);
         return null;
       });
+  },
+
+  // 封禁提示：feedPosts 返回 banned:true 时弹出
+  handleBanned() {
+    if (this._bannedShown) return;
+    this._bannedShown = true;
+    wx.showModal({
+      title: '账号已被封禁',
+      content: '您的账号已被封禁，暂无法浏览与发布信息。如有疑问请联系客服。',
+      showCancel: false,
+      confirmText: '我知道了',
+    });
   },
 
   // 全板块一次批量(带 city_code) → 返回 list 由云端按时间 desc 逐类取后扁平合并
@@ -270,9 +276,8 @@ Page({
       light: meta.light,
       image: p.image || '',
       username: p.username || '',
-      credit: Number(p.credit) || 0,
-      creditMeta: CREDIT_META[Number(p.credit)] || null,
-      title,
+      creditScore: Number(p.credit_score) || 100,
+            title,
       priceText,
       meta: `${loc || '未知地区'} · ${fmtAgo(p.published_at)}`,
       tags,

@@ -2126,7 +2126,7 @@ const INSERT_ALLOWED_FIELDS = [
   "data_type", "province", "province_code", "city", "city_code",
   "district", "district_code", "address",
   "raw_text", "content", "phone", "phone_masked", "contact", "username",
-  "image", "credit", "published_at", "source", "approved", "needs_review", "tags",
+  "image", "credit_score", "published_at", "source", "approved", "needs_review", "tags",
   "role", "role_id", "salary",
   "salary_expect", "salary_note", "availability", "service_area", "want_terms",
   "price", "monthly_rent", "area_sqm", "daily_revenue", "has_equipment", "terms",
@@ -2135,7 +2135,7 @@ const INSERT_ALLOWED_FIELDS = [
 ];
 const INSERT_NUMBER_FIELDS = [
   "salary", "salary_expect", "price", "monthly_rent", "area_sqm",
-  "daily_revenue", "rent_max", "area_min", "cond", "role_id", "credit", "seats",
+  "daily_revenue", "rent_max", "area_min", "cond", "role_id", "credit_score", "seats",
 ];
 const INSERT_BOOL_FIELDS = ["has_equipment", "approved", "needs_review"];
 const INSERT_ARRAY_FIELDS = ["want_terms", "terms", "tags"];

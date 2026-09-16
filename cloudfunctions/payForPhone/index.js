@@ -142,6 +142,7 @@ exports.main = async (event) => {
       case "verify": return await actionVerify(openid, event);
       case "reveal": return await actionReveal(openid, event);
       case "markPaid": return await actionMarkPaid(openid, event);
+      case "check": return await actionCheck(openid, event);
       case "list": return await actionList(openid);
       default: return fail("未知操作: " + action, "UNKNOWN_ACTION");
     }
@@ -558,6 +559,17 @@ async function actionReveal(openid, event) {
   }
 
   return ok({ phone, phone_masked: post.phone_masked || "", is_vip: vip });
+}
+
+// 轻量查询「是否已付费 / 是否会员」：供详情页进入时判断按钮文案（免费拨打 vs 付费查看）
+// 不取完整号、不计频控、不记日志，只返回权限状态
+async function actionCheck(openid, event) {
+  const postId = String(event.post_id || "").trim();
+  if (!postId) return fail("缺少帖子标识", "MISSING_POST");
+
+  const paid = await hasPaid(openid, postId);
+  const vip = await isVip(openid);
+  return ok({ paid, is_vip: vip });
 }
 
 // 兼容旧前端：直接写付费记录（新流程请用 create + verify）

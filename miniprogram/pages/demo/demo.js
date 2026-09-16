@@ -43,13 +43,6 @@ const TYPE_META = {
 
 const MAIN_TYPES = ['transfer', 'want_shop', 'recruit', 'jobseek', 'equip_sell', 'equip_buy'];
 
-const CREDIT_META = {
-  1: { label: '信用优秀', color: '#FF7A45', bg: '#FFF1E8' },
-  2: { label: '信用极好', color: '#36CFC9', bg: '#E6FFFB' },
-  3: { label: '信用良好', color: '#597EF7', bg: '#F0F5FF' },
-  4: { label: '信用一般', color: '#8C8C8C', bg: '#F5F5F5' },
-};
-
 const CITY_GEO = [
   { name: '北京', code: '110100', lat: 39.9042, lng: 116.4074 },
   { name: '上海', code: '310100', lat: 31.2304, lng: 121.4737 },
@@ -120,6 +113,7 @@ const TOP_TABS = [
 
 const { fmtAgo } = require('../../utils/time.js');
 const { loadAds, openAdLink } = require('../../utils/ad');
+const track = require('../../utils/track.js');
 
 // 首页全局弹窗广告的「今日已弹」标记（storage key，值为当天日期字符串）
 const POPUP_SHOWN_KEY = 'demo_popup_shown_date';       // 每天一次：已弹日期
@@ -254,6 +248,18 @@ Page({
       });
   },
 
+  // 封禁提示：feedPosts 返回 banned:true 时弹出，告知账号已被封禁
+  handleBanned() {
+    if (this._bannedShown) return; // 避免多次弹窗叠加
+    this._bannedShown = true;
+    wx.showModal({
+      title: '账号已被封禁',
+      content: '您的账号已被封禁，暂无法浏览与发布信息。如有疑问请联系客服。',
+      showCancel: false,
+      confirmText: '我知道了',
+    });
+  },
+
   onHide() {
     this.stopPartnersScroll();
   },
@@ -276,6 +282,8 @@ Page({
         if (img) {
           ads.push({
             value: img,
+            slot: a.slot || a.position || '',
+            page: 'demo',
             path: a.link || '',
             linkType: a.linkType || 'page',
             target: a.target || '',
@@ -292,6 +300,8 @@ Page({
       sub: a.sub || '',
       bgFrom: a.bgFrom || '#FFF1E8',
       bgTo: a.bgTo || '#FFE0C2',
+      slot: a.slot || a.position || '',
+      page: 'demo',
       path: a.link || '',
       linkType: a.linkType || 'page',
       target: a.target || '',
@@ -462,6 +472,15 @@ Page({
   // 兼容两种字段来源：banner/card 映射后是 path；popup 原始对象是 link
   openAdLink(item) {
     if (!item) return;
+    // 广告点击埋点（即时上报）。⚠️ 本 Page 方法覆盖了 utils/ad.js 的同名函数，
+    // 首页全部广告点击都走这里，必须在此补埋点，否则首页点击统计为 0。
+    track.trackNow('ad_click', {
+      ad_id: item._id || item.id || '',
+      slot: item.slot || item.position || '',
+      page: item.page || 'demo',
+      link_type: item.linkType || 'page',
+      target: item.target || item.path || item.link || '',
+    });
     const linkType = item.linkType || 'page';
     const target = item.target || item.path || item.link || '';
     if (!target && linkType !== 'none') return;
@@ -588,12 +607,19 @@ Page({
     this.stopPartnersScroll();
     const item = e.currentTarget.dataset.item;
     if (!item || !item.id) return;
+    // 商家点击埋点（即时上报）
+    track.trackNow('merchant_click', {
+      merchant_id: item.id,
+      merchant_name: item.name || '',
+    });
     wx.navigateTo({ url: `/pages/merchant-detail/merchant-detail?id=${item.id}` });
   },
 
   // 包友圈：点击"更多商家"或"全部" → 停止滚动 + 进入驻页
   onPartnersMore() {
     this.stopPartnersScroll();
+    // 进入驻页埋点（即时上报）
+    track.trackNow('merchant_more_click', {});
     wx.navigateTo({ url: '/pages/merchant-apply/merchant-apply' });
   },
   onPartnersAll() {
@@ -641,6 +667,7 @@ Page({
       .callFunction({ name: 'feedPosts', data, config: { timeout: 10000 } })
       .then((res) => {
         const r = res.result || {};
+        if (r.banned) { this.handleBanned(); return { list: [], hasMore: false }; }
         if (r.success) return { list: r.list || [], hasMore: !!r.hasMore };
         console.error('[demo] feedPosts 批量返回失败:', r.error);
         return null;
@@ -692,6 +719,7 @@ Page({
       .callFunction({ name: 'feedPosts', data, config: { timeout: 10000 } })
       .then((res) => {
         const r = res.result || {};
+        if (r.banned) { this.handleBanned(); return { list: [], hasMore: false }; }
         if (r.success) return { list: r.list || [], hasMore: !!r.hasMore };
         console.error('[demo] feedPosts 全量返回失败:', r.error);
         return null;
@@ -758,9 +786,8 @@ Page({
       emoji: meta.emoji,
       image: p.image || meta.image || '',
       username: p.username || '',
-      credit: Number(p.credit) || 0,
-      creditMeta: CREDIT_META[Number(p.credit)] || null,
-      color: meta.color,
+      creditScore: Number(p.credit_score) || 100,
+            color: meta.color,
       light: meta.light,
       title,
       priceText,

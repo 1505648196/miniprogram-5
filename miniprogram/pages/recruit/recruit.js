@@ -48,13 +48,6 @@ const SUB_CATS = [
 const DEFAULT_VISIBLE_SUB = 4;
 
 // 信用评分等级：1优秀 / 2极好 / 3良好 / 4一般；label 展示文案 + color 文字色 + bg 标签底色
-const CREDIT_META = {
-  1: { label: '信用优秀', color: '#FF7A45', bg: '#FFF1E8' },
-  2: { label: '信用极好', color: '#36CFC9', bg: '#E6FFFB' },
-  3: { label: '信用良好', color: '#597EF7', bg: '#F0F5FF' },
-  4: { label: '信用一般', color: '#8C8C8C', bg: '#F5F5F5' },
-};
-
 // 高薪阈值（元/月），工资筛选未设置时用于"高薪"标记
 const HIGH_PAY = 8000;
 
@@ -235,6 +228,7 @@ Page({
       })
       .then((res) => {
         const r = res.result || {};
+        if (r.banned) { this.handleBanned(); return { list: [], hasMore: false }; }
         if (r.success) return { list: r.list || [], hasMore: !!r.hasMore };
         console.error('[recruit] feedPosts 返回失败:', r.error);
         return null;
@@ -243,6 +237,18 @@ Page({
         console.error('[recruit] feedPosts 调用失败:', err && err.errMsg);
         return null;
       });
+  },
+
+  // 封禁提示：feedPosts 返回 banned:true 时弹出
+  handleBanned() {
+    if (this._bannedShown) return;
+    this._bannedShown = true;
+    wx.showModal({
+      title: '账号已被封禁',
+      content: '您的账号已被封禁，暂无法浏览与发布信息。如有疑问请联系客服。',
+      showCancel: false,
+      confirmText: '我知道了',
+    });
   },
 
   // 首屏 / 筛选 / 下拉刷新：从第 1 页重拉并整块替换（列表区切骨架屏）
@@ -398,9 +404,8 @@ Page({
       // 发布者昵称/称呼（为空则不展示发布人）
       username: p.username || '',
       // 信用评分（1优秀/2极好/3良好/4一般）；0/非法 → 不显示信用标签
-      credit: Number(p.credit) || 0,
-      creditMeta: CREDIT_META[Number(p.credit)] || null,
-      // 品类筛选检索串
+      creditScore: Number(p.credit_score) || 100,
+            // 品类筛选检索串
       haystack: `${p.role || ''} ${raw}`,
       // 卡片视觉
       image: p.image || '',   // 有图才渲染图片区

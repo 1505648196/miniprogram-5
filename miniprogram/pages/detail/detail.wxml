@@ -8,7 +8,7 @@
     <!-- 发布人 + 信用 + 时间 -->
     <!-- <view class="head-sub">
       <text wx:if="{{d.username}}" class="head-user">{{d.username}}</text>
-      <text wx:if="{{d.creditMeta}}" class="credit-tag" style="color:{{d.creditMeta.color}}; background:{{d.creditMeta.bg}};">{{d.creditMeta.label}}</text>
+      <text wx:if="{{d.creditScore}}" class="credit-tag">信用{{d.creditScore}}分</text>
       <text class="head-time">{{d.agoText}}</text>
     </view> -->
   </view>
@@ -154,7 +154,7 @@
     <view wx:if="{{d.hasPhone}}" class="card-row phone-row">
       <text class="card-key">联系电话</text>
       <text class="card-val phone-val" user-select>{{d.phonesText}}</text>
-      <view class="phone-action {{paying ? 'is-loading' : ''}}" bind:tap="onRevealPhone">{{paying ? '加载中…' : (canCall ? '拨打' : (isVip ? '免费拨打' : '查看电话'))}}</view>
+      <view class="phone-action {{paying ? 'is-loading' : ''}}" bind:tap="onRevealPhone">{{paying ? '加载中…' : (canCall ? '拨打' : ((isVip || hasPaid) ? '免费拨打' : '查看电话'))}}</view>
     </view>
     <view wx:if="{{d.address}}" class="card-row">
       <text class="card-key">详细地址</text>
@@ -199,8 +199,8 @@
       <text class="card-val">{{d.username}}</text>
     </view>
     <view wx:if="{{d.username}}" class="card-row">
-      <text class="card-key">信用等级</text>
-      <text class="card-val"> <text wx:if="{{d.creditMeta}}"  style="color:{{d.creditMeta.color}}; background:{{d.creditMeta.bg}};">{{d.creditMeta.label}}</text></text>
+      <text class="card-key">信用分</text>
+      <text class="card-val">{{d.creditScore}}分</text>
     </view>
    
   </view>
@@ -249,7 +249,7 @@
           size="large"
           loading="{{paying}}"
           bind:tap="onViewContact"
-        >{{ isVip ? '免费拨打电话' : '查看联系方式' }}</t-button>
+        >{{ (isVip || hasPaid) ? '免费拨打电话' : '查看联系方式' }}</t-button>
       </view>
     </block>
   </view>

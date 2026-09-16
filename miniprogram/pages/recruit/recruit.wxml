@@ -217,11 +217,11 @@
           <view class="goods-tags" wx:if="{{item.tags.length}}">
             <t-tag wx:for="{{item.tags}}" wx:for-item="tg" wx:key="*this" size="small" variant="light" t-class="goods-tag">{{tg}}</t-tag>
           </view>
-          <!-- 发布用户昵称/称呼：有值才展示；旁边附信用评分标签（有 credit 才显示） -->
+          <!-- 发布用户昵称/称呼：有值才展示；旁边附信用分标签 -->
           <view class="goods-user" wx:if="{{item.username}}">
             <t-icon name="user" size="24rpx" color="#FFE60A" />
             <text>{{item.username}}</text>
-            <text class="goods-credit" wx:if="{{item.creditMeta}}" style="color: {{item.creditMeta.color}}; background: {{item.creditMeta.bg}};">{{item.creditMeta.label}}</text>
+            <text class="goods-credit" wx:if="{{item.creditScore}}">信用{{item.creditScore}}分</text>
           </view>
           <!-- 地区·时间 行 -->
           <view class="goods-meta">
@@ -253,11 +253,11 @@
           <view class="goods-tags" wx:if="{{item.tags.length}}">
             <t-tag wx:for="{{item.tags}}" wx:for-item="tg" wx:key="*this" size="small" variant="light" t-class="goods-tag">{{tg}}</t-tag>
           </view>
-          <!-- 发布用户昵称/称呼：有值才展示；旁边附信用评分标签（有 credit 才显示） -->
+          <!-- 发布用户昵称/称呼：有值才展示；旁边附信用分标签 -->
           <view class="goods-user" wx:if="{{item.username}}">
             <t-icon name="user" size="24rpx" color="#FFE60A" />
             <text>{{item.username}}</text>
-            <text class="goods-credit" wx:if="{{item.creditMeta}}" style="color: {{item.creditMeta.color}}; background: {{item.creditMeta.bg}};">{{item.creditMeta.label}}</text>
+            <text class="goods-credit" wx:if="{{item.creditScore}}">信用{{item.creditScore}}分</text>
           </view>
           <!-- 地区·时间 行 -->
           <view class="goods-meta">

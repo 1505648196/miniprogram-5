@@ -3,12 +3,6 @@ const { fmtAgo } = require('../../utils/time.js');
 // 包子行业信息平台 · 全局模糊搜索页
 // 数据源：feedPosts 云函数 keyword 参数（云端对 原文/角色/省市区/地址/联系人/备注 做正则模糊，全部分类）
 // 交互：t-search 输入即搜(防抖)，也支持点键盘"搜索"；双列卡片；触底分页；点卡片进详情。
-const CREDIT_META = {
-  1: { label: '信用优秀', color: '#FF7A45', bg: '#FFF1E8' },
-  2: { label: '信用极好', color: '#36CFC9', bg: '#E6FFFB' },
-  3: { label: '信用良好', color: '#597EF7', bg: '#F0F5FF' },
-  4: { label: '信用一般', color: '#8C8C8C', bg: '#F5F5F5' },
-};
 const TYPE_META = {
   transfer:   { name: '转让',     emoji: '🥟', color: '#FF7A45', light: '#FFF1E8' },
   want_shop:  { name: '求店',     emoji: '🔎', color: '#36CFC9', light: '#E6FFFB' },
@@ -113,6 +107,18 @@ Page({
   },
 
   // 拉取结果第 page 页
+  // 封禁提示：feedPosts 返回 banned:true 时弹出
+  handleBanned() {
+    if (this._bannedShown) return;
+    this._bannedShown = true;
+    wx.showModal({
+      title: '账号已被封禁',
+      content: '您的账号已被封禁，暂无法浏览与发布信息。如有疑问请联系客服。',
+      showCancel: false,
+      confirmText: '我知道了',
+    });
+  },
+
   fetchResults(kw, page) {
     return wx.cloud
       .callFunction({
@@ -122,6 +128,7 @@ Page({
       })
       .then((res) => {
         const r = res.result || {};
+        if (r.banned) { this.handleBanned(); return { list: [], hasMore: false }; }
         if (r.success) return { list: r.list || [], hasMore: !!r.hasMore };
         console.error('[search] feedPosts 返回失败:', r.error);
         return { list: [], hasMore: false };
@@ -212,9 +219,8 @@ Page({
       emoji: meta.emoji,
       image: p.image || '',
       username: p.username || '',
-      credit: Number(p.credit) || 0,
-      creditMeta: CREDIT_META[Number(p.credit)] || null,
-      color: meta.color,
+      creditScore: Number(p.credit_score) || 100,
+            color: meta.color,
       light: meta.light,
       title,
       priceText,

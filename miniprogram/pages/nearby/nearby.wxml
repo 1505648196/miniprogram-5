@@ -79,7 +79,7 @@
           <view class="goods-user" wx:if="{{item.username}}">
             <t-icon name="user" size="24rpx" color="#FFE60A" />
             <text>{{item.username}}</text>
-            <text class="goods-credit" wx:if="{{item.creditMeta}}" style="color: {{item.creditMeta.color}}; background: {{item.creditMeta.bg}};">{{item.creditMeta.label}}</text>
+            <text class="goods-credit" wx:if="{{item.creditScore}}">信用{{item.creditScore}}分</text>
           </view>
           <view class="goods-meta">
             <text>{{item.meta}}</text>
@@ -112,7 +112,7 @@
           <view class="goods-user" wx:if="{{item.username}}">
             <t-icon name="user" size="24rpx" color="#FFE60A" />
             <text>{{item.username}}</text>
-            <text class="goods-credit" wx:if="{{item.creditMeta}}" style="color: {{item.creditMeta.color}}; background: {{item.creditMeta.bg}};">{{item.creditMeta.label}}</text>
+            <text class="goods-credit" wx:if="{{item.creditScore}}">信用{{item.creditScore}}分</text>
           </view>
           <view class="goods-meta">
             <text>{{item.meta}}</text>
