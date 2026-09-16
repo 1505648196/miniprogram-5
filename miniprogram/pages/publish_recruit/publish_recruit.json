@@ -8,8 +8,6 @@
     "t-button": "/miniprogram_npm/tdesign-miniprogram/button/button",
     "t-cascader": "/miniprogram_npm/tdesign-miniprogram/cascader/cascader",
     "t-popup": "/miniprogram_npm/tdesign-miniprogram/popup/popup",
-    "t-picker": "/miniprogram_npm/tdesign-miniprogram/picker/picker",
-    "t-picker-item": "/miniprogram_npm/tdesign-miniprogram/picker-item/picker-item",
     "t-icon": "/miniprogram_npm/tdesign-miniprogram/icon/icon",
     "t-toast": "/miniprogram_npm/tdesign-miniprogram/toast/toast",
     "t-grid": "/miniprogram_npm/tdesign-miniprogram/grid/grid",

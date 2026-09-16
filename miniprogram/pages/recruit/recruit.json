@@ -20,8 +20,6 @@
     "t-dropdown-menu": "/miniprogram_npm/tdesign-miniprogram/dropdown-menu/dropdown-menu",
     "t-dropdown-item": "/miniprogram_npm/tdesign-miniprogram/dropdown-item/dropdown-item",
     "t-sticky": "/miniprogram_npm/tdesign-miniprogram/sticky/sticky",
-    "t-picker": "/miniprogram_npm/tdesign-miniprogram/picker/picker",
-    "t-picker-item": "/miniprogram_npm/tdesign-miniprogram/picker-item/picker-item",
     "t-skeleton": "/miniprogram_npm/tdesign-miniprogram/skeleton/skeleton",
     "t-checkbox": "/miniprogram_npm/tdesign-miniprogram/checkbox/checkbox",
     "t-checkbox-group": "/miniprogram_npm/tdesign-miniprogram/checkbox-group/checkbox-group",

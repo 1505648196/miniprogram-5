@@ -6,16 +6,46 @@
 //   { user, pass, fileName, base64 }   fileName 含扩展名（如 a.png）
 // 返回：
 //   { success, fileID, url }   url 为临时 https 链接（1小时有效，仅供预览）
+//
+// ⚠️ 鉴权已从「环境变量 ADMIN_USER/ADMIN_PASS」改为「数据库 admin_accounts 账号 + 哈希密码」，
+//    与 adminAuth 后台登录同一套账号体系，避免后台登录后上传图片报「未授权」。
 
 const cloud = require("wx-server-sdk");
+const crypto = require("crypto");
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
-const ADMIN_USER = process.env.ADMIN_USER || "admin";
-const ADMIN_PASS = process.env.ADMIN_PASS || "admin";
+const db = cloud.database();
+
+const ADMIN_ACCOUNTS = "admin_accounts"; // 与 adminAuth 一致的后台账号表（哈希密码）
 
 function ok(data = {}) { return { success: true, ...data }; }
 function fail(message, code = "ERROR") { return { success: false, code, message }; }
+
+// 密码哈希：sha256(salt + pass)，与 adminAuth.hashPass 保持一致
+function hashPass(pass, salt) {
+  return crypto.createHash("sha256").update(String(salt) + String(pass)).digest("hex");
+}
+
+// 鉴权：查 admin_accounts 表校验账号密码（与 adminAuth 同一套账号体系）
+async function authorize(user, pass) {
+  const username = String(user || "").trim();
+  const password = String(pass || "");
+  if (!username || !password) return false;
+  try {
+    const r = await db
+      .collection(ADMIN_ACCOUNTS)
+      .where({ username, status: "active" })
+      .limit(1)
+      .get();
+    const acct = (r.data && r.data[0]) || null;
+    if (!acct) return false;
+    return hashPass(password, acct.salt) === acct.pass_hash;
+  } catch (e) {
+    console.error("[uploadImage] 查询管理员账号失败:", e && e.errMsg);
+    return false;
+  }
+}
 
 // 从文件名推断 contentType（仅用于记录，云存储主要靠扩展名）
 function guessExt(fileName) {
@@ -26,7 +56,10 @@ function guessExt(fileName) {
 exports.main = async (event = {}) => {
   const user = String(event.user || "").trim();
   const pass = String(event.pass || "").trim();
-  if (user !== ADMIN_USER || pass !== ADMIN_PASS) {
+  // 鉴权：走 admin_accounts 数据库账号（与 adminAuth 后台登录同源），
+  // 避免后台登录后上传图片因「环境变量账密」与「数据库账密」不一致而报未授权。
+  const authed = await authorize(user, pass);
+  if (!authed) {
     return fail("未授权", "AUTH_FAILED");
   }
 

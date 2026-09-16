@@ -13,16 +13,23 @@
     </view> -->
   </view>
 
-  <!-- 顶部卡片广告（方案 C：detailAds 为空时整块不渲染） -->
-  <view class="detail-ads" wx:if="{{detailAds.length}}">
-    <view
-      class="detail-ad-card"
-      wx:for="{{detailAds}}" wx:key="id"
-      data-item="{{item}}" bindtap="onDetailAdTap"
-    >
-      <image wx:if="{{item.image}}" class="detail-ad-img" src="{{item.image}}" mode="widthFix" />
-      <view wx:if="{{item.title}}" class="detail-ad-title">{{item.title}}</view>
+  <!-- 顶部广告轮播骨架屏（广告加载中先显示，避免闪跳） -->
+  <view class="detail-ads" wx:if="{{detailAdsLoading}}">
+    <view class="detail-ad-skeleton">
+      <t-skeleton theme="text" animation="gradient" row-col="{{detailAdSkeletonRows}}" />
     </view>
+  </view>
+  <!-- 顶部广告轮播（方案 C：detailAds 为空时整块不渲染） -->
+  <view class="detail-ads" wx:elif="{{detailAds.length}}">
+    <t-swiper
+      class="detail-ad-swiper"
+      list="{{detailAds}}"
+      height="240rpx"
+      autoplay="{{true}}"
+      interval="{{5000}}"
+      navigation="{{ { type: 'dots' } }}"
+      bind:click="onDetailAdTap"
+    />
   </view>
 
   <!-- 有图时展示图片 -->

@@ -8,6 +8,7 @@
     "t-skeleton": "/miniprogram_npm/tdesign-miniprogram/skeleton/skeleton",
     "t-empty": "/miniprogram_npm/tdesign-miniprogram/empty/empty",
     "t-dialog": "/miniprogram_npm/tdesign-miniprogram/dialog/dialog",
+    "t-swiper": "/miniprogram_npm/tdesign-miniprogram/swiper/swiper",
     "t-checkbox-group": "/miniprogram_npm/tdesign-miniprogram/checkbox-group/checkbox-group",
     "t-checkbox": "/miniprogram_npm/tdesign-miniprogram/checkbox/checkbox"
   }

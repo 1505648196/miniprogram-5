@@ -1,4 +1,6 @@
 // app.js
+const track = require('./utils/track.js');
+
 App({
   onLaunch: function () {
     this.globalData = {
@@ -12,5 +14,10 @@ App({
         traceUser: true,
       });
     }
+    // 埋点：启动补发上次没发完的缓存队列 + 前台每 5 秒定时 flush
+    track.recover();
+    track.startTimer();
+    // 小程序切后台：先落缓存再尝试发（同步落盘保证下次能补发）
+    wx.onAppHide && wx.onAppHide(() => track.onHide());
   },
 });

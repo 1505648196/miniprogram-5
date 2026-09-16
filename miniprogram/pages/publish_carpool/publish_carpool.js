@@ -229,10 +229,25 @@ Page({
       });
   },
   uploadOne(file) {
-    const src = file.url || file.name || '';
-    const ext = (src.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
-    const cloudPath = `posts/${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}.${ext}`;
-    return wx.cloud.uploadFile({ cloudPath, filePath: file.url }).then((res) => res.fileID || '');
+    return this.compressIfNeed(file.url).then((compressedPath) => {
+      const src = compressedPath || file.url || file.name || '';
+      const ext = (src.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+      const cloudPath = `posts/${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}.${ext}`;
+      return wx.cloud.uploadFile({ cloudPath, filePath: compressedPath }).then((res) => res.fileID || '');
+    });
+  },
+
+  // 上传前压缩：限制宽度 1080px + 质量 80，压缩失败用原图兜底（不阻断用户）
+  compressIfNeed(filePath) {
+    return new Promise((resolve) => {
+      wx.compressImage({
+        src: filePath,
+        quality: 80,
+        compressedWidth: 1080,
+        success: (res) => resolve(res.tempFilePath),
+        fail: () => resolve(filePath),
+      });
+    });
   },
   onUploadRemove() { this.setData({ image: '', imageFiles: [] }); },
 

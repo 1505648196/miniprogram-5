@@ -12,6 +12,8 @@
 // 广告对象字段：_id, slot, page, position, type, title, image, icon, emoji, sub,
 //               bgFrom, bgTo, link, linkType, target, sort
 
+const track = require('./track.js');
+
 const DEFAULT_TIMEOUT = 10000;
 
 /**
@@ -106,6 +108,14 @@ function loadAds(page, positions) {
  */
 function openAdLink(item) {
   if (!item) return;
+  // 广告点击埋点（即时上报，覆盖全站所有广告位）
+  track.trackNow('ad_click', {
+    ad_id: item._id,
+    slot: item.slot || item.position,
+    page: item.page || '',
+    link_type: item.linkType || 'page',
+    target: item.target || item.link || '',
+  });
   const linkType = item.linkType || 'page';
   const target = item.target || item.link || '';
   if (!target && linkType !== 'none') return;

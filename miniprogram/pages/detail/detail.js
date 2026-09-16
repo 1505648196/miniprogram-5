@@ -15,6 +15,7 @@ const { fmtAgo } = require('../../utils/time.js');
 const privacy = require('../../utils/privacy.js');
 const { callPayCommon, pickPayment } = require('../../utils/pay.js');
 const { loadAds, openAdLink } = require('../../utils/ad.js');
+const track = require('../../utils/track.js');
 
 const CREDIT_META = {
   1: { label: '信用优秀', color: '#FF7A45', bg: '#FFF1E8' },
@@ -68,6 +69,12 @@ Page({
     paying: false,
     // 详情页顶部卡片广告（方案 C：ad_slots 里 page=detail, position=top_card）
     detailAds: [],
+    // 广告轮播加载中（骨架屏先出来，广告拉到后再渲染轮播）
+    detailAdsLoading: true,
+    // 广告轮播骨架屏：一个 240rpx 高的矩形（与 t-swiper 高度一致，避免闪跳）
+    detailAdSkeletonRows: [
+      [{ width: '100%', height: '240rpx', type: 'rect' }],
+    ],
     // 详情加载骨架屏：模拟 徽章+标题 → 封面图 → 关键信息行 → 描述 的垂直布局（纯 TDesign row-col）
     skeletonRows: [
       [{ width: '24%', height: '40rpx', type: 'rect' }],
@@ -116,30 +123,38 @@ Page({
     this.fetchRemote(id);
   },
 
-  // 详情页顶部卡片广告：page=detail, position=top_card
+  // 详情页顶部广告轮播：page=detail, position=top_card
+  // 改成 t-swiper 轮播：一条广告含多图（images 数组）时展开成多个轮播项，
+  // 否则回退单图 image。detailAds 存 t-swiper 的 list（value=图片 url + 跳转字段）。
   async loadDetailAds() {
+    this.setData({ detailAdsLoading: true });
     const groups = await loadAds('detail', ['top_card']);
-    const list = (groups.top_card || []).map((a) => {
-      // 兼容两种图片来源：单图 image 字段 / 轮播多图 images 数组（取第一张）
-      let img = a.image || '';
-      if (!img && Array.isArray(a.images) && a.images.length) {
-        img = a.images[0] || '';
-      }
-      return {
-        id: a._id,
-        image: img,
-        title: a.title || '',
-        link: a.link || '',
-        linkType: a.linkType || 'none',
-        target: a.target || '',
-      };
+    const list = [];
+    (groups.top_card || []).forEach((a) => {
+      const imgs = (Array.isArray(a.images) && a.images.length)
+        ? a.images
+        : (a.image ? [a.image] : []);
+      imgs.forEach((img) => {
+        if (img) {
+          list.push({
+            id: a._id,
+            value: img,
+            link: a.link || '',
+            linkType: a.linkType || 'none',
+            target: a.target || '',
+          });
+        }
+      });
     });
-    this.setData({ detailAds: list });
+    this.setData({ detailAds: list, detailAdsLoading: false });
   },
 
-  // 点击顶部卡片广告
+  // 点击详情页广告轮播项（t-swiper click：e.detail.index 为当前项索引）
   onDetailAdTap(e) {
-    const item = e.currentTarget.dataset.item;
+    const idx = e.detail && e.detail.index;
+    const item = this.data.detailAds[idx];
+    if (!item) return;
+    // 复用 openAdLink 统一跳转（linkType/link/target 已透传）
     openAdLink(item);
   },
 
@@ -783,6 +798,8 @@ Page({
       return;
     }
     if (this.data.paying) return;
+    // 付费意图埋点（即时上报）
+    track.trackNow('pay_intent', { post_id: postId, biz_type: 'phone' });
     this.setData({ paying: true });
     // 立即给反馈：发起支付前要串行经过 reveal/create/下单 多次云调用，用 loading 消除"点了没反应"的空白感
     wx.showLoading({ title: '正在发起支付…', mask: true });
@@ -847,7 +864,11 @@ Page({
           signType: p.signType || 'RSA',
           paySign: p.paySign || '',
           success: resolve,
-          fail: reject,
+          fail: (err) => {
+            // 取消支付埋点（即时上报）
+            track.trackNow('pay_cancel', { post_id: postId, biz_type: 'phone' });
+            reject(err);
+          },
         });
       });
 

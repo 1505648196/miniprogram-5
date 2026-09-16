@@ -397,23 +397,39 @@ Page({
       });
   },
   uploadOne(file) {
-    const src = file.url || file.name || '';
-    const ext = (src.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
-    const cloudPath = `posts/${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}.${ext}`;
-    return wx.cloud.uploadFile({ cloudPath, filePath: file.url })
-      .then((res) => {
-        const fileID = res.fileID || '';
-        if (!fileID) return '';
-        // 上传后立即做图片安全检测（不等到点发布）
-        return this.checkImageSafe(fileID).then((suggest) => {
-          if (suggest === 'reject' || suggest === 'risky') {
-            const err = new Error('图片内容违规');
-            err.isIllegal = true;
-            throw err;
-          }
-          return fileID;
+    return this.compressIfNeed(file.url).then((compressedPath) => {
+      const src = compressedPath || file.url || file.name || '';
+      const ext = (src.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+      const cloudPath = `posts/${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}.${ext}`;
+      return wx.cloud.uploadFile({ cloudPath, filePath: compressedPath })
+        .then((res) => {
+          const fileID = res.fileID || '';
+          if (!fileID) return '';
+          // 上传后立即做图片安全检测（不等到点发布）
+          return this.checkImageSafe(fileID).then((suggest) => {
+            if (suggest === 'reject' || suggest === 'risky') {
+              const err = new Error('图片内容违规');
+              err.isIllegal = true;
+              throw err;
+            }
+            return fileID;
+          });
         });
+    });
+  },
+
+  // 上传前压缩：限制宽度 1080px + 质量 80，压缩失败用原图兜底（不阻断用户）
+  // 原理：wx.compressImage 客户端本地降分辨率 + 有损重编码，省流量/存储/上传快
+  compressIfNeed(filePath) {
+    return new Promise((resolve) => {
+      wx.compressImage({
+        src: filePath,
+        quality: 80,
+        compressedWidth: 1080,
+        success: (res) => resolve(res.tempFilePath),
+        fail: () => resolve(filePath),
       });
+    });
   },
 
   // 图片安全检测：调 imgSecCheck 云函数，返回 suggest（pass/risky/reject/pending）

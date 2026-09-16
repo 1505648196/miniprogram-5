@@ -247,12 +247,33 @@ async function actionOnline(openid, event) {
 
 // 浏览点击量 +1（原子自增）。任何登录用户浏览帖子详情时调用。
 // 防重复计数由前端节流（同一帖子 10 秒内不重复上报），此处不做去重。
+// 同时写一条详情曝光埋点(post_detail_view)到 baozi_events，供后台统计「看最多是哪个板块」。
+// 服务端权威：前端杀进程/断网也不丢，且与浏览量 +1 同一次调用，不额外增加请求。
 async function actionView(event) {
   if (!event._id) return fail("缺少 _id", "MISSING_ID");
+  const openid = (cloud.getWXContext() || {}).OPENID || "";
   try {
+    const post = await db.collection(COLLECTION).doc(event._id).get();
+    const dataType = post.data ? post.data.data_type || "" : "";
     await db.collection(COLLECTION).doc(event._id).update({
       data: { views: _.inc(1) },
     });
+    // 详情曝光埋点（失败不影响浏览量）
+    try {
+      await db.collection("baozi_events").add({
+        data: {
+          event: "post_detail_view",
+          ts: Date.now(),
+          session_id: "",
+          page: "pages/detail/detail",
+          params: { post_id: event._id, data_type: dataType },
+          _openid: openid,
+          created_at: Date.now(),
+        },
+      });
+    } catch (e) {
+      console.error("[managePost] 埋点失败(不影响浏览量):", e && e.errMsg);
+    }
     return ok({ viewed: 1 });
   } catch (e) {
     // 帖子不存在等：不视为失败，静默返回（避免浏览上报报错影响体验）

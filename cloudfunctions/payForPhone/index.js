@@ -310,6 +310,9 @@ async function actionVerify(openid, event) {
     console.error("[payForPhone] 更新订单状态失败:", e && e.errMsg);
   }
 
+  // 6) 付费成功埋点（服务端权威，防前端伪造/丢失，覆盖 phone/member/refresh/top/merchant 全业务）
+  await trackPaySuccess(openid, order);
+
   return ok({ fulfilled: true, already: false, biz_type: order.biz_type, out_trade_no: outTradeNo });
 }
 
@@ -477,6 +480,34 @@ async function fulfillTop(openid, order) {
       created_at: now,
     },
   });
+}
+
+// 付费成功埋点：覆盖 phone / member / refresh / top / merchant 全业务类型。
+// 服务端权威：用户付了钱订单一定在服务端履约，埋点跟着履约走，前端杀不杀进程都无所谓。
+// 写入 baozi_events，供后台统计「付费最多是哪个板块」（按 params.biz_type 聚合）。
+async function trackPaySuccess(openid, order) {
+  try {
+    await db.collection("baozi_events").add({
+      data: {
+        event: "pay_success",
+        ts: Date.now(),
+        session_id: "",           // 服务端拿不到前端 session，留空由看板按 openid 聚合
+        page: "",
+        params: {
+          biz_type: order.biz_type,   // 付费板块：phone/member/top/refresh/merchant
+          amount: Number(order.amount) || 0, // 单位：分
+          post_id: order.post_id || "",
+          plan: order.plan || "",
+          top_days: order.top_days || 0,
+          out_trade_no: order.out_trade_no,
+        },
+        _openid: openid,
+        created_at: Date.now(),
+      },
+    });
+  } catch (e) {
+    console.error("[payForPhone] 埋点失败(不影响主流程):", e && e.errMsg);
+  }
 }
 
 // ==================== reveal：会员免费 / 已付费 → 返回完整手机号 ====================

@@ -151,6 +151,8 @@ const ACTION_PERM = {
   // 日志 / 概览
   logs: "log.view",
   stats: "log.view",
+  event_stats: "log.view",
+  event_paths: "log.view",
   // 账号 / 角色管理（仅超管）
   admin_list: "admin.manage",
   admin_create: "admin.manage",
@@ -1730,6 +1732,152 @@ async function actionPayStats(event) {
   return ok(out);
 }
 
+// ---------- 行为埋点统计（baozi_events）----------
+// 后台「埋点分析」看板专用：聚合 baozi_events 回答四个问题——
+//   ① 看详情最多板块（post_detail_view 按 params.data_type）
+//   ② 付费最多板块（pay_success 按 params.biz_type，含金额）
+//   ③ 广告点击（ad_click 按 params.slot）
+//   ④ 用户停留终点（page_leave 按 page）
+// 聚合失败逐项降级为空，不拖垮整接口。
+async function actionEventStats(event) {
+  const out = {};
+  const ev = db.collection("baozi_events");
+  const agg = db.command.aggregate;
+
+  // 时间范围：默认近 30 天
+  const now = Date.now();
+  const days = Math.max(1, Math.min(365, parseInt(event.days, 10) || 30));
+  const since = now - days * 86400000;
+
+  async function groupByEvent(eventName, groupField, sumField) {
+    const groupExpr = sumField
+      ? { _id: `$${groupField}`, count: agg.sum(1), amount: agg.sum(`$${sumField}`) }
+      : { _id: `$${groupField}`, count: agg.sum(1) };
+    const r = await ev
+      .aggregate()
+      .match({ event: eventName, ts: _.gte(since) })
+      .group(groupExpr)
+      .sort({ count: -1 })
+      .limit(20)
+      .end();
+    return (r.list || []).map((x) => ({
+      key: x._id || "未知",
+      count: x.count || 0,
+      amount: x.amount || 0,
+    }));
+  }
+
+  // ① 看详情最多板块
+  try { out.detail_by_type = await groupByEvent("post_detail_view", "params.data_type"); }
+  catch (e) { out.detail_by_type = []; }
+
+  // ② 付费最多板块（含金额）
+  try { out.pay_by_biz = await groupByEvent("pay_success", "params.biz_type", "params.amount"); }
+  catch (e) { out.pay_by_biz = []; }
+
+  // ③ 广告点击
+  try { out.ad_click_by_slot = await groupByEvent("ad_click", "params.slot"); }
+  catch (e) { out.ad_click_by_slot = []; }
+
+  // ④ 用户停留终点
+  try { out.leave_by_page = await groupByEvent("page_leave", "page"); }
+  catch (e) { out.leave_by_page = []; }
+
+  // 汇总指标（近 N 天总量）
+  const totals = {
+    detail_total: "post_detail_view",
+    pay_total: "pay_success",
+    ad_click_total: "ad_click",
+    page_view_total: "page_view",
+  };
+  for (const [k, eventName] of Object.entries(totals)) {
+    try {
+      out[k] = (await ev.where({ event: eventName, ts: _.gte(since) }).count()).total;
+    } catch (e) {
+      out[k] = 0;
+    }
+  }
+
+  out.days = days;
+  return ok(out);
+}
+
+// ---------- 用户行为链路树（page_view 按 session 还原跳转路径）----------
+// 后台「埋点分析」看板：把 page_view 事件按 session_id 分组，
+// 还原每个会话的页面访问序列（按 ts 升序），构建「页面跳转前缀树(trie)」。
+// 根节点 → 入口页 → 下一跳 → 再下一跳，层层嵌套。
+// 限深 + 限节点数，避免树爆炸；聚合失败降级为空树。
+async function actionEventPaths(event) {
+  const ev = db.collection("baozi_events");
+  const now = Date.now();
+  const days = Math.max(1, Math.min(365, parseInt(event.days, 10) || 30));
+  const since = now - days * 86400000;
+  const maxDepth = Math.max(2, Math.min(8, parseInt(event.max_depth, 10) || 5));
+
+  // 拉取近 N 天所有 page_view（按 ts 升序，便于串路径）
+  let list = [];
+  try {
+    const r = await ev
+      .where({ event: "page_view", ts: _.gte(since) })
+      .orderBy("ts", "asc")
+      .limit(1000)
+      .get();
+    list = r.data || [];
+  } catch (e) {
+    console.error("[adminAuth] 拉取 page_view 失败:", e && e.errMsg);
+    return ok({ tree: [], total_sessions: 0, days, max_depth: maxDepth });
+  }
+
+  // 按 session_id 分组，每组按 ts 升序排列 page 序列
+  const sessions = {};
+  list.forEach((x) => {
+    const sid = x.session_id || "_anon";
+    if (!sessions[sid]) sessions[sid] = [];
+    sessions[sid].push(String(x.page || "").trim());
+  });
+
+  // 构建前缀树：每个节点 { name, count, children }
+  // count = 有多少个 session 经过该页面序列（前缀）
+  const root = { name: "", count: 0, children: new Map() };
+  let totalSessions = 0;
+  Object.values(sessions).forEach((seq) => {
+    if (!seq.length) return;
+    totalSessions++;
+    let node = root;
+    node.count++;
+    for (let i = 0; i < seq.length && i < maxDepth; i++) {
+      const page = seq[i];
+      if (!page) break;
+      if (!node.children.has(page)) {
+        node.children.set(page, { name: page, count: 0, children: new Map() });
+      }
+      node = node.children.get(page);
+      node.count++;
+    }
+  });
+
+  // 转成普通对象树，并限制每层子节点数（按 count 降序取前 N）
+  const MAX_CHILDREN = 50;
+  function toTree(mapNode) {
+    const children = Array.from(mapNode.children.values())
+      .sort((a, b) => b.count - a.count)
+      .slice(0, MAX_CHILDREN)
+      .map((c) => ({
+        name: c.name,
+        count: c.count,
+        children: toTree(c),
+      }));
+    return children;
+  }
+
+  return ok({
+    tree: toTree(root),
+    total_sessions: totalSessions,
+    days,
+    max_depth: maxDepth,
+  });
+}
+
 // ---------- 广告运营位管理（§2.9）----------
 // 集合 advertisements，字段见文档 §2.9：
 //   slot, type(banner/feed/popup), title, image, icon, emoji, sub, bgFrom, bgTo,
@@ -2620,6 +2768,8 @@ exports.main = async (event = {}) => {
       case "member": return await actionMember(event);
       case "file_url": return await actionFileUrl(event);
       case "stats": return await actionStats(event);
+      case "event_stats": return await actionEventStats(event);
+      case "event_paths": return await actionEventPaths(event);
       case "user_ban": return await actionUserBan(event);
       case "logs": return await actionLogs(event);
       case "ad_list": return await actionAdList(event);

@@ -5,7 +5,7 @@
   <!-- VIP 顶部横幅 -->
   <view class="hero">
     <view class="hero-tag">VIP</view>
-    <view class="hero-title">包子一哥 · 会员</view>
+    <view class="hero-title">包查查 · 会员</view>
     <view class="hero-sub">发布更显眼 · 曝光更多 · 专属标识</view>
   </view>
 

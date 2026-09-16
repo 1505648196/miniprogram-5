@@ -41,28 +41,22 @@
   line-height: 1.4;
 }
 
-/* ============ 顶部卡片广告（方案 C） ============ */
+/* ============ 顶部广告轮播（方案 C） ============ */
 .detail-ads {
   margin-top: 16rpx;
 }
 
-.detail-ad-card {
-  background: #FFFFFF;
+.detail-ad-swiper {
   border-radius: 20rpx;
   overflow: hidden;
-  margin-bottom: 16rpx;
 }
 
-.detail-ad-img {
+/* 广告轮播骨架屏：与轮播同高(240rpx)、同圆角，避免加载时高度闪跳 */
+.detail-ad-skeleton {
   width: 100%;
-  display: block;
-}
-
-.detail-ad-title {
-  font-size: 28rpx;
-  font-weight: 600;
-  color: #1A1A1A;
-  padding: 20rpx 24rpx;
+  height: 240rpx;
+  border-radius: 20rpx;
+  overflow: hidden;
 }
 
 .head-sub {
