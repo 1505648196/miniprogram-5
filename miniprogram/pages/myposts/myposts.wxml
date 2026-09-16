@@ -20,16 +20,6 @@
 
   <!-- 列表 -->
   <view class="list" wx:else>
-    <!-- 顶部：发布信息按钮（点击弹出发布类型选择弹层） -->
-    <view class="publish-bar">
-      <t-button
-        class="publish-bar-btn"
-        theme="primary"
-        size="medium"
-        block
-        bind:tap="goPublish"
-      >点击发布信息</t-button>
-    </view>
     <view class="card" wx:for="{{list}}" wx:key="id">
       <!-- 主体：点进详情 -->
       <view class="card-main" data-id="{{item.id}}" bindtap="onTap">
@@ -94,6 +84,16 @@
     bind:cancel="onDeleteDialogClose"
     bind:close="onDeleteDialogClose"
   />
+
+  <!-- 悬浮发布按钮（圆形 FAB：图标 + 文字，点击弹出发布类型选择弹层） -->
+  <button
+    class="pub-fab"
+    hover-class="pub-fab-hover"
+    bindtap="goPublish"
+  >
+    <t-icon name="add" size="40rpx" color="#FFFFFF" />
+    <text class="pub-fab-text">发布</text>
+  </button>
 
   <!-- 底部 TabBar（同 demo/mine，不做 VIP 图标判断、不拉未读红点，省资源） -->
   <t-tab-bar

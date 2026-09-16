@@ -11,6 +11,7 @@ const db = cloud.database();
 const _ = db.command;
 
 const COLL = "baozi_merchants";
+const SETTINGS = "baozi_settings"; // 全局配置集合（后台开关等）
 
 // 商家分类（与前端保持一致，便于扩展）
 const CATEGORIES = [
@@ -59,8 +60,26 @@ exports.main = async (event) => {
   }
 };
 
+// 读取全局开关：key 对应值是否为 true（默认 true=展示；未配置视为展示，向后兼容）
+async function settingFlag(key) {
+  try {
+    const r = await db.collection(SETTINGS).where({ key }).limit(1).get();
+    const s = r.data && r.data[0];
+    if (!s) return true; // 未配置 → 默认展示
+    return s.value === true || s.value === 1 || s.value === "1" || s.value === "true";
+  } catch (e) {
+    console.error("[merchantApply] 读取配置失败:", e && e.errMsg);
+    return true; // 读配置异常 → 默认展示，避免误隐藏
+  }
+}
+
 // ============ list：列出已通过审核的商家（支持 keyword 搜索 + category 筛选 + tab 区分）============
 async function actionList(event) {
+  // 「包友圈展示」开关：关闭时返回空列表，前端区块自动不渲染（小程序端零改动）
+  if (await settingFlag("partner_section_visible") === false) {
+    return ok({ list: [], page: 1, pageSize: 20, hidden: true });
+  }
+
   const page = Math.max(parseInt(event.page, 10) || 1, 1);
   const pageSize = Math.min(Math.max(parseInt(event.pageSize, 10) || 20, 1), 50);
 

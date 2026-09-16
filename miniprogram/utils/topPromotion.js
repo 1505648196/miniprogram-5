@@ -160,10 +160,129 @@ function afterPublish(opts) {
     });
 }
 
+/**
+ * 查询当前用户是否会员（会员免费发布 / 免费看电话）
+ * @returns {Promise<boolean>} true=有效会员
+ */
+function isVipMember() {
+  return wx.cloud
+    .callFunction({ name: 'memberService', data: { action: 'status' }, config: { timeout: 10000 } })
+    .then((res) => {
+      const r = res.result || {};
+      return !!r.isVip;
+    })
+    .catch(() => false);
+}
+
+/**
+ * 发布信息付费：非会员发布时调用（2 元/条）。
+ * 流程：payForPhone.create(biz_type=publish) → 集成支付下单 → requestPayment → verify 履约
+ * 履约后云函数会写一条「发布凭证」(baozi_publish_quota)，供 publishPost 入库时消费。
+ *
+ * ⚠️ 先付款后入库：本函数不依赖帖子 id（帖子尚未创建），只负责「买一次发布额度」。
+ *
+ * @returns {Promise<void>} 成功 resolve；失败 reject（用户取消时 errMsg 含 'cancel'）
+ */
+async function payForPublish() {
+  wx.showLoading({ title: '发起支付…', mask: true });
+
+  // 1) 建单（服务端按 publish 定价 2 元，无需 post_id）
+  const createRes = await wx.cloud.callFunction({
+    name: 'payForPhone',
+    data: { action: 'create', biz_type: 'publish' },
+    config: { timeout: 10000 },
+  });
+  const cr = (createRes && createRes.result) || {};
+  if (!cr.success) throw new Error(cr.message || '下单失败');
+  const outTradeNo = cr.out_trade_no;
+  const amount = Number(cr.amount) || 0;
+  if (!outTradeNo) throw new Error('下单参数异常');
+
+  // 2) 集成支付下单
+  const order = await callPayCommon('wxpay_order', {
+    description: cr.title || '发布信息',
+    out_trade_no: outTradeNo,
+    amount: { total: amount, currency: 'CNY' },
+  });
+  if (order && order.code !== undefined && order.code !== null && order.code !== 0) {
+    throw new Error(order.msg || '下单失败');
+  }
+  const p = pickPayment(order);
+  if (!p || !p.package) throw new Error('下单失败：未获取到支付参数');
+
+  // 3) 拉起支付
+  wx.hideLoading();
+  await new Promise((resolve, reject) => {
+    wx.requestPayment({
+      timeStamp: String(p.timeStamp || ''),
+      nonceStr: p.nonceStr || '',
+      package: p.package,
+      signType: p.signType || 'RSA',
+      paySign: p.paySign || '',
+      success: resolve,
+      fail: reject,
+    });
+  });
+
+  // 4) 核销（履约：写一条发布凭证）
+  const verifyRes = await wx.cloud.callFunction({
+    name: 'payForPhone',
+    data: { action: 'verify', out_trade_no: outTradeNo },
+    config: { timeout: 10000 },
+  });
+  const vr = (verifyRes && verifyRes.result) || {};
+  if (!vr.success) throw new Error(vr.message || '支付核销失败');
+}
+
+/**
+ * 发布 + 付费 统一入口（先付款后入库，凭证制，三页复用）。
+ * 流程：
+ *   ① precheck：云端返回 isVip / hasQuota
+ *   ② 会员 或 已有可用凭证 → 直接 publishPost 入库
+ *   ③ 非会员且无凭证 → 先 payForPublish() 付费拿凭证 → 再 publishPost 入库
+ * 返回：publishPost 的 result（{ success, _id, needs_review, ... }）
+ *
+ * @param {object} form 发布表单（与 publishPost 的 form 字段一致）
+ * @returns {Promise<object>} publishPost 的结果对象
+ */
+async function publishWithPay(form) {
+  // ① 云端 precheck：会员 / 有无可用凭证
+  const preRes = await wx.cloud.callFunction({
+    name: 'publishPost',
+    data: { action: 'precheck', form: form || {} },
+    config: { timeout: 10000 },
+  });
+  const pre = (preRes && preRes.result) || {};
+  const needPay = !pre.is_vip && !pre.has_quota;
+
+  // ② 非会员且无凭证：先付费拿凭证
+  if (needPay) {
+    await payForPublish();
+  }
+
+  // ③ 入库（云端会再次校验会员/凭证，权威兜底）
+  const pubRes = await wx.cloud.callFunction({
+    name: 'publishPost',
+    data: { action: 'create', form: form || {} },
+    config: { timeout: 10000 },
+  });
+  const pr = (pubRes && pubRes.result) || {};
+  if (!pr.success && pr.code === 'NEED_PAY') {
+    // 极端情况：precheck 判断有凭证，但并发下被消费光了 → 提示重试
+    const err = new Error(pr.error || '发布需先支付');
+    err.needPay = true;
+    throw err;
+  }
+  return pr;
+}
+
 module.exports = {
   TOP_OPTIONS,
   TOP_INTRO,
   getTopIntro,
   payForTop,
   afterPublish,
+  isVipMember,
+  payForPublish,
+  publishWithPay,
 };

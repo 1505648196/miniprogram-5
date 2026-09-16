@@ -28,9 +28,14 @@ const USERS = "baozi_users";
 const PAY_RECORDS = "baozi_pay_records";
 const PAY_ORDERS = "baozi_pay_orders"; // 订单表：out_trade_no 唯一
 const PHONE_VIEWS = "baozi_phone_views"; // 电话查看日志（频控 + 泄露溯源）
+const PUBLISH_QUOTA = "baozi_publish_quota"; // 发布凭证（先付款后入库：付费成功写一条 unused 凭证，入库时消费）
 
-// 付费查看电话：1 分钱
-const PHONE_FEE = 1;
+// 付费查看电话：2 元 = 200 分
+const PHONE_FEE = 200;
+
+// 发布信息：默认 2 元 = 200 分（会员免费发布，非会员付费）
+// 【测试】临时改为 1 分钱，便于联调，测试完恢复 200
+const PUBLISH_FEE = 1;
 
 // 擦亮（刷新，帖子重新排前）：5 毛 = 50 分
 const REFRESH_FEE = 50;
@@ -232,6 +237,13 @@ async function actionCreate(openid, event) {
     doc.title = `信息置顶 ${days} 天`;
     doc.post_id = postId;
     doc.top_days = days;
+  } else if (bizType === "publish") {
+    // 发布信息：固定 2 元。
+    // ⚠️ 先付款后入库：下单时不依赖帖子（帖子尚不存在），只记「买了一次发布额度」。
+    //    付款成功 verify 履约时写一条 baozi_publish_quota 凭证，入库时由 publishPost 消费。
+    doc.amount = PUBLISH_FEE;
+    doc.title = "发布信息";
+    doc.post_id = ""; // 无 post_id（发布凭证制，不绑定具体帖子）
   } else if (bizType === "merchant") {
     // 商家入驻高级版：固定 2999 元，订单携带 merchant_id（下单前已创建入驻申请）
     const merchantId = String(event.merchant_id || "").trim();
@@ -294,6 +306,8 @@ async function actionVerify(openid, event) {
       await fulfillRefresh(openid, order);
     } else if (order.biz_type === "top") {
       await fulfillTop(openid, order);
+    } else if (order.biz_type === "publish") {
+      await fulfillPublish(openid, order);
     } else {
       return fail("订单业务类型异常: " + order.biz_type, "BAD_BIZ_TYPE");
     }
@@ -483,6 +497,32 @@ async function fulfillTop(openid, order) {
   });
 }
 
+// 履约：发布信息 → 写一条「发布凭证」到 baozi_publish_quota（先付款后入库）。
+// 幂等：同一 out_trade_no 只写一条（重复 verify 不重复发凭证，防止一人多付一次却发多次额度）。
+// 凭证被 publishPost 消费后 status 由 unused → used，绑定 used_post_id。
+async function fulfillPublish(openid, order) {
+  const now = Date.now();
+  const outTradeNo = order.out_trade_no;
+
+  // 幂等：该订单是否已发过凭证
+  const exist = await db
+    .collection(PUBLISH_QUOTA)
+    .where({ out_trade_no: outTradeNo })
+    .limit(1)
+    .get();
+  if (exist.data && exist.data.length) return; // 已发过，跳过
+
+  await db.collection(PUBLISH_QUOTA).add({
+    data: {
+      openid,
+      out_trade_no: outTradeNo,
+      status: "unused",   // unused 可用 / used 已消费
+      used_post_id: "",   // 消费后回填帖子 id
+      created_at: now,
+    },
+  });
+}
+
 // 付费成功埋点：覆盖 phone / member / refresh / top / merchant 全业务类型。
 // 服务端权威：用户付了钱订单一定在服务端履约，埋点跟着履约走，前端杀不杀进程都无所谓。
 // 写入 baozi_events，供后台统计「付费最多是哪个板块」（按 params.biz_type 聚合）。
@@ -495,7 +535,7 @@ async function trackPaySuccess(openid, order) {
         session_id: "",           // 服务端拿不到前端 session，留空由看板按 openid 聚合
         page: "",
         params: {
-          biz_type: order.biz_type,   // 付费板块：phone/member/top/refresh/merchant
+          biz_type: order.biz_type,   // 付费板块：phone/member/top/refresh/merchant/publish
           amount: Number(order.amount) || 0, // 单位：分
           post_id: order.post_id || "",
           plan: order.plan || "",

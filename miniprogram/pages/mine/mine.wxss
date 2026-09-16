@@ -294,18 +294,21 @@
   margin: 24rpx 24rpx 0;
 }
 
-/* ===== 发布类型弹层（同 demo） ===== */
+/* ===== 发布类型弹层（居中卡片；t-popup placement=center 是自适应宽度的悬浮卡片，
+   必须给固定宽度，否则内部 t-grid 百分比列宽循环依赖 → 宫格挤扁、文字换行） ===== */
 .pub-sheet {
+  width: 620rpx;
+  box-sizing: border-box;
   background: #FFFFFF;
-  border-radius: 24rpx 24rpx 0 0;
-  padding: 32rpx 16rpx calc(32rpx + env(safe-area-inset-bottom));
+  border-radius: 24rpx;
+  padding: 40rpx 24rpx 32rpx;
 }
 .pub-sheet-title {
-  font-size: 30rpx;
+  font-size: 32rpx;
   font-weight: 600;
   color: #1A1A1A;
   text-align: center;
-  margin-bottom: 24rpx;
+  margin-bottom: 28rpx;
 }
 .pub-grid {
   --td-grid-item-padding: 20rpx 0;

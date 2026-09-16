@@ -108,7 +108,7 @@ async function fetchTops(types, openid, cityCode) {
     if (!topIds.length) return [];
 
     // 回查帖子完整内容：已过审 + 可选同城过滤（下架帖不回显）
-    const postConds = [{ _id: _.in(topIds) }, { approved: _.eq(true) }, { status: _.neq("offline") }];
+    const postConds = [{ _id: _.in(topIds) }, { approved: _.eq(true) }, { status: _.neq("offline") }, { paid: _.neq(false) }];
     if (cityCode) postConds.push({ city_code: cityCode });
     const postRes = await db
       .collection("baozi_posts")
@@ -176,6 +176,7 @@ exports.main = async (event) => {
   const baseConds = [
     { approved: _.eq(true) }, // 只展示已通过
     { status: _.neq("offline") }, // 排除已下架帖子
+    { paid: _.neq(false) }, // 排除未付费的帖子（发布收费：paid=false 待支付不展示）
   ];
   if (city) baseConds.push({ city });
   if (cityCode) baseConds.push({ city_code: cityCode });

@@ -34,14 +34,39 @@
   gap: 20rpx;
 }
 
-/* 顶部发布信息按钮 */
-.publish-bar {
-  padding: 4rpx 0;
+/* ===== 悬浮发布按钮（圆形 FAB：图标 + 文字，点击弹出发布类型选择；样式同 demo share-fab） ===== */
+.pub-fab {
+  position: fixed;
+  right: 32rpx;
+  bottom: calc(160rpx + env(safe-area-inset-bottom)); /* 避开固定 tabbar(96rpx) + 留白 */
+  width: 104rpx;
+  height: 104rpx;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #FF7A45 0%, #FF9E6B 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4rpx;
+  box-shadow: 0 8rpx 24rpx rgba(255, 122, 69, 0.45);
+  z-index: 999;
+  padding: 0;
+  margin: 0;
 }
-.publish-bar-btn {
-  --td-button-primary-bg-color: #FF7A45;
-  --td-button-primary-border-color: #FF7A45;
+.pub-fab::after {
+  border: none;
 }
+.pub-fab-text {
+  font-size: 20rpx;
+  color: #FFFFFF;
+  font-weight: 600;
+  line-height: 1;
+}
+.pub-fab-hover {
+  transform: scale(0.92);
+  opacity: 0.9;
+}
+
 .card {
   background: #FFFFFF;
   border-radius: 20rpx;
@@ -90,18 +115,21 @@
   padding: 0 24rpx 8rpx;
 }
 
-/* 发布类型选择弹层（同 demo 弹层样式） */
+/* 发布类型选择弹层（居中卡片；t-popup placement=center 是自适应宽度的悬浮卡片，
+   必须给固定宽度，否则内部 t-grid 百分比列宽循环依赖 → 宫格挤扁、文字换行） */
 .pub-sheet {
+  width: 620rpx;
+  box-sizing: border-box;
   background: #FFFFFF;
-  border-radius: 24rpx 24rpx 0 0;
-  padding: 32rpx 16rpx calc(32rpx + env(safe-area-inset-bottom));
+  border-radius: 24rpx;
+  padding: 40rpx 24rpx 32rpx;
 }
 .pub-sheet-title {
-  font-size: 30rpx;
+  font-size: 32rpx;
   font-weight: 600;
   color: #1A1A1A;
   text-align: center;
-  margin-bottom: 24rpx;
+  margin-bottom: 28rpx;
 }
 .pub-grid {
   --td-grid-item-padding: 20rpx 0;

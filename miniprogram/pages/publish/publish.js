@@ -7,7 +7,7 @@
 const regionData = require('../../utils/regionData.js');
 const { preRequestAuditSubscribe } = require('../../utils/subscribe.js');
 // 置顶套餐与支付链路走公共模块（三页共用，避免价格/逻辑三处维护）
-const { TOP_OPTIONS, getTopIntro, payForTop } = require('../../utils/topPromotion.js');
+const { TOP_OPTIONS, getTopIntro, payForTop, publishWithPay } = require('../../utils/topPromotion.js');
 
 // 店铺类型（转让/求店共用，role_id 1-5；与 dicts category='shop_type' 一致）
 const SHOP_TYPES = [
@@ -611,46 +611,54 @@ Page({
     const subP = preRequestAuditSubscribe();
     void subP;
 
+    this.setData({ submitting: true });
+    // 发布收费（先付款后入库，凭证制）：统一走 publishWithPay
+    // 会员/已有凭证 → 直接入库；非会员无凭证 → 先付 2 元再入库
     wx.showLoading({ title: '发布中…', mask: true });
-    wx.cloud
-      .callFunction({ name: 'publishPost', data: { form: payloadForm }, config: { timeout: 10000 } })
-      .then((res) => {
-        const r = res.result || {};
+    publishWithPay(payloadForm)
+      .then((r) => {
         wx.hideLoading();
-        this.setData({ submitting: false });
-        if (r.success) {
-          const postId = r._id;
-          const done = () => setTimeout(() => wx.navigateBack(), 1200);
-          // 选了置顶 → 发布成功后立即拉起置顶支付（走公共模块，与招聘页同一链路）
-          if (this.data.topDays > 0 && postId) {
-            payForTop(postId, this.data.topDays)
-              .then(() => {
-                wx.showToast({ title: `发布成功，已置顶 ${this.data.topDays} 天`, icon: 'success' });
-                done();
-              })
-              .catch((err) => {
-                // 支付取消/失败：帖子已发布，只是未置顶
-                const msg = String((err && (err.errMsg || err.message)) || '');
-                wx.showToast({
-                  title: msg.indexOf('cancel') >= 0 ? '已取消置顶，可在我的发布中重新置顶' : '发布成功，置顶支付未完成',
-                  icon: 'none',
-                });
-                done();
-              });
-          } else {
-            wx.showToast({ title: r.needs_review ? '已提交待审核' : '发布成功', icon: 'success' });
-            done();
-          }
-        } else {
-          wx.showToast({ title: r.error || '发布失败', icon: 'none' });
+        if (!r || !r.success) {
+          this.setData({ submitting: false });
+          wx.showToast({ title: (r && r.error) || '发布失败', icon: 'none' });
+          return;
         }
+        this.afterPaidPublish(r._id);
       })
       .catch((err) => {
         wx.hideLoading();
         this.setData({ submitting: false });
-        wx.showToast({ title: '网络异常，请重试', icon: 'none' });
-        console.error('[publish] 发布失败:', err && err.errMsg);
+        const msg = String((err && (err.errMsg || err.message)) || '');
+        wx.showToast({
+          title: msg.indexOf('cancel') >= 0 ? '已取消发布' : (msg || '网络异常，请重试'),
+          icon: 'none',
+        });
+        console.error('[publish] 发布失败:', err && (err.errMsg || err.message));
       });
+  },
+
+  // 发布（或付费）成功后的统一收尾：可选置顶 → 提示 → 返回
+  afterPaidPublish(postId) {
+    this.setData({ submitting: false });
+    const done = () => setTimeout(() => wx.navigateBack(), 1200);
+    if (this.data.topDays > 0 && postId) {
+      payForTop(postId, this.data.topDays)
+        .then(() => {
+          wx.showToast({ title: `发布成功，已置顶 ${this.data.topDays} 天`, icon: 'success' });
+          done();
+        })
+        .catch((err) => {
+          const msg = String((err && (err.errMsg || err.message)) || '');
+          wx.showToast({
+            title: msg.indexOf('cancel') >= 0 ? '发布成功，置顶已取消' : '发布成功，置顶支付未完成',
+            icon: 'none',
+          });
+          done();
+        });
+    } else {
+      wx.showToast({ title: '发布成功', icon: 'success' });
+      done();
+    }
   },
 
   callUpdate(updateForm) {

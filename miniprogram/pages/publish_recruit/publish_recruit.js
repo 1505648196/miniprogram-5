@@ -7,7 +7,7 @@ const regionData = require('../../utils/regionData.js');
 const { callPayCommon, pickPayment } = require('../../utils/pay.js');
 const { preRequestAuditSubscribe } = require('../../utils/subscribe.js');
 // 置顶套餐与支付链路走公共模块（三页共用，避免价格/逻辑三处维护）
-const { TOP_OPTIONS, getTopIntro, payForTop } = require('../../utils/topPromotion.js');
+const { TOP_OPTIONS, getTopIntro, payForTop, publishWithPay } = require('../../utils/topPromotion.js');
 
 // 师傅类型（roleId 稳定映射 1-14，与招聘筛选 SUB_CATS 一致）
 const SUB_CATS = [
@@ -434,13 +434,13 @@ Page({
       return;
     }
 
-    // 新建：publishPost
-    // 先请求「审核结果通知」订阅授权：必须在此刻（用户点击的同步手势栈内）调用，
-    // 否则微信报 "can only be invoked by user TAP gesture"。不 await → 不阻塞发布。
+    // 新建：publishPost（发布收费：先付款后入库，凭证制）
+    // 先请求「审核结果通知」订阅授权：必须在此刻（用户点击的同步手势栈内）调用。
     const subP = preRequestAuditSubscribe();
     void subP;
 
-    wx.showLoading({ title: '正在发布', mask: true });
+    this.setData({ submitting: true });
+    this._lastCityCode = base.city_code; // 供发布成功后推荐用
     const payload = {
       form: Object.assign({}, base, {
         desc,
@@ -448,44 +448,53 @@ Page({
         tags: [],
       }),
     };
-    wx.cloud
-      .callFunction({ name: 'publishPost', data: payload, config: { timeout: 10000 } })
-      .then(async (res) => {
-        const r = res.result || {};
+
+    // 发布收费（先付款后入库，凭证制）：统一走 publishWithPay
+    wx.showLoading({ title: '正在发布', mask: true });
+    publishWithPay(payload.form)
+      .then((r) => {
         wx.hideLoading();
-        this.setData({ submitting: false });
-        if (r.success) {
-          const postId = r._id;
-          // 选了置顶 → 发布成功后立即拉起置顶支付（走公共模块）
-          if (this.data.topDays > 0 && postId) {
-            payForTop(postId, this.data.topDays)
-              .then(() => {
-                wx.showToast({ title: `发布成功，已置顶 ${this.data.topDays} 天`, icon: 'success' });
-                this.recommendAndShow(base.city_code);
-              })
-              .catch((err) => {
-                // 支付取消/失败：帖子已发布，只是未置顶
-                const msg = String((err && (err.errMsg || err.message)) || '');
-                wx.showToast({
-                  title: msg.indexOf('cancel') >= 0 ? '已取消置顶，可在我的发布中重新置顶' : '发布成功，置顶支付未完成',
-                  icon: 'none',
-                });
-                this.recommendAndShow(base.city_code);
-              });
-          } else {
-            wx.showToast({ title: r.needs_review ? '已提交待审核' : '发布成功', icon: 'success' });
-            this.recommendAndShow(base.city_code);
-          }
-        } else {
-          wx.showToast({ title: r.error || '发布失败', icon: 'none' });
+        if (!r || !r.success) {
+          this.setData({ submitting: false });
+          wx.showToast({ title: (r && r.error) || '发布失败', icon: 'none' });
+          return;
         }
+        this.afterRecruitPublish(r._id);
       })
       .catch((err) => {
         wx.hideLoading();
         this.setData({ submitting: false });
-        wx.showToast({ title: '网络异常，请重试', icon: 'none' });
-        console.error('[publish_recruit] 发布失败:', err && err.errMsg);
+        const msg = String((err && (err.errMsg || err.message)) || '');
+        wx.showToast({
+          title: msg.indexOf('cancel') >= 0 ? '已取消发布' : (msg || '网络异常，请重试'),
+          icon: 'none',
+        });
+        console.error('[publish_recruit] 发布失败:', err && (err.errMsg || err.message));
       });
+  },
+
+  // 招工发布（或付费）成功后：可选置顶 → 提示 → 推荐
+  afterRecruitPublish(postId) {
+    this.setData({ submitting: false });
+    const base = this._lastCityCode || '';
+    if (this.data.topDays > 0 && postId) {
+      payForTop(postId, this.data.topDays)
+        .then(() => {
+          wx.showToast({ title: `发布成功，已置顶 ${this.data.topDays} 天`, icon: 'success' });
+          this.recommendAndShow(base);
+        })
+        .catch((err) => {
+          const msg = String((err && (err.errMsg || err.message)) || '');
+          wx.showToast({
+            title: msg.indexOf('cancel') >= 0 ? '发布成功，置顶已取消' : '发布成功，置顶支付未完成',
+            icon: 'none',
+          });
+          this.recommendAndShow(base);
+        });
+    } else {
+      wx.showToast({ title: '发布成功', icon: 'success' });
+      this.recommendAndShow(base);
+    }
   },
 
   // 发布成功后：按类型+城市推荐互补信息并弹窗

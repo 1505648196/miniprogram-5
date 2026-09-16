@@ -39,9 +39,9 @@ const TMPL_CFG = {
     kind: "unread",
     data(event, now) {
       return {
-        消息内容: { value: cut(event.content || "您有一条新的消息", 30) },
-        时间: { value: event.time || now },
-        备注: { value: cut(event.remark || "可在小程序内查看详情", 30) },
+        thing2: { value: cut(event.content || "您有一条新的消息", 30) },
+        time37: { value: event.time || now },
+        thing7: { value: cut(event.remark || "可在小程序内查看详情", 30) },
       };
     },
   },
@@ -50,10 +50,10 @@ const TMPL_CFG = {
     kind: "audit",
     data(event, now) {
       return {
-        审核结果: { value: cut(event.result || "审核通过", 5) }, // phrase 一般很短
-        审核内容: { value: cut(event.content || "您提交的信息", 20) }, // thing 有字数上限
-        审核时间: { value: cut(event.time || now, 20) },
-        备注: { value: cut(event.remark || "点击查看详情", 30) },
+        phrase1: { value: cut(event.result || "审核通过", 5) }, // phrase 一般很短
+        thing2: { value: cut(event.content || "您提交的信息", 20) }, // thing 有字数上限
+        date3: { value: cut(event.time || now, 20) },
+        thing7: { value: cut(event.remark || "点击查看详情", 30) },
       };
     },
   },
@@ -87,8 +87,8 @@ exports.main = async (event) => {
   const data = cfg.data(event, now);
   // 跳转页：可指定具体帖子详情 / 消息页；不传回首页
   const page = event.page || "pages/demo/demo";
-  // 运行环境：默认正式版；开发自测可在调用时传 "trial"
-  const miniprogramState = event.miniprogramState || "formal";
+  // 运行环境：默认体验版；正式发布前需改回 "formal"
+  const miniprogramState = event.miniprogramState || "trial";
 
   try {
     const res = await cloud.openapi.subscribeMessage.send({
@@ -100,7 +100,15 @@ exports.main = async (event) => {
       data,
     });
     console.log("[sendSubscribeMsg] send ok, kind:", cfg.kind, "errCode:", res.errCode, res.errMsg);
-    return { success: true, ...res };
+    // ⚠️ 不要直接 ...res：微信返回体里可能含 BigInt(msgid)，
+    // Node16 云函数 JSON.stringify 无法序列化 BigInt 会抛 "Do not know how to serialize a BigInt"。
+    // 这里只取需要且可安全序列化的字段，msgid 转字符串。
+    return {
+      success: true,
+      errCode: res.errCode,
+      errMsg: res.errMsg,
+      msgid: res.msgid != null ? String(res.msgid) : "",
+    };
   } catch (e) {
     console.error("[sendSubscribeMsg] send failed:", e.errCode, e.errMsg || e.message || e);
     // 43101 = 用户未订阅/次数用尽：属正常业务结果，不是异常，调用方无需重试

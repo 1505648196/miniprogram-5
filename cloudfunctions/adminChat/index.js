@@ -33,6 +33,7 @@ const PROVINCES = Object.keys(CODES.PROVINCE_CODES);
 
 const COLLECTION = "baozi_posts";
 const USERS = "baozi_users";
+const ADMIN_OPENIDS = "admin_openids"; // 管理员 openid 白名单集合（替代环境变量）
 const PAY_ORDERS = "baozi_pay_orders";
 const MERCHANTS = "baozi_merchants";
 const TOPS = "baozi_post_tops";
@@ -77,11 +78,18 @@ const ANALYZE_BATCH = 25;
  */
 async function isAdminOpenid(openid) {
   if (!openid) return false;
-  const wl = String(process.env.ADMIN_OPENIDS || "")
-    .split(/[,，\s]+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-  if (wl.includes(openid)) return true;
+  // ① admin_openids 白名单集合（替代环境变量 ADMIN_OPENIDS，后台可动态增删）
+  try {
+    const r = await db
+      .collection(ADMIN_OPENIDS)
+      .where({ openid })
+      .limit(1)
+      .get();
+    if (r.data && r.data.length) return true;
+  } catch (e) {
+    console.error("[adminChat] 查 admin_openids 白名单失败:", e && e.errMsg);
+  }
+  // ② 角色兜底
   try {
     const r = await db
       .collection(USERS)

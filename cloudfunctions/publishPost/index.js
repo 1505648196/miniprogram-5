@@ -3,9 +3,16 @@
 // 统一支持全部分类（前端发布弹层的 7 类）：
 //   recruit 招工 / jobseek 求职 / transfer 店铺转让 / want_shop 求店 /
 //   equip_sell 设备出售 / equip_buy 设备求购 / other 其他
+//
+// 发布收费（先付款后入库，凭证制）：
+//   非会员发布必须先付费 2 元拿到「发布凭证」(baozi_publish_quota, status=unused)，
+//   本函数入库前校验并消费凭证；会员免费直接入库。
+//   云端权威判定会员 + 校验凭证，前端传的 paid 字段一律忽略（防伪造）。
+//
 // 入参：
-//   { form: { ...字段见 TYPE 校验..., data_type 由云端按需决定 } }
-//   - 前端可选传 form.data_type 显式指定；缺省按"招工 recruit"兼容旧调用
+//   { action: 'precheck' | 'create'(默认), form: {...} }
+//   - action='precheck'：轻量返回 { isVip, hasQuota }，供前端决定是否需要先付费
+//   - action='create'：正式入库（非会员需已有可用凭证，否则拒绝）
 // 返回：
 //   { success: true, _id, needs_review, sec_status }
 //   | { success: false, error }
@@ -14,6 +21,63 @@ const { checkText } = require("./secCheck.js");
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
+const _ = db.command;
+
+// 发布凭证集合（与 payForPhone 的 PUBLISH_QUOTA 同名）
+const PUBLISH_QUOTA = "baozi_publish_quota";
+
+// 是否为有效会员（membership=vip 且未过期），与 memberService/payForPhone 同一口径
+async function isVipMember(openid) {
+  if (!openid) return false;
+  try {
+    const r = await db.collection("baozi_users").where({ openid_wxapp: openid }).limit(1).get();
+    const u = r.data && r.data[0];
+    if (!u) return false;
+    return u.membership === "vip" && Number(u.membership_expire_at) > Date.now();
+  } catch (e) {
+    console.error("[publishPost] 会员状态查询失败:", e && e.errMsg);
+    return false;
+  }
+}
+
+// 是否已有可用发布凭证（未消费）
+async function hasUnusedQuota(openid) {
+  if (!openid) return false;
+  try {
+    const r = await db
+      .collection(PUBLISH_QUOTA)
+      .where({ openid, status: "unused" })
+      .limit(1)
+      .get();
+    return !!(r.data && r.data.length);
+  } catch (e) {
+    console.error("[publishPost] 查询发布凭证失败:", e && e.errMsg);
+    return false;
+  }
+}
+
+// 消费一条可用凭证（原子性尽力而为：先取一条 unused → 置 used 并绑定 postId）
+// 返回 true=消费成功，false=无可用凭证
+async function consumeQuota(openid, postId) {
+  if (!openid) return false;
+  try {
+    const r = await db
+      .collection(PUBLISH_QUOTA)
+      .where({ openid, status: "unused" })
+      .orderBy("created_at", "asc") // 先消费最早购买的那条（FIFO）
+      .limit(1)
+      .get();
+    const q = r.data && r.data[0];
+    if (!q) return false;
+    await db.collection(PUBLISH_QUOTA).doc(q._id).update({
+      data: { status: "used", used_post_id: postId, used_at: Date.now() },
+    });
+    return true;
+  } catch (e) {
+    console.error("[publishPost] 消费发布凭证失败:", e && e.errMsg);
+    return false;
+  }
+}
 
 // 所有分类的通用必填展示字段（无专项的帖子也要能看）
 // 脱敏：保留前 3 后 4，中间 4 位 ****（187****9563）
@@ -78,11 +142,69 @@ async function pushReviewNotify(openid, dataType, postId, typeName) {
   }
 }
 
+// 审核结果通知模板（与 sendSubscribeMsg 的 TMPL_CFG key 保持一致）
+const SUB_TMPL_AUDIT = "iYAWAJR4UEG2XUjlCjs8-9eiatRAmAGQJlDL9BMIjag";
+
+/**
+ * 给发帖人推一条微信订阅消息（服务通知）——审核通过时。
+ * 与站内通知独立：任一步失败互不影响；用户未授权(43101)属正常，静默跳过。
+ * 全程 try/catch：任何异常只打日志，绝不向上抛，确保不影响发布主流程。
+ */
+async function pushReviewSubscribe(openid, dataType, postId, typeName) {
+  if (!openid || !postId) return;
+  try {
+    const res = await cloud.callFunction({
+      name: "sendSubscribeMsg",
+      data: {
+        templateId: SUB_TMPL_AUDIT,
+        toOpenid: openid,
+        result: "通过",
+        content: `${typeName || "信息"}已审核通过`.slice(0, 20),
+        remark: "已发布，点击查看详情".slice(0, 30),
+        page: `pages/detail/detail?id=${postId}`,
+      },
+    });
+    const r = (res && res.result) || {};
+    if (r.success) {
+      console.log("[publishPost] 审核订阅消息已发送:", postId);
+    } else if (r.errCode === 43101) {
+      // 用户未订阅/次数用尽：正常业务结果，忽略
+      console.log("[publishPost] 审核订阅消息跳过（用户未订阅）:", postId);
+    } else {
+      console.warn("[publishPost] 审核订阅消息发送失败:", r.errCode, r.error);
+    }
+  } catch (e) {
+    console.error("[publishPost] pushReviewSubscribe 异常:", e && (e.errMsg || e.message));
+  }
+}
+
 exports.main = async (event) => {
   const { OPENID } = cloud.getWXContext();
   const openid = OPENID || "";
   const f = event.form || {};
   const dataType = String(f.data_type || "recruit").trim();
+
+  // ---- 发布收费：先付款后入库（凭证制）----
+  // action='precheck'：轻量返回会员/凭证状态，供前端决定是否先付费
+  // action='create'（默认）：正式入库，非会员需消费一条可用凭证
+  const action = String(event.action || "create").trim();
+  if (action === "precheck") {
+    return {
+      success: true,
+      is_vip: await isVipMember(openid),
+      has_quota: await hasUnusedQuota(openid),
+    };
+  }
+
+  // 非会员必须校验并消费一条发布凭证；会员免费直接放行。
+  // 前端传的 paid 字段一律忽略（凭证/会员是唯一权威，杜绝"传 paid:true 白嫖"）。
+  const isVip = await isVipMember(openid);
+  if (!isVip) {
+    const hasQ = await hasUnusedQuota(openid);
+    if (!hasQ) {
+      return { success: false, error: "发布需先支付 2 元，请先完成支付", code: "NEED_PAY" };
+    }
+  }
 
   // ---- §2.4 封禁校验：封禁用户不允许发布 ----
   if (openid) {
@@ -135,6 +257,9 @@ exports.main = async (event) => {
     source: "user",
     needs_review: false,
     approved: true, // 结果型别名：approved = !needs_review（true=已通过/可展示）
+    // 发布收费（先付款后入库）：能走到这里说明「会员」或「已消费凭证」，
+    // 帖子一律按已付费正常展示。不再信任前端 paid 字段。
+    paid: true,
     tags: cleanArr(f.tags),
   };
 
@@ -233,10 +358,19 @@ exports.main = async (event) => {
 
   try {
     const res = await db.collection("baozi_posts").add({ data: regionBase });
+
+    // 非会员：入库成功后消费一条发布凭证（绑定本条帖子，防止复用）
+    if (!isVip) {
+      await consumeQuota(openid, res._id);
+    }
+
     // 审核通过 → 给发帖人推一条站内通知（review）
+    // （此时必已付款/会员，不会出现"没付钱却收到审核通过通知"）
     if (!regionBase.needs_review && openid) {
       const typeName = DATA_TYPE_NAMES[dataType] || DATA_TYPE_NAMES.other;
       await pushReviewNotify(openid, dataType, res._id, typeName);
+      // 审核通过 → 额外推微信订阅消息（服务通知）。用户未授权(43101)静默跳过，不影响发布。
+      await pushReviewSubscribe(openid, dataType, res._id, typeName);
     }
     return {
       success: true,

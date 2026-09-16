@@ -32,22 +32,46 @@ const _ = db.command;
 const ADMIN_USER = process.env.ADMIN_USER || "admin";
 const ADMIN_PASS = process.env.ADMIN_PASS || "admin";
 
-// 管理员 openid 白名单（逗号分隔）；用于小程序端「管理员 AI 入口」显隐判断。
-// 云函数环境变量配置 ADMIN_OPENIDS，如 "oREGN7xxx,oREGN7yyy"；未配置时不返回管理员身份。
-const ADMIN_OPENIDS = String(process.env.ADMIN_OPENIDS || "")
-  .split(/[,，\s]+/)
-  .map((s) => s.trim())
-  .filter(Boolean);
+// 数据集合名
+const COLLECTION = "baozi_posts";
+const USERS = "baozi_users";
+// 管理员 openid 白名单集合（替代环境变量 ADMIN_OPENIDS，后台可动态增删、纯数据库操作）
+const ADMIN_OPENIDS = "admin_openids";
+const TOPS = "baozi_post_tops"; // 置顶独立集合
+const LOGS = "admin_logs"; // §2.8 操作日志（需先在控制台建该集合）
+const ADS = "advertisements"; // §2.9 广告运营位（广告内容）
+const AD_SLOTS = "ad_slots"; // §2.9 广告位定义（方案 C：数据驱动）
+const GROUPS = "baozi_groups"; // 包友群（C 端只读，管理端增删改）
+const MERCHANTS = "baozi_merchants"; // 包友圈商家（C 端提交/浏览，管理端审核）
+const MESSAGES = "baozi_messages"; // 站内通知 / 平台公告（与 notifyMsg 同集合）
+const IDENTITIES = "baozi_identities"; // 身份认证申请（店主/师傅，管理端审核）
+const SETTINGS = "baozi_settings"; // 全局配置集合（key/value，如「包友圈展示」开关）
+
+// ---- RBAC：管理员账号 / 角色（多人分级权限）----
+const ADMIN_ACCOUNTS = "admin_accounts"; // 管理员账号表（username 唯一）
+const ADMIN_ROLES = "admin_roles"; // 角色权限表（role 唯一）
+// ==================== 配置区结束 ====================
 
 /**
  * 统一「小程序端」管理员判定（C 端 openid 通道）：
- *   ① 环境变量 ADMIN_OPENIDS 白名单命中 → 直接为管理员（免查库，冷启动兜底）
- *   ② 未命中 → 查 baozi_users 里 role === 'admin'（权威来源，后台可动态增删）
+ *   ① admin_openids 白名单集合命中 → 直接为管理员（后台可动态增删，纯数据库操作）
+ *   ② 未命中 → 查 baozi_users 里 role === 'admin'（向后兼容：历史以 role 授管理员的方式仍有效）
  * 与 wxTask / adminChat 三处保持同一口径；改一处务必同步另两处。
  */
 async function isAdminOpenid(openid) {
   if (!openid) return false;
-  if (ADMIN_OPENIDS.includes(openid)) return true;
+  // ① 白名单集合
+  try {
+    const r = await db
+      .collection(ADMIN_OPENIDS)
+      .where({ openid })
+      .limit(1)
+      .get();
+    if (r.data && r.data.length) return true;
+  } catch (e) {
+    console.error("[adminAuth] 查 admin_openids 白名单失败:", e && e.errMsg);
+  }
+  // ② 角色兜底
   try {
     const r = await db
       .collection(USERS)
@@ -60,22 +84,6 @@ async function isAdminOpenid(openid) {
     return false;
   }
 }
-// 数据集合名
-const COLLECTION = "baozi_posts";
-const USERS = "baozi_users";
-const TOPS = "baozi_post_tops"; // 置顶独立集合
-const LOGS = "admin_logs"; // §2.8 操作日志（需先在控制台建该集合）
-const ADS = "advertisements"; // §2.9 广告运营位（广告内容）
-const AD_SLOTS = "ad_slots"; // §2.9 广告位定义（方案 C：数据驱动）
-const GROUPS = "baozi_groups"; // 包友群（C 端只读，管理端增删改）
-const MERCHANTS = "baozi_merchants"; // 包友圈商家（C 端提交/浏览，管理端审核）
-const MESSAGES = "baozi_messages"; // 站内通知 / 平台公告（与 notifyMsg 同集合）
-const IDENTITIES = "baozi_identities"; // 身份认证申请（店主/师傅，管理端审核）
-
-// ---- RBAC：管理员账号 / 角色（多人分级权限）----
-const ADMIN_ACCOUNTS = "admin_accounts"; // 管理员账号表（username 唯一）
-const ADMIN_ROLES = "admin_roles"; // 角色权限表（role 唯一）
-// ==================== 配置区结束 ====================
 
 // ==================== RBAC 权限点 ====================
 // permission 粒度对应业务模块，action → permission 映射见 ACTION_PERM。
@@ -133,6 +141,9 @@ const ACTION_PERM = {
   merchant_update: "merchant.manage",
   merchant_delete: "merchant.manage",
   merchant_audit: "merchant.manage", // 审核通过 / 驳回
+  // 全局配置开关（如「包友圈展示」），归属商家管理权限
+  setting_get: "merchant.manage",
+  setting_set: "merchant.manage",
   // 举报 / 意见反馈管理（baozi_feedback）
   feedback_list: "feedback.manage",
   feedback_handle: "feedback.manage",
@@ -1398,10 +1409,44 @@ async function actionUserRole(event) {
     const cur = (await db.collection(USERS).doc(event._id).get()).data;
     if (!cur) return fail("用户不存在", "NOT_FOUND");
 
+    const openid = String(cur.openid_wxapp || "").trim();
+
+    // 1) 更新 baozi_users.role
     await db.collection(USERS).doc(event._id).update({
       data: { role, updated_at: Date.now() },
     });
-    await writeLog(event, role === "admin" ? "user_grant_admin" : "user_revoke_admin", event._id, cur.openid_wxapp || "");
+
+    // 2) 同步维护 admin_openids 白名单集合（替代环境变量，纯数据库操作、即时生效）
+    //    授予 admin -> 加入白名单；撤销 admin -> 移出白名单。
+    //    openid 为空时跳过（无法入白名单，仅靠 role 字段，与历史行为一致）。
+    if (openid) {
+      if (role === "admin") {
+        // 已存在则不重复插入（幂等）
+        try {
+          const exist = await db
+            .collection(ADMIN_OPENIDS)
+            .where({ openid })
+            .limit(1)
+            .get();
+          if (!exist.data || !exist.data.length) {
+            await db.collection(ADMIN_OPENIDS).add({
+              data: { openid, remark: "后台用户管理授予", created_at: Date.now() },
+            });
+          }
+        } catch (e) {
+          console.error("[adminAuth] 写入 admin_openids 失败:", e && e.errMsg);
+        }
+      } else {
+        // 撤销：删除该 openid 的全部白名单记录
+        try {
+          await db.collection(ADMIN_OPENIDS).where({ openid }).remove();
+        } catch (e) {
+          console.error("[adminAuth] 删除 admin_openids 失败:", e && e.errMsg);
+        }
+      }
+    }
+
+    await writeLog(event, role === "admin" ? "user_grant_admin" : "user_revoke_admin", event._id, openid);
     return ok({ role });
   } catch (e) {
     return fail(String(e && e.message ? e.message : e));
@@ -2311,6 +2356,48 @@ async function actionMerchantDelete(event) {
   }
 }
 
+// ---------- 全局配置开关（baozi_settings，key/value）----------
+// 用于后台控制小程序端某些区块的显示/隐藏（如「包友圈展示」），
+// 由 merchantApply 等 C 端云函数读取，前端零改动。
+
+/** 读单个配置项（未配置返回 null） */
+async function actionSettingGet(event) {
+  const key = String(event.key || "").trim();
+  if (!key) return fail("缺少 key");
+  try {
+    const r = await db.collection(SETTINGS).where({ key }).limit(1).get();
+    const s = r.data && r.data[0];
+    return ok({ key, value: s ? s.value : null });
+  } catch (e) {
+    return fail(String(e && e.message ? e.message : e));
+  }
+}
+
+/** 写单个配置项（upsert：已存在则更新，否则新建） */
+async function actionSettingSet(event) {
+  const key = String(event.key || "").trim();
+  if (!key) return fail("缺少 key");
+  // value 支持布尔/数字/字符串，原样存
+  if (event.value === undefined || event.value === null) return fail("缺少 value");
+  const now = Date.now();
+  try {
+    const r = await db.collection(SETTINGS).where({ key }).limit(1).get();
+    if (r.data && r.data.length) {
+      await db.collection(SETTINGS).doc(r.data[0]._id).update({
+        data: { value: event.value, updated_at: now },
+      });
+    } else {
+      await db.collection(SETTINGS).add({
+        data: { key, value: event.value, updated_at: now },
+      });
+    }
+    await writeLog(event, "setting_set", key, String(event.value));
+    return ok({ key, value: event.value });
+  } catch (e) {
+    return fail(String(e && e.message ? e.message : e));
+  }
+}
+
 // ---------- 举报 / 意见反馈管理（baozi_feedback）----------
 // C 端提交走独立云函数 feedback(action=submit)；管理侧查询/处理在此统一入口，复用 RBAC。
 const FEEDBACK = "baozi_feedback";
@@ -2760,6 +2847,9 @@ exports.main = async (event = {}) => {
       case "merchant_update": return await actionMerchantUpdate(event);
       case "merchant_audit": return await actionMerchantAudit(event);
       case "merchant_delete": return await actionMerchantDelete(event);
+      // 全局配置开关（如「包友圈展示」）
+      case "setting_get": return await actionSettingGet(event);
+      case "setting_set": return await actionSettingSet(event);
       // 举报 / 意见反馈管理
       case "feedback_list": return await actionFeedbackList(event);
       case "feedback_handle": return await actionFeedbackHandle(event);

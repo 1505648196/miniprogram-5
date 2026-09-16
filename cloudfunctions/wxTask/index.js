@@ -110,31 +110,31 @@ function isFromGateway(p) {
   return !!(user && pass)
 }
 
-/** 管理员 OPENID 白名单（与 adminAuth 共用同一个环境变量，保持一致） */
-function adminOpenids() {
-  return (process.env.ADMIN_OPENIDS || '')
-    .split(',')
-    .map(s => s.trim())
-    .filter(Boolean)
-}
-
 const USERS = 'baozi_users'
+const ADMIN_OPENIDS = 'admin_openids' // 管理员 openid 白名单集合（替代环境变量）
 
 /**
  * 判断调用者是否管理员 —— **双通道，命中任一即为管理员**：
- *   ① 环境变量 ADMIN_OPENIDS 白名单命中 → 是（免查库，冷启动兜底）
- *   ② 未命中 → 查数据库 baozi_users.role === 'admin'（权威来源，后台可动态增删）
+ *   ① admin_openids 白名单集合命中 → 是（后台可动态增删，纯数据库操作）
+ *   ② 未命中 → 查数据库 baozi_users.role === 'admin'（向后兼容）
  *
- * ⚠️ 之前是「配了白名单就以白名单为准、不再查库」，导致给用户加了 role 也无效。
- *    现改为「白名单命中→true，未命中→继续查 role」，与 adminAuth.check_admin 口径一致。
- *    三处（adminAuth / wxTask / adminChat）判定逻辑必须同步，改一处记得改另两处。
+ * 三处（adminAuth / wxTask / adminChat）判定逻辑必须同步，改一处记得改另两处。
  */
 async function isAdminCaller(openid) {
   if (!openid) return false
 
-  const wl = adminOpenids()
-  if (wl.includes(openid)) return true
+  // ① admin_openids 白名单集合
+  try {
+    const r = await db.collection(ADMIN_OPENIDS)
+      .where({ openid })
+      .limit(1)
+      .get()
+    if (r.data && r.data.length) return true
+  } catch (e) {
+    // 集合未建或查询失败，继续走 role 兜底
+  }
 
+  // ② role 兜底
   try {
     const r = await db.collection(USERS)
       .where({ openid_wxapp: openid, role: 'admin' })

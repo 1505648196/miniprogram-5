@@ -149,7 +149,7 @@ exports.main = async (event) => {
 // 不再限定 data_type —— 发布侧已支持全分类，我的发布要能看到自己发的全部信息。
 async function actionListMine(openid) {
   const res = await db.collection(COLLECTION)
-    .where({ _openid: openid })
+    .where({ _openid: openid, paid: _.neq(false) }) // 排除未付费(发布收费待支付)的草稿
     .orderBy("published_at", "desc")
     .limit(50)
     .get();
