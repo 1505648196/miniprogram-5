@@ -361,6 +361,46 @@ async function fulfillPhone(openid, order) {
   });
 }
 
+// 开通会员成功通知模板（与 sendSubscribeMsg 的 TMPL_CFG key 保持一致）
+const SUB_TMPL_MEMBER = "xea4n_3f_PAnULJ5kLZw1O5NMGM4J0f90pPU4pJIy40";
+
+/**
+ * 会员开通成功后，给用户推一条微信订阅消息（服务通知）。
+ * 与站内通知独立：任一步失败互不影响；用户未授权(43101)属正常，静默跳过。
+ * 全程 try/catch：任何异常只打日志，绝不向上抛，确保不影响会员开通主流程。
+ * @param {string} openid 接收人 openid
+ * @param {string} planName 套餐名（天卡/月卡/年卡）
+ * @param {number} amountFen 支付金额（分）
+ * @param {number} newExpire 到期时间戳（毫秒）
+ */
+async function pushMemberSubscribe(openid, planName, amountFen, newExpire) {
+  if (!openid) return;
+  try {
+    const res = await cloud.callFunction({
+      name: "sendSubscribeMsg",
+      data: {
+        templateId: SUB_TMPL_MEMBER,
+        toOpenid: openid,
+        content: planName || "会员",
+        amount: String((Number(amountFen) || 0) / 100), // 分 → 元字符串
+        time: newExpire ? fmtDate(newExpire) : "",
+        remark: "感谢开通会员",
+        page: "pages/vip/vip",
+      },
+    });
+    const r = (res && res.result) || {};
+    if (r.success) {
+      console.log("[payForPhone] 会员订阅消息已发送:", planName);
+    } else if (r.errCode === 43101) {
+      console.log("[payForPhone] 会员订阅消息跳过（用户未订阅）:", planName);
+    } else {
+      console.warn("[payForPhone] 会员订阅消息发送失败:", r.errCode, r.error);
+    }
+  } catch (e) {
+    console.error("[payForPhone] pushMemberSubscribe 异常:", e && (e.errMsg || e.message));
+  }
+}
+
 // 履约：会员开通/续期 → 写 baozi_users + 推站内通知（幂等由 order.status 保证）
 async function fulfillMember(openid, order) {
   const plan = order.plan || "month";
@@ -429,6 +469,9 @@ async function fulfillMember(openid, order) {
   } catch (e) {
     console.error("payForPhone 推送 member 通知失败:", e && e.errMsg);
   }
+
+  // 会员开通成功 → 推微信订阅消息（服务通知）。用户未授权(43101)静默跳过，不影响开通。
+  await pushMemberSubscribe(openid, planName, order.amount, newExpire);
 }
 
 // 履约：商家入驻高级版 → 把入驻申请置为「已支付高级版」状态（幂等由 order.status 保证）

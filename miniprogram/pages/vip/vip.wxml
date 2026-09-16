@@ -48,4 +48,15 @@
     <view class="pay-note">微信支付 · 支付完成后自动开通</view>
   </view>
 
+  <!-- 开通成功结果弹窗：询问是否开启会员通知（方案 B：支付后再授权） -->
+  <t-dialog
+    visible="{{showNotifyDialog}}"
+    title="开通成功"
+    content="是否开启「会员到期提醒」？开启后可在微信服务通知里收到会员状态通知。"
+    confirm-btn="开启通知"
+    cancel-btn="暂不需要"
+    bind:confirm="onEnableNotify"
+    bind:cancel="onSkipNotify"
+  />
+
 </view>

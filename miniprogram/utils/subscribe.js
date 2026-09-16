@@ -10,6 +10,7 @@
 // 【模板 ID】（与 cloudfunctions/sendSubscribeMsg 的 TMPL_CFG 保持一致）
 //   - AUDIT_TPL  审核结果通知：帖子审核通过/驳回时推送（发布后触发授权）
 //   - UNREAD_TPL 消息未读提醒：站内新通知时推送（进消息页/我的发布时触发授权）
+//   - MEMBER_TPL 开通会员成功通知：会员开通成功后推送（会员开通时触发授权）
 //
 // 【设计原则】
 //   ① 任何异常/拒绝都不阻断主流程（发布成功该返回就返回）
@@ -18,6 +19,7 @@
 
 const AUDIT_TPL = 'iYAWAJR4UEG2XUjlCjs8-9eiatRAmAGQJlDL9BMIjag'; // 审核结果通知
 const UNREAD_TPL = 'bQSbo99ET7wuboZeBOHnGmxSrLFDBLOhjEUE-ECWdEA'; // 消息未读提醒
+const MEMBER_TPL = 'xea4n_3f_PAnULJ5kLZw1O5NMGM4J0f90pPU4pJIy40'; // 开通会员成功通知
 
 const STORE_KEY = 'subscribe_req_date'; // { [tmplId]: 'YYYY-MM-DD' }
 
@@ -79,7 +81,7 @@ function requestSubscribe(tmplIds, opts = {}) {
         const rejected = toAsk.filter((id) => res && res[id] === 'reject');
         // 用户点了「总是保持以上选择，不再询问」时返回 ban，同样视为已拒绝
         if (accepted.length && !opts.silent) {
-          wx.showToast({ title: '已开启审核结果通知', icon: 'none', duration: 1500 });
+          wx.showToast({ title: opts.toastText || '已开启通知', icon: 'none', duration: 1500 });
         }
         resolve({ accepted, rejected, skipped: false });
       },
@@ -98,13 +100,23 @@ function requestSubscribe(tmplIds, opts = {}) {
  * 与 requestAuditSubscribe 的区别：本函数**立刻就弹**，不等待任何前置 await。
  */
 function preRequestAuditSubscribe() {
-  return requestSubscribe([AUDIT_TPL], { silent: false });
+  return requestSubscribe([AUDIT_TPL], { silent: false, toastText: '已开启审核结果通知' });
+}
+
+/**
+ * 同步版：会员开通时在用户点击瞬间调用，先拿到 Promise 再去发请求。
+ * 请求「开通会员成功通知」订阅授权（用户开通会员成功后推送服务通知）。
+ */
+function preRequestMemberSubscribe() {
+  return requestSubscribe([MEMBER_TPL], { silent: false, toastText: '已开启会员通知' });
 }
 
 module.exports = {
   AUDIT_TPL,
   UNREAD_TPL,
+  MEMBER_TPL,
   requestSubscribe,
   preRequestAuditSubscribe,
+  preRequestMemberSubscribe,
   requestedToday,
 };

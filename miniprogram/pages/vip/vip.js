@@ -10,6 +10,7 @@
 //
 // ⚠️ 金额由服务端定价（PLAN_FEES），前端传价无效，杜绝改价。
 const { callPayCommon, pickPayment } = require('../../utils/pay.js')
+const { preRequestMemberSubscribe } = require('../../utils/subscribe.js')
 
 // 正式定价：天卡 9.9 / 月卡 50 / 年卡 299（服务端 PLAN_FEES 同步为 990/5000/29900 分）
 const PLANS = [
@@ -25,6 +26,7 @@ Page({
     isVip: false,
     expireText: '',
     paying: false,
+    showNotifyDialog: false, // 开通成功后「是否开启会员通知」弹窗
   },
 
   onLoad() {
@@ -61,6 +63,8 @@ Page({
     if (this.data.paying) return;
     const plan = this.data.activePlan;
     const p = PLANS.find((x) => x.id === plan) || PLANS[0];
+
+    // 【方案 B】不再在支付前弹订阅授权；支付成功后再用结果弹窗询问用户是否开启通知。
     this.setData({ paying: true });
 
     try {
@@ -122,8 +126,8 @@ Page({
         this.loadStatus(resolve);
       });
       this.setData({ paying: false });
-      wx.showToast({ title: `已开通${p.name}`, icon: 'success' });
-      setTimeout(() => wx.navigateBack(), 900);
+      // 方案 B：开通成功后弹「是否开启会员通知」结果框（而不是直接 toast 返回）
+      this.setData({ showNotifyDialog: true });
     } catch (err) {
       wx.hideLoading();
       this.setData({ paying: false });
@@ -135,6 +139,22 @@ Page({
         wx.showToast({ title: msg, icon: 'none' });
       }
     }
+  },
+
+  // 用户点击「开启会员通知」→ 此刻是新 tap 手势，合规地弹订阅授权
+  // （注意：本次开通的推送时机已过，此处授权用于「下次开通/续费」时能收到通知）
+  onEnableNotify() {
+    this.setData({ showNotifyDialog: false });
+    preRequestMemberSubscribe();
+    wx.showToast({ title: '已开启会员通知', icon: 'none', duration: 1500 });
+    setTimeout(() => wx.navigateBack(), 900);
+  },
+
+  // 用户点击「暂不需要」→ 直接关闭弹窗并返回
+  onSkipNotify() {
+    this.setData({ showNotifyDialog: false });
+    wx.showToast({ title: '已开通会员', icon: 'success' });
+    setTimeout(() => wx.navigateBack(), 900);
   },
 
   // 已开通时的续费：同样走真实支付（在原到期时间上顺延）

@@ -8,6 +8,9 @@
 //   2) 审核结果通知 (模板 786)
 //        iYAWAJR4UEG2XUjlCjs8-9eiatRAmAGQJlDL9BMIjag
 //        phrase1=审核结果 / thing2=审核内容 / date3=审核时间 / thing7=备注
+//   3) 开通会员成功通知 (模板 738)
+//        xea4n_3f_PAnULJ5kLZw1O5NMGM4J0f90pPU4pJIy40
+//        thing1=会员名称 / amount2=支付金额 / date3=到期时间 / thing4=备注
 //
 // 入参（语义字段，云端按 templateId 映射到后台关键词；name 不一致会 43101/47003）：
 //   {
@@ -54,6 +57,18 @@ const TMPL_CFG = {
         thing2: { value: cut(event.content || "您提交的信息", 20) }, // thing 有字数上限
         date3: { value: cut(event.time || now, 20) },
         thing7: { value: cut(event.remark || "点击查看详情", 30) },
+      };
+    },
+  },
+  // 开通会员成功通知(738)
+  "xea4n_3f_PAnULJ5kLZw1O5NMGM4J0f90pPU4pJIy40": {
+    kind: "member",
+    data(event, now) {
+      return {
+        thing1: { value: cut(event.content || "会员", 20) },      // 会员名称
+        amount2: { value: cut(event.amount || "0", 20) },         // 支付金额（分转元的字符串由调用方给）
+        date3: { value: cut(event.time || now, 20) },             // 到期时间
+        thing4: { value: cut(event.remark || "感谢开通会员", 20) }, // 备注
       };
     },
   },
