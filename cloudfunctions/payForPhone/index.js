@@ -34,8 +34,7 @@ const PUBLISH_QUOTA = "baozi_publish_quota"; // 发布凭证（先付款后入�
 const PHONE_FEE = 200;
 
 // 发布信息：默认 2 元 = 200 分（会员免费发布，非会员付费）
-// 【测试】临时改为 1 分钱，便于联调，测试完恢复 200
-const PUBLISH_FEE = 1;
+const PUBLISH_FEE = 200;
 
 // 擦亮（刷新，帖子重新排前）：5 毛 = 50 分
 const REFRESH_FEE = 50;
